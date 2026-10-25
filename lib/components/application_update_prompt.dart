@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'package:venera_next/foundation/application_update_service.dart';
+import 'package:venera_next/foundation/application_update_download.dart';
+import 'package:venera_next/foundation/application_update_release.dart';
 import 'package:venera_next/foundation/context.dart';
 import 'package:venera_next/foundation/log.dart';
 import 'package:venera_next/foundation/navigation_admission.dart';
@@ -10,15 +12,18 @@ import 'package:venera_next/foundation/translations.dart';
 import 'package:venera_next/network/request_scope.dart';
 
 import 'window_frame.dart';
+import 'application_update_dialog.dart';
 
 class ApplicationUpdateScope extends InheritedWidget {
   const ApplicationUpdateScope({
     required this.service,
+    this.download,
     required super.child,
     super.key,
   });
 
   final ApplicationUpdateService service;
+  final ApplicationUpdateDownload? download;
 
   static ApplicationUpdateService of(BuildContext context) => context
       .dependOnInheritedWidgetOfExactType<ApplicationUpdateScope>()!
@@ -26,7 +31,8 @@ class ApplicationUpdateScope extends InheritedWidget {
 
   @override
   bool updateShouldNotify(ApplicationUpdateScope oldWidget) =>
-      !identical(service, oldWidget.service);
+      !identical(service, oldWidget.service) ||
+      !identical(download, oldWidget.download);
 }
 
 /// One check and its optional dialog belong to the original page and window.
@@ -35,9 +41,15 @@ class ApplicationUpdatePrompt {
   ApplicationUpdatePrompt({
     required BuildContext context,
     required this.service,
+    ApplicationUpdateDownload? download,
     RequestScope? parent,
     bool Function()? isActive,
-  }) : _context = context,
+  }) : download =
+           download ??
+           context
+               .getInheritedWidgetOfExactType<ApplicationUpdateScope>()
+               ?.download,
+       _context = context,
        _navigator = Navigator.of(context, rootNavigator: true),
        _route = ModalRoute.of(context),
        _window = context.getInheritedWidgetOfExactType<WindowFrameController>(),
@@ -45,6 +57,8 @@ class ApplicationUpdatePrompt {
        _isActive = isActive;
 
   final ApplicationUpdateService service;
+  final ApplicationUpdateDownload? download;
+  bool _presentedDownload = false;
   final BuildContext _context;
   final NavigatorState _navigator;
   final ModalRoute<dynamic>? _route;
@@ -93,6 +107,14 @@ class ApplicationUpdatePrompt {
     final context = _context;
     try {
       if (!context.mounted || !_active) return;
+      if (download != null) {
+        await _checkDownload(
+          silent: silent,
+          delay: delay,
+          onChecked: onChecked,
+        );
+        return;
+      }
       final version = await service
           .check(scope: _scope)
           .whenComplete(() => onChecked?.call());
@@ -158,12 +180,76 @@ class ApplicationUpdatePrompt {
     } finally {
       try {
         await _removeDialog();
+        await _clearPresentedDownload();
       } finally {
         _window?.removeCloseStartListener(cancel);
         _window?.removeExitTask(closeAndWait);
         _scope.dispose();
       }
     }
+  }
+
+  Future<void> _checkDownload({
+    required bool silent,
+    required Duration delay,
+    VoidCallback? onChecked,
+  }) async {
+    final context = _context;
+    final controller = download!;
+    await controller.initialize();
+    if (!context.mounted || !_active) return;
+    ApplicationUpdateRelease? release = controller.candidate;
+    if (release == null &&
+        controller.state != ApplicationUpdateDownloadState.blocked) {
+      release = await service
+          .checkRelease(scope: _scope)
+          .whenComplete(() => onChecked?.call());
+    } else {
+      onChecked?.call();
+    }
+    if (!context.mounted || !_active) return;
+    if (release == null &&
+        controller.state != ApplicationUpdateDownloadState.blocked) {
+      if (!silent) context.showMessage(message: 'No new version available'.tl);
+      return;
+    }
+    if (delay > Duration.zero) await _scope.wait(delay);
+    if (!context.mounted || !_active) return;
+    final candidate = release;
+    final dialog = DialogRoute<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => ApplicationUpdateDialog(
+        download: controller,
+        release: candidate,
+        releasePageUrl: candidate?.pageUrl ?? service.releasePageUrl,
+        canAct: () =>
+            !_scope.isCancelled &&
+            _dialog?.isCurrent == true &&
+            NavigationAdmission.allows(context),
+        onClose: () {
+          if (!_scope.isCancelled &&
+              _dialog?.isCurrent == true &&
+              NavigationAdmission.allows(context)) {
+            Navigator.of(context).pop();
+          }
+        },
+      ),
+    );
+    _presentedDownload = true;
+    _dialog = dialog;
+    await Future.any<void>([_navigator.push(dialog), _scope.whenCancelled]);
+  }
+
+  Future<void> _clearPresentedDownload() async {
+    final controller = download;
+    if (!_presentedDownload ||
+        controller == null ||
+        controller.state == ApplicationUpdateDownloadState.installing ||
+        controller.state == ApplicationUpdateDownloadState.blocked) {
+      return;
+    }
+    await controller.cancelAndClear();
   }
 
   Future<void> _removeDialog() {

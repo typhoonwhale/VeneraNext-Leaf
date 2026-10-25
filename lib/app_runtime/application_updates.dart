@@ -4,6 +4,7 @@ import 'package:venera_next/foundation/appdata.dart';
 import 'package:venera_next/foundation/application_preferences.dart';
 import 'package:venera_next/foundation/global_preference_store.dart';
 import 'package:venera_next/foundation/application_update_service.dart';
+import 'package:venera_next/foundation/application_update_download.dart';
 import 'package:venera_next/foundation/startup_update_check.dart';
 import 'package:venera_next/network/app_dio.dart';
 import 'package:venera_next/network/request_scope.dart';
@@ -36,6 +37,20 @@ ApplicationUpdateService createApplicationUpdates({
     createClient: () => Dio()..httpClientAdapter = RHttpAdapter(),
     currentVersion: () => App.version,
     releaseRepository: releaseRepository,
+  );
+}
+
+/// Created only after bootstrap has established the private cache path.
+ApplicationUpdateDownload? createApplicationUpdateDownload(
+  ApplicationUpdateService service, {
+  bool? isAndroid,
+  String? cacheRoot,
+}) {
+  if (!(isAndroid ?? App.isAndroid) || !service.isEnabled) return null;
+  return ApplicationUpdateDownload(
+    cacheRoot: cacheRoot ?? App.cachePath,
+    repository: service.releaseRepository!,
+    dioFactory: () => Dio()..httpClientAdapter = RHttpAdapter(),
   );
 }
 

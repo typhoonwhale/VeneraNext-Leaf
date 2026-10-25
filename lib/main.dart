@@ -109,7 +109,12 @@ void main(List<String> args) {
                   macos: App.isMacOS,
                 )
               : null;
+          final applicationUpdates = createApplicationUpdates();
           final host = ApplicationHost(
+            applicationUpdates: applicationUpdates,
+            applicationUpdateDownload: createApplicationUpdateDownload(
+              applicationUpdates,
+            ),
             core: core,
             sync: sync,
             placement: placement,
@@ -163,6 +168,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       await ApplicationUpdatePrompt(
         context: context,
         service: widget.host.applicationUpdates,
+        download: widget.host.applicationUpdateDownload,
         parent: scope,
         isActive: () => mounted && !widget.host.isClosing,
       ).check(silent: true, delay: const Duration(seconds: 2));
@@ -173,6 +179,14 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     if (widget.host.isClosing) return;
+    unawaited(
+      widget.host.initializeApplicationUpdates().catchError((
+        Object error,
+        StackTrace stack,
+      ) {
+        Log.error('Recover application update cache', error, stack);
+      }),
+    );
     _mount = widget.host.attach(
       stop: () {
         _backgroundSync.stop();
@@ -492,6 +506,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               widget = DataSyncScope(controller: _dataSync, child: widget);
               widget = ApplicationUpdateScope(
                 service: this.widget.host.applicationUpdates,
+                download: this.widget.host.applicationUpdateDownload,
                 child: widget,
               );
               widget = WebDavLibraryScope(services: _library, child: widget);

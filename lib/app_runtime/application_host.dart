@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:venera_next/foundation/app_data_operations.dart';
 import 'package:venera_next/foundation/application_update_service.dart';
+import 'package:venera_next/foundation/application_update_download.dart';
 import 'package:venera_next/foundation/selection_operation.dart';
 
 import 'package:venera_next/features/sync/data_sync_controller.dart';
@@ -23,6 +24,7 @@ class ApplicationHost {
     SourceUpdateService? sourceUpdates,
     AppDataOperations? dataOperations,
     ApplicationUpdateService? applicationUpdates,
+    this.applicationUpdateDownload,
   }) : sourceUpdates =
            sourceUpdates ??
            SourceUpdateService(
@@ -38,6 +40,13 @@ class ApplicationHost {
   final SourceUpdateService sourceUpdates;
   final SourceInstallations? sourceInstallations;
   final ApplicationUpdateService applicationUpdates;
+  final ApplicationUpdateDownload? applicationUpdateDownload;
+
+  /// Local recovery runs regardless of startup network-check preferences.
+  Future<void> initializeApplicationUpdates() async {
+    if (!_closing) await applicationUpdateDownload?.initialize();
+  }
+
   final AppDataOperations dataOperations;
   final selections = SelectionTaskRegistry();
   final _mounts = <ApplicationMount>[];
@@ -104,6 +113,8 @@ class ApplicationHost {
     // release fails. Older mounts cannot disappear from the final drain.
     await Future.wait([
       attempt('selection tasks', selections.closeAndWait),
+      if (applicationUpdateDownload case final download?)
+        attempt('application download', download.closeAndWait),
       // Selections and startup mounts may be awaiting this shared check.
       // Start cancellation before waiting for any of those consumers.
       attempt('source updates', sourceUpdates.closeAndWait),

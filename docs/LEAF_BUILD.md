@@ -18,7 +18,7 @@ Android 使用保留上游主体、右下方带高对比 `Leaf` 标记的图标�
 
 Android 更新来源默认为 `typhoonwhale/VeneraNext-Leaf`。“关于”页手动检查和更新提示均使用该仓库；“启动时检查更新”沿用原有设置，默认关闭，用户可自行打开。旧备份只能改变该开关，不能将更新来源改回上游。其他平台仍使用 VeneraNext 上游更新渠道。
 
-可通过构建参数 `LEAF_ANDROID_RELEASE_REPOSITORY` 覆盖默认仓库；配置值必须是 `owner/repository`，且不能指向 `CyrilPeng/venera-next`（大小写不敏感）。显式传空值可关闭 Android 应用更新查询。应用只查询所选仓库并打开其 Release 页面，不自动下载安装；Debug 与 Release 包名不同，打开页面不表示能相互覆盖。
+可通过构建参数 `LEAF_ANDROID_RELEASE_REPOSITORY` 覆盖默认仓库；配置值必须是 `owner/repository`，且不能指向 `CyrilPeng/venera-next`（大小写不敏感）。显式传空值可关闭 Android 应用更新查询。1.18.3开发分支新增应用内下载并调用系统安装器，规则见[应用内更新方案](LEAF_IN_APP_UPDATE_DESIGN.md)。资产需来自所选仓库且包含SHA-256摘要；校验包名、签名、版本及ARM64后才能安装。Debug与Release身份不同，Debug只提供手动发布页入口。已发布1.18.2仍需从发布页手动下载。
 
 Leaf Release 必须使用一把固定、长期保管并离线备份的自有 keystore。上游 GitHub Secrets 不会提供给 fork，不能拿上游密钥，也不能每次临时生成新密钥。没有有效 `android/key.properties` 和对应 keystore 时，Gradle Release 任务和 GitHub Release 构建都会明确失败；CI 的 Debug 构建不代表可升级发布包。首次生成后不得重新生成或随意轮换 keystore，否则会破坏已安装 Leaf 与后续 APK 的覆盖升级关系。
 
@@ -113,7 +113,7 @@ AGP 增量更新 APK 时可能保留旧 ZIP 条目占用的空闲区域。若文
 
 Leaf仅维护Android ARM64产物；工作流职责见下表。当前发布方式是本机使用固定签名构建ARM64包，核对版本、内置pubspec、证书、ABI和SHA-256后，上传GitHub Release草稿，再正式发布为Latest。不要上传keystore或key.properties；不要在没有同一签名的情况下改用临时签名。
 
-使用发布API回读 `releases/latest` 确认新版本与APK资产，再通过实际版本比较函数检查旧版本会提示更新、新版本不会自我提示。设备仍须能访问GitHub API和下载域名；更新按钮打开发布页，由用户下载并确认覆盖安装。
+使用发布API回读 `releases/latest` 确认新版本与APK资产，再通过实际版本比较函数检查旧版本会提示更新、新版本不会自我提示。设备须分别能访问GitHub API和资产下载域名。首次安装承载应用内更新功能的版本仍需手动覆盖安装，之后可在应用中下载并交给Android确认；安装结果不明确时保留唯一候选包并提供发布页回退。
 
 ## Leaf 工作流维护范围
 

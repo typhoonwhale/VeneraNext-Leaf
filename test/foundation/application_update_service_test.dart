@@ -58,6 +58,63 @@ void main() {
   );
 
   test(
+    'checkRelease keeps release notes and reports an unavailable asset',
+    () async {
+      final adapter = ApplicationUpdateAdapter()..released.complete();
+      final service = ApplicationUpdateService(
+        createClient: () => Dio()..httpClientAdapter = adapter,
+        currentVersion: () => '1.0.0',
+        releaseRepository: 'typhoonwhale/VeneraNext-Leaf',
+      );
+
+      final result = service.checkRelease();
+      await adapter.entered.future;
+      adapter.complete({
+        'tag_name': 'v1.1.0',
+        'body': 'Release notes',
+        'assets': [],
+      });
+      final release = await result;
+      expect(release?.version, '1.1.0');
+      expect(release?.notes, 'Release notes');
+      expect(
+        release?.pageUrl,
+        'https://github.com/typhoonwhale/VeneraNext-Leaf/releases/tag/v1.1.0',
+      );
+      expect(release?.asset, isNull);
+      expect(release?.assetError, 'asset_missing');
+      await service.closeAndWait();
+    },
+  );
+
+  test(
+    'checkRelease cancellation waits for adapter cleanup before completing',
+    () async {
+      final adapter = ApplicationUpdateAdapter();
+      final service = ApplicationUpdateService(
+        createClient: () => Dio()..httpClientAdapter = adapter,
+        currentVersion: () => '1.0.0',
+      );
+      final scope = RequestScope();
+      var finished = false;
+      final checked = expectLater(
+        service.checkRelease(scope: scope),
+        throwsA(isA<RequestCancelled>()),
+      ).whenComplete(() => finished = true);
+
+      await adapter.entered.future;
+      scope.cancel();
+      await adapter.draining.future;
+      expect(finished, isFalse);
+      final closing = service.closeAndWait();
+      adapter.released.complete();
+      await Future.wait([checked, closing]);
+      expect(adapter.closes, 1);
+      scope.dispose();
+    },
+  );
+
+  test(
     'a 404 latest with an empty Leaf release list means no update',
     () async {
       final adapter = _EmptyLeafReleaseAdapter()..released.complete();
@@ -220,6 +277,9 @@ void main() {
     {'message': 'upstream error'},
     [
       {'tag_name': ''},
+    ],
+    [
+      {'tag_name': 'garbage'},
     ],
     [null],
   ]) {
