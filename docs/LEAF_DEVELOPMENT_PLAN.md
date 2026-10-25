@@ -313,3 +313,7 @@ git switch feature/leaf-reader-footer
 - 用户确认目标Leaf5+使用手势导航、底部无虚拟按键栏。官方导航文档区分手势与虚拟按键，未规定固定底部8像素区域；此前8像素是测试模拟，不能当作机型实测值。代码默认请求immersive，只响应系统实际padding，不凭手势范围人为留白。本机任务 docs/leaf5plus-device.md记录来源和未实测边界。
 - 50项配置/持久化/布局回归、11组真实CJK视觉场景及最终analyze通过。固定签名ARM64 Release已构建验包，versionCode从2362增至2372，23.37 MB。SHA-256：f3282e1dfe6ac9a7b4f5d61ac9335cf80d32442657ad83482a4d77dd74caedb0。
 - 已存超范围旧值按新边界生效，已有安装可手动选18/11；同签名Release直接覆盖，无需重新导入。紧凑版尚待实机验收，源码未提交/推送。
+
+## 应用内更新方案（2026-10-26）
+
+已确认在独立分支 `feature/leaf-in-app-update` 开发，需求与设计见 [Leaf应用内更新方案](LEAF_IN_APP_UPDATE_DESIGN.md)。计划提供应用内下载、两阶段校验、系统安装确认和专用更新目录清理；不做断点续传。当前仅形成方案，尚未实现或验收。

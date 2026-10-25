@@ -10,6 +10,10 @@
 | 2026-10-25 | [Android 包体积、身份与升级](2026-10-25-android-build-and-upgrade.md) | Debug/Release差异、固定签名、包大小、升级与备份范围；不等同于实机覆盖升级验收 |
 | 2026-10-25 | [APK 身份证据](evidence/2026-10-25-apk-identities.json) | 三个已构建包的大小、版本、哈希和原生库；不包含安装包或私钥 |
 
+## 相关功能方案
+
+[Leaf应用内更新方案](../LEAF_IN_APP_UPDATE_DESIGN.md)记录2026-10-26已确认需求、代码依据、更新目录生命周期及验收要求。开发使用独立分支 `feature/leaf-in-app-update`；当前仍是设计阶段，不能把计划写成已有能力。
+
 ## 后续 agent 从这里开始
 
 1. 核对当前分支、commit、tracking upstream和工作区状态。此轮基于 `feature/leaf-reader-footer` / `77e12cf9b09e177b501fb5a7ab45ce58c07d8721`，记录形成时实现尚有本地未提交修改，不能把这个commit当成所有功能已合入的证明；后续以实际checkout为准。
