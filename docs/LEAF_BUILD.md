@@ -56,22 +56,22 @@ adb version
 
 ```sh
 flutter pub get --enforce-lockfile
-flutter build apk --debug --target-platform android-arm64
+flutter build apk --debug --target-platform android-arm64 --split-per-abi
 ```
 
-Debug 包不需要 Leaf keystore，输出位于 `build/app/outputs/apk/debug/`。ARM64 交付应取该目录的 `app-arm64-v8a-debug.apk`，并用 aapt 确认 ABI；`build/app/outputs/flutter-apk/app-debug.apk` 可能是包含其他 ABI 的 universal 副本，不应仅根据构建参数给它命名为 ARM64。设备可同时安装官方版、Leaf Release 与 Leaf Debug。
+Debug 包不需要 Leaf keystore，输出为 `build/app/outputs/apk/debug/app-arm64-v8a-debug.apk`，Flutter副本为 `build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk`。必须带 `--split-per-abi`，让Flutter按分包文件名查找产物；旧目录中的 `app-debug.apk` 可能是历史通用包，不应交付。设备可同时安装官方版、Leaf Release 与 Leaf Debug。
 
 本机已放置固定 keystore 和 `android/key.properties` 后，构建 ARM64 Release APK：
 
 ```sh
-flutter build apk --release --target-platform android-arm64
+flutter build apk --release --target-platform android-arm64 --split-per-abi
 ```
 
 默认已连接自有仓库，也可以显式指定同一来源：
 
 ```sh
 flutter build apk --release \
-  --target-platform android-arm64 \
+  --target-platform android-arm64 --split-per-abi \
   --dart-define=LEAF_ANDROID_RELEASE_REPOSITORY=typhoonwhale/VeneraNext-Leaf
 ```
 
@@ -111,6 +111,22 @@ AGP 增量更新 APK 时可能保留旧 ZIP 条目占用的空闲区域。若文
 
 首次公开发布为1.18.2（build240，ARM64 versionCode2402），发布到本仓库的GitHub Releases。Android检查更新比较Release标签和应用内版本号，忽略build后缀；因此每次正式发布都须递增 `release.json.version` 并同步 `pubspec.yaml`，仅增加build不会产生更新提示。发布标签使用 `v<version>`，更新说明来自CHANGELOG对应节。
 
-Leaf保留标签的元数据校验与质量工作流；此fork不运行继承的多平台自动Build/Release及AltStore后续发布任务。当前发布方式是本机使用固定签名构建ARM64包，核对版本、内置pubspec、证书、ABI和SHA-256后，上传GitHub Release草稿，再正式发布为Latest。不要上传keystore或key.properties；不要在没有同一签名的情况下改用临时签名。
+Leaf仅维护Android ARM64产物；工作流职责见下表。当前发布方式是本机使用固定签名构建ARM64包，核对版本、内置pubspec、证书、ABI和SHA-256后，上传GitHub Release草稿，再正式发布为Latest。不要上传keystore或key.properties；不要在没有同一签名的情况下改用临时签名。
 
 使用发布API回读 `releases/latest` 确认新版本与APK资产，再通过实际版本比较函数检查旧版本会提示更新、新版本不会自我提示。设备仍须能访问GitHub API和下载域名；更新按钮打开发布页，由用户下载并确认覆盖安装。
+
+## Leaf 工作流维护范围
+
+| 入口 | 行为 |
+|---|---|
+| `main.yml`：v* 标签／手动运行 | 仅发布元数据校验和质量检查，不构建、不创建Release |
+| `analyze.yml`：main推送／PR／发布校验调用 | Dart分析、格式与架构检查、脚本测试、Linux宿主的Rust和Flutter测试及覆盖率 |
+| `pr_build.yml`：PR | 相关路径变化时构建Android ARM64 Debug作冒烟检查，不上传或发布Debug包，不使用Release密钥 |
+| `build.yml`：手动运行 | 使用固定签名构建一个Android ARM64 Release APK及SHA-256摘要，上传Actions artifact，不自动发布 |
+| `dependency_review.yml` | 保留依赖漏洞检查，覆盖Android使用的Rust依赖 |
+
+Linux在这里是测试宿主，不生成Linux客户端。已移除Apple/iOS原生检查、Windows PR构建及Windows/macOS/iOS/Linux正式构建入口，以及AltStore、Winget、Fastlane和上游赞助同步工作流。上游平台源码和通用脚本仍保留，便于后续同步；它们不是Leaf的交付目标。Issue检查和手动清理运行记录不涉及应用产物，继续保留。
+
+Android Gradle仅启用`arm64-v8a`，不生成ARM32、x86_64或通用APK；保留ARM64的版本码规则`build × 10 + 2`和原固定包名、证书。构建命令使用`flutter build apk --release --target-platform android-arm64 --split-per-abi`。
+
+云端手动构建必须配置与现有Leaf安装一致的`ANDROID_KEYSTORE`和`ANDROID_KEY_PROPERTIES`，缺失时直接失败，不能生成临时签名替代。当前尚未配置这些Secrets，正式交付继续使用本机固定签名；本轮不上传私钥、不改变既有Release或触发新版本发布。将来启用云端构建时，上传产物应验签并核对证书后再发布。

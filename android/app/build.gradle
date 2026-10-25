@@ -5,7 +5,7 @@ plugins {
     id "dev.flutter.flutter-gradle-plugin"
 }
 
-ext.abiCodes = ["armeabi-v7a": 1, "arm64-v8a": 2, "x86_64": 3]
+ext.abiCodes = ["arm64-v8a": 2]
 
 def localProperties = new Properties()
 def localPropertiesFile = rootProject.file("local.properties")
@@ -54,9 +54,9 @@ android {
     splits{
         abi {
             reset()
-            include 'armeabi-v7a', 'arm64-v8a', 'x86_64'
+            include 'arm64-v8a'
             enable true
-            universalApk true
+            universalApk false
         }
     }
 
@@ -93,19 +93,19 @@ android {
         release {
             minifyEnabled true
             shrinkResources true
-            ndk {
-                abiFilters "armeabi-v7a", "arm64-v8a", "x86_64"
-            }
             if (releaseSigningAvailable) {
                 signingConfig signingConfigs.release
             }
         }
         debug {
             applicationIdSuffix ".debug"
-            ndk {
-                abiFilters "armeabi-v7a", "arm64-v8a", "x86_64"
-            }
         }
+    }
+
+    // Flutter also creates a profile build type with default ABI filters.
+    // The single ARM64 split owns ABI selection for every build type.
+    buildTypes.configureEach {
+        ndk.abiFilters.clear()
     }
 
     applicationVariants.all { variant ->

@@ -120,7 +120,6 @@ def main() -> None:
 
     validate_pubspec_version(tag)
     validate_flutter_rust_bridge_lock()
-    validate_windows_installer_metadata()
     notes = extract_release_notes(tag)
 
     if args.write_notes:

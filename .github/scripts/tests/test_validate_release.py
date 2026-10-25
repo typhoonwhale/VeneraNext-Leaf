@@ -34,13 +34,6 @@ class ValidateReleaseTests(unittest.TestCase):
                 '    version: "2.11.1"\n'
             ),
         }
-        installer = (
-            "[Setup]\nUninstallDisplayName={#MyAppName}\n[Run]\n"
-            'Filename: "{app}\\{#MyAppExeName}"; '
-            "Flags: nowait postinstall skipifsilent\n"
-        )
-        for path in ("windows/build.iss", "windows/build_arm64.iss"):
-            files[path] = installer
         for path, text in files.items():
             target = self.root / path
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -138,8 +131,6 @@ class ValidateReleaseTests(unittest.TestCase):
             "pubspec.yaml": "version: 9.9.9+42\n",
             "CHANGELOG.md": "## v1.2.3\n\n",
             "pubspec.lock": "packages: {}\n",
-            "windows/build.iss": "[Setup]\n",
-            "windows/build_arm64.iss": "[Setup]\n",
         }
         for path, text in invalid.items():
             with self.subTest(path=path):
@@ -151,7 +142,7 @@ class ValidateReleaseTests(unittest.TestCase):
                 finally:
                     target.write_bytes(original)
 
-    def test_complete_build_keeps_branch_and_release_paths_separate(self):
+    def test_leaf_validation_keeps_branch_and_release_paths_separate(self):
         workflow = (ROOT / ".github/workflows/main.yml").read_text(encoding="utf-8")
         metadata = re.search(
             r"^  Release_Metadata:\n(?P<body>.*?)(?=^  \w+:)",
@@ -168,15 +159,9 @@ class ValidateReleaseTests(unittest.TestCase):
             r"if: github\.ref_type != 'tag'\n"
             r"\s+run: python3 \.github/scripts/validate_release\.py --build-only\n",
         )
-        release = workflow.split("\n  Release:\n", 1)[1]
-        self.assertIn(
-            "if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')",
-            release,
-        )
-        self.assertIn(
-            "run: python3 .github/scripts/validate_release.py --write-notes", release
-        )
-        self.assertNotIn("--build-only", release)
+        # Tag pushes validate metadata and quality; local signing publishes Leaf.
+        self.assertNotIn("gh release create", workflow)
+        self.assertNotIn("./.github/workflows/build.yml", workflow)
 
 
 if __name__ == "__main__":
