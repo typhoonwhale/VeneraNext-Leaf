@@ -487,6 +487,7 @@
     "app_runtime/init.dart",
     "app_runtime/interactive_platform_bindings.dart",
     "app_runtime/sync_window_binding.dart",
+    "app_shell/android_window_insets.dart",
     "app_shell/app_shell.dart",
     "app_shell/auth_page.dart",
     "app_shell/home_page.dart",

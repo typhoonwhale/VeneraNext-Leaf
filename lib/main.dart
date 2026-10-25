@@ -31,6 +31,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:venera_next/app_runtime/app_runtime.dart';
 import 'package:venera_next/app_shell/app_shell.dart';
 import 'package:venera_next/app_shell/startup_failure.dart';
+import 'package:venera_next/app_shell/android_window_insets.dart';
 import 'package:venera_next/foundation/log.dart';
 import 'package:venera_next/foundation/file_interaction.dart';
 import 'components/gesture.dart';
@@ -431,20 +432,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               );
             };
             if (widget != null) {
-              /// 如果无法检测到状态栏高度设定指定高度
-              /// https://github.com/flutter/flutter/issues/161086
-              var isPaddingCheckError =
-                  MediaQuery.of(context).viewPadding.top <= 0 ||
-                  MediaQuery.of(context).viewPadding.top > 200;
-
-              if (isPaddingCheckError && Platform.isAndroid) {
-                widget = MediaQuery(
-                  data: MediaQuery.of(context).copyWith(
-                    viewPadding: const EdgeInsets.only(top: 15, bottom: 15),
-                    padding: const EdgeInsets.only(top: 15, bottom: 15),
-                  ),
-                  child: widget,
-                );
+              if (App.isAndroid) {
+                widget = AndroidWindowInsets(child: widget);
               }
 
               widget = FavoritesScope(

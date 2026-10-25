@@ -611,16 +611,7 @@ class _ReaderSettingsState extends SettingsSaveState<ReaderSettings> {
                   : null,
               useDeviceSettings: useDeviceSpecificSettings,
             ).toSliver(),
-          SwitchSetting.reader(
-            title: "Display time & battery info in reader".tl,
-            preference: ReaderPreferences.enableClockAndBatteryInfoInReader,
-            onChanged: () {
-              widget.onChanged?.call("enableClockAndBatteryInfoInReader");
-            },
-            comicId: isEnabledSpecificSettings ? widget.comicId : null,
-            comicSource: isEnabledSpecificSettings ? widget.comicSource : null,
-            useDeviceSettings: useDeviceSpecificSettings,
-          ).toSliver(),
+          const Divider().toSliver(),
           SelectSetting.reader(
             title: 'Reader information display'.tl,
             preference: ReaderPreferences.readerInformationMode,
@@ -640,7 +631,38 @@ class _ReaderSettingsState extends SettingsSaveState<ReaderSettings> {
             comicSource: isEnabledSpecificSettings ? widget.comicSource : null,
             useDeviceSettings: useDeviceSpecificSettings,
           ).toSliver(),
+          SwitchSetting.reader(
+            title: "Display time & battery info in reader".tl,
+            preference: ReaderPreferences.enableClockAndBatteryInfoInReader,
+            onChanged: () {
+              widget.onChanged?.call("enableClockAndBatteryInfoInReader");
+            },
+            comicId: isEnabledSpecificSettings ? widget.comicId : null,
+            comicSource: isEnabledSpecificSettings ? widget.comicSource : null,
+            useDeviceSettings: useDeviceSpecificSettings,
+          ).toSliver(),
+          SwitchSetting.reader(
+            title: "Show Page Number".tl,
+            preference: ReaderPreferences.showPageNumberInReader,
+            onChanged: () {
+              widget.onChanged?.call("showPageNumberInReader");
+            },
+            comicId: isEnabledSpecificSettings ? widget.comicId : null,
+            comicSource: isEnabledSpecificSettings ? widget.comicSource : null,
+            useDeviceSettings: useDeviceSpecificSettings,
+          ).toSliver(),
           if (_value(ReaderPreferences.readerInformationMode) == 'footer') ...[
+            SwitchSetting.reader(
+              title: 'Show book and chapter name in reader information bar'.tl,
+              preference: ReaderPreferences.readerFooterShowChapter,
+              onChanged: () =>
+                  widget.onChanged?.call('readerFooterShowChapter'),
+              comicId: isEnabledSpecificSettings ? widget.comicId : null,
+              comicSource: isEnabledSpecificSettings
+                  ? widget.comicSource
+                  : null,
+              useDeviceSettings: useDeviceSpecificSettings,
+            ).toSliver(),
             SliderSetting.reader(
               title: 'Reader information bar height'.tl,
               preference: ReaderPreferences.readerFooterHeight,
@@ -663,18 +685,8 @@ class _ReaderSettingsState extends SettingsSaveState<ReaderSettings> {
                   : null,
               useDeviceSettings: useDeviceSpecificSettings,
             ).toSliver(),
-            SwitchSetting.reader(
-              title: 'Show book and chapter name in reader information bar'.tl,
-              preference: ReaderPreferences.readerFooterShowChapter,
-              onChanged: () =>
-                  widget.onChanged?.call('readerFooterShowChapter'),
-              comicId: isEnabledSpecificSettings ? widget.comicId : null,
-              comicSource: isEnabledSpecificSettings
-                  ? widget.comicSource
-                  : null,
-              useDeviceSettings: useDeviceSpecificSettings,
-            ).toSliver(),
           ],
+          const Divider().toSliver(),
           SwitchSetting.reader(
             title: "Show system status bar".tl,
             preference: ReaderPreferences.showSystemStatusBar,
@@ -711,16 +723,6 @@ class _ReaderSettingsState extends SettingsSaveState<ReaderSettings> {
           SliderSetting.reader(
             title: "Number of images preloaded".tl,
             preference: ReaderPreferences.preloadImageCount,
-            comicId: isEnabledSpecificSettings ? widget.comicId : null,
-            comicSource: isEnabledSpecificSettings ? widget.comicSource : null,
-            useDeviceSettings: useDeviceSpecificSettings,
-          ).toSliver(),
-          SwitchSetting.reader(
-            title: "Show Page Number".tl,
-            preference: ReaderPreferences.showPageNumberInReader,
-            onChanged: () {
-              widget.onChanged?.call("showPageNumberInReader");
-            },
             comicId: isEnabledSpecificSettings ? widget.comicId : null,
             comicSource: isEnabledSpecificSettings ? widget.comicSource : null,
             useDeviceSettings: useDeviceSpecificSettings,

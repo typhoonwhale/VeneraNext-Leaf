@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:venera_next/app_shell/android_window_insets.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -36,6 +37,94 @@ void main() {
   tearDown(
     () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(battery, null),
+  );
+
+  testWidgets(
+    'root window insets reach footer across fullscreen and menu changes',
+    (tester) async {
+      const size = Size(667, 900);
+      await tester.binding.setSurfaceSize(size);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final f = _Fixture()
+        ..gallery = true
+        ..showStatus = false
+        ..showChapter = false;
+      try {
+        final scenarios = [
+          const MediaQueryData(
+            size: size,
+            systemGestureInsets: EdgeInsets.only(bottom: 32),
+          ),
+          const MediaQueryData(
+            size: size,
+            padding: EdgeInsets.only(bottom: 24),
+            viewPadding: EdgeInsets.only(bottom: 24),
+          ),
+          const MediaQueryData(
+            size: size,
+            padding: EdgeInsets.only(top: 24, bottom: 20),
+            viewPadding: EdgeInsets.only(top: 24, bottom: 20),
+          ),
+          const MediaQueryData(
+            size: size,
+            padding: EdgeInsets.fromLTRB(30, 0, 8, 20),
+            viewPadding: EdgeInsets.fromLTRB(30, 0, 8, 20),
+            devicePixelRatio: 2,
+          ),
+          const MediaQueryData(
+            size: size,
+            padding: EdgeInsets.only(top: 24),
+            viewPadding: EdgeInsets.only(top: 24, bottom: 20),
+            viewInsets: EdgeInsets.only(bottom: 280),
+          ),
+          const MediaQueryData(size: size),
+        ];
+        for (final metrics in scenarios) {
+          f.windowMetrics = metrics;
+          await tester.pumpWidget(f.build(1, false));
+          await tester.pump();
+          final shell = tester.state<ReaderScaffoldState>(
+            find.byType(ReaderScaffold),
+          );
+          // Exercise both menu states with the current platform metrics. Real
+          // Android delivers metric updates asynchronously after the request.
+          shell.openOrClose();
+          await tester.pump();
+          expect(f.systemUiChanges.last, isTrue);
+          shell.openOrClose();
+          await tester.pump();
+          expect(f.systemUiChanges.last, isFalse);
+          final footer = tester.getRect(find.byType(ReaderInformationFooter));
+          final page = tester.getRect(find.text('4/12'));
+          final viewport = tester.getRect(
+            find.byKey(const ValueKey('reader-content-viewport')),
+          );
+          expect(footer.height, 18 + metrics.padding.bottom);
+          expect(footer.bottom, size.height - metrics.viewInsets.bottom);
+          expect(
+            page.bottom,
+            closeTo(footer.bottom - metrics.padding.bottom, 0.01),
+          );
+          expect(viewport.bottom, footer.top);
+          expect(
+            MediaQuery.paddingOf(
+              tester.element(find.byType(ReaderInformationFooter)),
+            ),
+            metrics.padding,
+          );
+          final content = tester.element(
+            find.byKey(const ValueKey('reader-test-content')),
+          );
+          expect(MediaQuery.paddingOf(content).bottom, 0);
+          expect(MediaQuery.paddingOf(content).left, metrics.padding.left);
+          expect(tester.takeException(), isNull);
+        }
+      } finally {
+        await tester.pumpWidget(const SizedBox());
+        await f.work.dispose();
+        f.favorites.dispose();
+      }
+    },
   );
 
   for (final scenario in [
@@ -728,6 +817,8 @@ class _Fixture {
   final repaint = GlobalKey();
   final progressIdentity = Object();
   var padding = const EdgeInsets.fromLTRB(16, 24, 12, 20);
+  MediaQueryData? windowMetrics;
+  final systemUiChanges = <bool>[];
   bool showPage = true, showStatus = true, comments = false;
   int taps = 0;
   bool gallery = false;
@@ -746,72 +837,78 @@ class _Fixture {
     ),
     home: Builder(
       builder: (context) => MediaQuery(
-        data: MediaQuery.of(context).copyWith(
-          padding: padding,
-          textScaler: TextScaler.linear(scale),
-          disableAnimations: true,
-        ),
-        child: RepaintBoundary(
-          key: repaint,
-          child: Scaffold(
-            body: SizedBox.expand(
-              child: ReaderScaffold(
-                data: ReaderShellData(
-                  comicId: 'book',
-                  sourceKey: 'local',
-                  title: title,
-                  chapterTitle: chapterTitle,
-                  hasChapters: hasChapters,
-                  vertical: true,
-                  gallery: gallery,
-                  animating: false,
-                  onCommentsPage: comments,
-                  swipeToCollect: false,
-                  preferences: ReaderSettings.resolve(
-                    global: {
-                      'readerInformationMode': mode,
-                      'readerFooterHeight': footerHeight,
-                      'readerFooterFontSize': footerFontSize,
-                      'readerFooterShowChapter': showChapter,
-                      'showPageNumberInReader': showPage,
-                      'enableClockAndBatteryInfoInReader': showStatus,
-                    },
+        data:
+            (windowMetrics ??
+                    MediaQuery.of(
+                      context,
+                    ).copyWith(padding: padding, viewPadding: padding))
+                .copyWith(
+                  textScaler: TextScaler.linear(scale),
+                  disableAnimations: true,
+                ),
+        child: AndroidWindowInsets(
+          child: RepaintBoundary(
+            key: repaint,
+            child: Scaffold(
+              body: SizedBox.expand(
+                child: ReaderScaffold(
+                  data: ReaderShellData(
+                    comicId: 'book',
+                    sourceKey: 'local',
+                    title: title,
+                    chapterTitle: chapterTitle,
+                    hasChapters: hasChapters,
+                    vertical: true,
+                    gallery: gallery,
+                    animating: false,
+                    onCommentsPage: comments,
+                    swipeToCollect: false,
+                    preferences: ReaderSettings.resolve(
+                      global: {
+                        'readerInformationMode': mode,
+                        'readerFooterHeight': footerHeight,
+                        'readerFooterFontSize': footerFontSize,
+                        'readerFooterShowChapter': showChapter,
+                        'showPageNumberInReader': showPage,
+                        'enableClockAndBatteryInfoInReader': showStatus,
+                      },
+                    ),
+                    automaticReading: AutoReadingStatus.stopped,
                   ),
-                  automaticReading: AutoReadingStatus.stopped,
-                ),
-                progress: ReaderProgressRequest(
-                  identity: progressIdentity,
-                  page: 4,
-                  maxPage: 12,
-                  chapter: 2,
-                  maxChapter: 3,
-                  reversed: false,
-                  isCurrent: () => true,
-                  toPage: (_, {animated = true}) => true,
-                  toChapter: (_) => true,
-                ),
-                onExit: () async {},
-                onFullscreen: null,
-                onToggleAutomaticReading: () => false,
-                acquireSidebarPause: () => () {},
-                readImagePickContext: () => null,
-                imageWork: work,
-                orientation: ReaderOrientation.system,
-                onRotate: null,
-                onSystemUiChanged: (_) {},
-                createChapterMenu: () => null,
-                favoriteChanges: favorites,
-                createFavoriteQuery: () => null,
-                createImageFavorite: () => null,
-                createImageExport: () => null,
-                createSettings: () => null,
-                createChapterComments: () => null,
-                chapterNavigation: null,
-                child: GestureDetector(
-                  key: const ValueKey('reader-test-content'),
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => taps++,
-                  child: const ColoredBox(color: Color(0xff758473)),
+                  progress: ReaderProgressRequest(
+                    identity: progressIdentity,
+                    page: 4,
+                    maxPage: 12,
+                    chapter: 2,
+                    maxChapter: 3,
+                    reversed: false,
+                    isCurrent: () => true,
+                    toPage: (_, {animated = true}) => true,
+                    toChapter: (_) => true,
+                  ),
+                  onExit: () async {},
+                  onFullscreen: null,
+                  onToggleAutomaticReading: () => false,
+                  acquireSidebarPause: () => () {},
+                  readImagePickContext: () => null,
+                  imageWork: work,
+                  orientation: ReaderOrientation.system,
+                  onRotate: null,
+                  onSystemUiChanged: systemUiChanges.add,
+                  createChapterMenu: () => null,
+                  favoriteChanges: favorites,
+                  createFavoriteQuery: () => null,
+                  createImageFavorite: () => null,
+                  createImageExport: () => null,
+                  createSettings: () => null,
+                  createChapterComments: () => null,
+                  chapterNavigation: null,
+                  child: GestureDetector(
+                    key: const ValueKey('reader-test-content'),
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => taps++,
+                    child: const ColoredBox(color: Color(0xff758473)),
+                  ),
                 ),
               ),
             ),
