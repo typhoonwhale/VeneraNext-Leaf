@@ -106,6 +106,22 @@ abstract final class ReaderPreferences {
     step: 1,
     integer: false,
   );
+  static const readerFooterHeight = NumericPreference(
+    'readerFooterHeight',
+    18.0,
+    min: 15,
+    max: 25,
+    step: 1,
+    integer: false,
+  );
+  static const readerFooterFontSize = NumericPreference(
+    'readerFooterFontSize',
+    11.0,
+    min: 9,
+    max: 13,
+    step: 1,
+    integer: false,
+  );
   static const readerScreenPicNumberForPortrait = NumericPreference(
     'readerScreenPicNumberForPortrait',
     1,
@@ -196,6 +212,15 @@ abstract final class ReaderPreferences {
     'enableClockAndBatteryInfoInReader',
     true,
   );
+  static const readerInformationMode = ChoicePreference(
+    'readerInformationMode',
+    'footer',
+    ['footer', 'overlay', 'hidden'],
+  );
+  static const readerFooterShowChapter = BoolPreference(
+    'readerFooterShowChapter',
+    false,
+  );
   static const showPageNumberInReader = BoolPreference(
     'showPageNumberInReader',
     true,
@@ -264,6 +289,10 @@ abstract final class ReaderPreferences {
     limitImageWidth,
     enableTurnPageByVolumeKey,
     enableClockAndBatteryInfoInReader,
+    readerInformationMode,
+    readerFooterHeight,
+    readerFooterFontSize,
+    readerFooterShowChapter,
     showPageNumberInReader,
     showImageDimensions,
     showSingleImageOnFirstPage,

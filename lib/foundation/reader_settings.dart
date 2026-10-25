@@ -115,6 +115,12 @@ class ReaderSettings {
       _values['enableTurnPageByVolumeKey'] as bool;
   bool get enableClockAndBatteryInfoInReader =>
       _values['enableClockAndBatteryInfoInReader'] as bool;
+  String get readerInformationMode =>
+      _values['readerInformationMode'] as String;
+  double get readerFooterHeight => _values['readerFooterHeight'] as double;
+  double get readerFooterFontSize => _values['readerFooterFontSize'] as double;
+  bool get readerFooterShowChapter =>
+      _values['readerFooterShowChapter'] as bool;
   bool get showPageNumberInReader => _values['showPageNumberInReader'] as bool;
   bool get showImageDimensions => _values['showImageDimensions'] as bool;
   bool get showSingleImageOnFirstPage =>

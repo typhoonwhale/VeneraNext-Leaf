@@ -8,12 +8,36 @@ import 'package:venera_next/foundation/startup_update_check.dart';
 import 'package:venera_next/network/app_dio.dart';
 import 'package:venera_next/network/request_scope.dart';
 
-ApplicationUpdateService createApplicationUpdates() => ApplicationUpdateService(
-  // Public release metadata needs network preferences, not application cookies
-  // or an interactive Cloudflare interceptor.
-  createClient: () => Dio()..httpClientAdapter = RHttpAdapter(),
-  currentVersion: () => App.version,
-);
+ApplicationUpdateService createApplicationUpdates({
+  bool? isAndroid,
+  String androidReleaseRepository = const String.fromEnvironment(
+    'LEAF_ANDROID_RELEASE_REPOSITORY',
+    defaultValue: ApplicationUpdateService.androidDefaultReleaseRepository,
+  ),
+}) {
+  final useAndroidChannel = isAndroid ?? App.isAndroid;
+  final configuredRepository = androidReleaseRepository.trim();
+  final upstreamRepository = ApplicationUpdateService.defaultReleaseRepository
+      .toLowerCase();
+  final String? releaseRepository;
+  if (!useAndroidChannel) {
+    releaseRepository = ApplicationUpdateService.defaultReleaseRepository;
+  } else if (configuredRepository.isEmpty ||
+      configuredRepository.toLowerCase() == upstreamRepository) {
+    // Keep forked Android packages on their own release page.
+    releaseRepository = null;
+  } else {
+    releaseRepository = configuredRepository;
+  }
+
+  return ApplicationUpdateService(
+    // Public release metadata needs network preferences, not application cookies
+    // or an interactive Cloudflare interceptor.
+    createClient: () => Dio()..httpClientAdapter = RHttpAdapter(),
+    currentVersion: () => App.version,
+    releaseRepository: releaseRepository,
+  );
+}
 
 StartupUpdateCheck createStartupUpdateCheck({
   required SourceUpdateService sources,

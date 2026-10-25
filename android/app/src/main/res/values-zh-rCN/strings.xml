@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="app_name">Leaf</string>
     <string name="share_text">搜索</string>
     <string name="download_channel">漫画下载</string>
     <string name="download_active">正在下载漫画</string>

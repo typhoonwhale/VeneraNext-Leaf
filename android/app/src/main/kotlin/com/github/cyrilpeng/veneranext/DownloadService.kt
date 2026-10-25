@@ -102,7 +102,7 @@ class DownloadService : Service() {
         )
         val builder = NotificationCompat.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_download_notification)
-            .setContentTitle("VeneraNext")
+            .setContentTitle(getString(R.string.app_name))
             .setContentText(getString(if (session?.waiting == true) R.string.download_waiting else R.string.download_active))
             .setContentIntent(open)
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)

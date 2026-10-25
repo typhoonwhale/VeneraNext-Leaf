@@ -616,6 +616,7 @@
     "features/reader/image_selection.dart",
     "features/reader/images.dart",
     "features/reader/images_host.dart",
+    "features/reader/information_footer.dart",
     "features/reader/information_text.dart",
     "features/reader/loading.dart",
     "features/reader/platform_effects.dart",

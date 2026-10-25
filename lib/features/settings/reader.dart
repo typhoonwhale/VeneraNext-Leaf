@@ -621,6 +621,60 @@ class _ReaderSettingsState extends SettingsSaveState<ReaderSettings> {
             comicSource: isEnabledSpecificSettings ? widget.comicSource : null,
             useDeviceSettings: useDeviceSpecificSettings,
           ).toSliver(),
+          SelectSetting.reader(
+            title: 'Reader information display'.tl,
+            preference: ReaderPreferences.readerInformationMode,
+            optionTranslation: {
+              'footer': 'Separate bottom bar'.tl,
+              'overlay': 'Overlay'.tl,
+              'hidden': 'Hidden'.tl,
+            },
+            help:
+                'The separate bottom bar only applies to Gallery modes. Continuous and Waterfall modes keep the existing overlay display.'
+                    .tl,
+            onChanged: () {
+              setState(() {});
+              widget.onChanged?.call('readerInformationMode');
+            },
+            comicId: isEnabledSpecificSettings ? widget.comicId : null,
+            comicSource: isEnabledSpecificSettings ? widget.comicSource : null,
+            useDeviceSettings: useDeviceSpecificSettings,
+          ).toSliver(),
+          if (_value(ReaderPreferences.readerInformationMode) == 'footer') ...[
+            SliderSetting.reader(
+              title: 'Reader information bar height'.tl,
+              preference: ReaderPreferences.readerFooterHeight,
+              valueFormatter: (value) => value.toInt().toString(),
+              onChanged: () => widget.onChanged?.call('readerFooterHeight'),
+              comicId: isEnabledSpecificSettings ? widget.comicId : null,
+              comicSource: isEnabledSpecificSettings
+                  ? widget.comicSource
+                  : null,
+              useDeviceSettings: useDeviceSpecificSettings,
+            ).toSliver(),
+            SliderSetting.reader(
+              title: 'Reader information font size'.tl,
+              preference: ReaderPreferences.readerFooterFontSize,
+              valueFormatter: (value) => value.toInt().toString(),
+              onChanged: () => widget.onChanged?.call('readerFooterFontSize'),
+              comicId: isEnabledSpecificSettings ? widget.comicId : null,
+              comicSource: isEnabledSpecificSettings
+                  ? widget.comicSource
+                  : null,
+              useDeviceSettings: useDeviceSpecificSettings,
+            ).toSliver(),
+            SwitchSetting.reader(
+              title: 'Show book and chapter name in reader information bar'.tl,
+              preference: ReaderPreferences.readerFooterShowChapter,
+              onChanged: () =>
+                  widget.onChanged?.call('readerFooterShowChapter'),
+              comicId: isEnabledSpecificSettings ? widget.comicId : null,
+              comicSource: isEnabledSpecificSettings
+                  ? widget.comicSource
+                  : null,
+              useDeviceSettings: useDeviceSpecificSettings,
+            ).toSliver(),
+          ],
           SwitchSetting.reader(
             title: "Show system status bar".tl,
             preference: ReaderPreferences.showSystemStatusBar,

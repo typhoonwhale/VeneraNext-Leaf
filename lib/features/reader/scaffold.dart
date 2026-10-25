@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'information_footer.dart';
 import 'package:venera_next/components/settings_save_state.dart';
 
 import 'package:venera_next/features/reader/status_info.dart';
@@ -225,25 +226,14 @@ class ReaderScaffoldState extends State<ReaderScaffold> {
     final topBarHeight = kTopBarHeight * titleScale;
     return Stack(
       children: [
-        Positioned.fill(
-          child: AbsorbPointer(
-            absorbing: widget.data.animating,
-            child: widget.child,
-          ),
-        ),
-        if (!isOnChapterCommentsPage)
-          Positioned.fill(
-            child: ReaderBrightnessOverlay(
-              enabled:
-                  _brightnessPreview.enabled ??
-                  widget.data.preferences.readerBrightnessEnabled,
-              brightness:
-                  _brightnessPreview.brightness ??
-                  widget.data.preferences.readerBrightness,
-            ),
-          ),
-        if (!isOnChapterCommentsPage) _buildInformation(),
-        ReaderChapterNavigationButton(action: widget.chapterNavigation),
+        Positioned.fill(child: _buildReadingArea()),
+        if (!isOnChapterCommentsPage &&
+            !_usesFooter &&
+            (!widget.data.gallery ||
+                widget.data.preferences.readerInformationMode != 'hidden'))
+          _buildInformation(),
+        if (!_usesFooter)
+          ReaderChapterNavigationButton(action: widget.chapterNavigation),
         AnimatedPositioned(
           duration: menuDuration,
           top: _isOpen ? 0 : -(topBarHeight + context.padding.top),
@@ -281,6 +271,73 @@ class ReaderScaffoldState extends State<ReaderScaffold> {
         Positioned.fill(
           child: EInkRefreshOverlay(controller: _eInkRefreshController),
         ),
+      ],
+    );
+  }
+
+  bool get _usesFooter =>
+      widget.data.gallery &&
+      widget.data.preferences.readerInformationMode == 'footer' &&
+      (widget.data.preferences.showPageNumberInReader ||
+          widget.data.preferences.enableClockAndBatteryInfoInReader ||
+          widget.data.preferences.readerFooterShowChapter);
+
+  Widget _buildReadingArea() {
+    final preferences = widget.data.preferences;
+    Widget content = Stack(
+      fit: StackFit.expand,
+      children: [
+        AbsorbPointer(absorbing: widget.data.animating, child: widget.child),
+        if (!widget.data.onCommentsPage)
+          ReaderBrightnessOverlay(
+            enabled:
+                _brightnessPreview.enabled ??
+                preferences.readerBrightnessEnabled,
+            brightness:
+                _brightnessPreview.brightness ?? preferences.readerBrightness,
+          ),
+        if (_usesFooter)
+          ReaderChapterNavigationButton(action: widget.chapterNavigation),
+      ],
+    );
+    return Column(
+      children: [
+        Expanded(
+          child: ClipRect(
+            key: const ValueKey('reader-content-viewport'),
+            child: LayoutBuilder(
+              builder: (context, constraints) => MediaQuery(
+                data: _usesFooter
+                    ? MediaQuery.of(context).copyWith(
+                        size: constraints.biggest,
+                        padding: MediaQuery.paddingOf(
+                          context,
+                        ).copyWith(bottom: 0),
+                      )
+                    : MediaQuery.of(context),
+                child: content,
+              ),
+            ),
+          ),
+        ),
+        if (_usesFooter)
+          ReaderInformationFooter(
+            page: widget.progress.page,
+            maxPage: widget.progress.maxPage,
+            title: preferences.readerFooterShowChapter
+                ? widget.data.title
+                : null,
+            chapterTitle:
+                preferences.readerFooterShowChapter && widget.data.hasChapters
+                ? widget.data.chapterTitle ?? 'E${widget.progress.chapter}'
+                : null,
+            showPage: preferences.showPageNumberInReader,
+            showStatus: preferences.enableClockAndBatteryInfoInReader,
+            height: preferences.readerFooterHeight,
+            fontSize: preferences.readerFooterFontSize,
+            // Keep the gallery extent stable when swiping to/from comments.
+            hideInformation: widget.data.onCommentsPage,
+          ),
       ],
     );
   }

@@ -212,4 +212,31 @@ void main() {
       'none',
     );
   });
+
+  test(
+    'Leaf reader information defaults and writes serialize with settings',
+    () {
+      final defaults = ReaderPreferences.storageDefaults;
+      expect(defaults['readerInformationMode'], 'footer');
+      expect(defaults['readerFooterHeight'], 18.0);
+      expect(defaults['readerFooterFontSize'], 11.0);
+      expect(defaults['readerFooterShowChapter'], isFalse);
+
+      final global = ReaderPreferenceStore(
+        settings: settings,
+        scope: ReaderPreferenceScope.global,
+      );
+      global.write(ReaderPreferences.readerInformationMode, 'overlay');
+      global.write(ReaderPreferences.readerFooterHeight, 22);
+      global.write(ReaderPreferences.readerFooterFontSize, 12);
+      global.write(ReaderPreferences.readerFooterShowChapter, true);
+
+      final serialized =
+          jsonDecode(jsonEncode(appdata.toJson()['settings'])) as Map;
+      expect(serialized['readerInformationMode'], 'overlay');
+      expect(serialized['readerFooterHeight'], 22);
+      expect(serialized['readerFooterFontSize'], 12);
+      expect(serialized['readerFooterShowChapter'], isTrue);
+    },
+  );
 }

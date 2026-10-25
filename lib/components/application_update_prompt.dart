@@ -133,9 +133,10 @@ class ApplicationUpdatePrompt {
                 }
                 Navigator.of(context).pop();
                 try {
-                  await launchUrlString(
-                    'https://github.com/CyrilPeng/venera-next/releases',
-                  );
+                  final releasePageUrl = service.releasePageUrl;
+                  if (releasePageUrl != null) {
+                    await launchUrlString(releasePageUrl);
+                  }
                 } catch (error, stack) {
                   Log.error('Open application release', error, stack);
                 }

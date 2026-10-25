@@ -5,6 +5,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:venera_next/components/application_update_prompt.dart';
 import 'package:venera_next/components/select.dart';
 import 'package:venera_next/components/settings_save_state.dart';
 import 'package:venera_next/features/history/history_manager.dart';
@@ -17,6 +18,7 @@ import 'package:venera_next/features/settings/setting_components.dart';
 import 'package:venera_next/foundation/app.dart';
 import 'package:venera_next/foundation/app_data_operations.dart';
 import 'package:venera_next/foundation/appdata.dart';
+import 'package:venera_next/foundation/application_update_service.dart';
 import 'package:venera_next/foundation/cache_manager.dart';
 import 'package:venera_next/foundation/comic_type.dart';
 import 'package:venera_next/foundation/context.dart';
@@ -96,6 +98,7 @@ void main() {
     Widget child, {
     double scale = 1,
     bool dark = false,
+    ApplicationUpdateService? updateService,
   }) async {
     await tester.pumpWidget(
       _libraryView(
@@ -107,7 +110,11 @@ void main() {
             ).copyWith(textScaler: TextScaler.linear(scale)),
             child: child!,
           ),
-          home: Scaffold(body: child),
+          home: Scaffold(
+            body: updateService == null
+                ? child
+                : ApplicationUpdateScope(service: updateService, child: child),
+          ),
         ),
       ),
     );
@@ -281,7 +288,11 @@ void main() {
     tester,
   ) async {
     appdata.settings['checkUpdateOnStart'] = 'true';
-    await open(tester, const AboutSettings());
+    final service = ApplicationUpdateService(
+      createClient: () => throw StateError('no update request expected'),
+      currentVersion: () => App.version,
+    );
+    await open(tester, const AboutSettings(), updateService: service);
     final field = find.widgetWithText(
       SwitchSetting,
       'Check for updates on startup',
@@ -305,7 +316,29 @@ void main() {
     );
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
+    await service.closeAndWait();
   });
+
+  testWidgets(
+    'about hides update controls when the release channel is disabled',
+    (tester) async {
+      final service = ApplicationUpdateService(
+        createClient: () => throw StateError('disabled updates cannot request'),
+        currentVersion: () => App.version,
+        releaseRepository: null,
+      );
+      await open(tester, const AboutSettings(), updateService: service);
+
+      expect(find.widgetWithText(ListTile, 'Check for updates'), findsNothing);
+      expect(
+        find.widgetWithText(SwitchSetting, 'Check for updates on startup'),
+        findsNothing,
+      );
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await service.closeAndWait();
+    },
+  );
 }
 
 HistoryManager? _historyOwner;

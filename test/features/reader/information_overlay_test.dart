@@ -6,6 +6,8 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:venera_next/features/reader/auto_reading.dart';
+import 'package:venera_next/features/reader/information_footer.dart';
+import 'package:venera_next/features/reader/brightness.dart';
 import 'package:venera_next/features/reader/platform_effects_controller.dart';
 import 'package:venera_next/features/reader/progress_bar.dart';
 import 'package:venera_next/features/reader/progress_navigation.dart';
@@ -164,6 +166,475 @@ void main() {
     });
   }
 
+  testWidgets(
+    'footer uses white and black in light theme and dark theme colors',
+    (tester) async {
+      final f = _Fixture()..gallery = true;
+      try {
+        for (final dark in [false, true]) {
+          await tester.pumpWidget(f.build(1, dark));
+          await tester.pump(const Duration(milliseconds: 300));
+          final footer = find.byType(ReaderInformationFooter);
+          final context = tester.element(footer);
+          final colors = Theme.of(context).colorScheme;
+          final background = tester.widget<ColoredBox>(
+            find
+                .descendant(of: footer, matching: find.byType(ColoredBox))
+                .first,
+          );
+          final page = tester.widget<Text>(find.text('4/12'));
+          expect(background.color, dark ? colors.surface : Colors.white);
+          expect(page.style!.color, dark ? colors.onSurface : Colors.black);
+          final divider = find.byKey(const ValueKey('reader-footer-divider'));
+          final dividerColor = tester.widget<ColoredBox>(divider).color;
+          expect(dividerColor, dark ? colors.onSurface : Colors.black);
+          expect(tester.getRect(divider).height, 1);
+          expect(
+            tester.getRect(divider).width,
+            tester.getRect(footer).width,
+            reason: 'The divider spans the full information bar.',
+          );
+        }
+      } finally {
+        await tester.pumpWidget(const SizedBox());
+        await f.work.dispose();
+        f.favorites.dispose();
+      }
+    },
+  );
+
+  for (final size in [const Size(320, 568), const Size(667, 375)]) {
+    for (final scale in [1.0, 3.2]) {
+      testWidgets(
+        'footer reserves viewport and blocks reading taps $size/$scale',
+        (tester) async {
+          await tester.binding.setSurfaceSize(size);
+          addTearDown(() => tester.binding.setSurfaceSize(null));
+          final f = _Fixture()..gallery = true;
+          try {
+            Future<void> mount() async {
+              await tester.pumpWidget(f.build(scale, false));
+              await tester.pump();
+            }
+
+            await mount();
+            final footerFinder = find.byType(ReaderInformationFooter);
+            final viewportFinder = find.byKey(
+              const ValueKey('reader-content-viewport'),
+            );
+            final viewport = tester.getRect(viewportFinder);
+            final footer = tester.getRect(footerFinder);
+            expect(viewport.bottom, footer.top);
+            expect(viewport.overlaps(footer), isFalse);
+            expect(
+              tester.getRect(find.byType(ReaderBrightnessOverlay)),
+              viewport,
+            );
+            expect(
+              tester.widget<ClipRect>(viewportFinder).clipBehavior,
+              Clip.hardEdge,
+            );
+            final childContext = tester.element(
+              find.byKey(const ValueKey('reader-test-content')),
+            );
+            expect(MediaQuery.sizeOf(childContext), viewport.size);
+            await tester.pump(const Duration(minutes: 1));
+            expect(tester.getRect(viewportFinder), viewport);
+            await tester.tapAt(footer.center);
+            expect(f.taps, 0);
+            await tester.tapAt(viewport.center);
+            expect(f.taps, 1);
+            final shell = tester.state<ReaderScaffoldState>(
+              find.byType(ReaderScaffold),
+            );
+            shell.openOrClose();
+            await tester.pump();
+            expect(tester.getRect(viewportFinder), viewport);
+            shell.openOrClose();
+            await tester.pump();
+            f.chapterTitle = 'A changed chapter ' * 30;
+            await mount();
+            expect(tester.getRect(viewportFinder), viewport);
+            f.comments = true;
+            await mount();
+            expect(tester.getRect(viewportFinder), viewport);
+            // Visibility retains layout/state while excluding paint and input.
+            expect(find.text('4/12').hitTestable(), findsNothing);
+            final visibility = tester.widget<Visibility>(
+              find
+                  .ancestor(
+                    of: find.text('4/12'),
+                    matching: find.byType(Visibility),
+                  )
+                  .first,
+            );
+            expect(visibility.visible, isFalse);
+            f.comments = false;
+            f.footerHeight = 25;
+            f.footerFontSize = 13;
+            await mount();
+            expect(
+              tester.getRect(viewportFinder).bottom,
+              lessThanOrEqualTo(viewport.bottom),
+            );
+            expect(
+              tester.element(find.byKey(const ValueKey('reader-test-content'))),
+              same(childContext),
+            );
+            f.showPage = false;
+            f.showStatus = false;
+            f.showChapter = false;
+            await mount();
+            expect(footerFinder, findsNothing);
+            expect(
+              tester.getSize(find.byKey(const ValueKey('reader-test-content'))),
+              size,
+            );
+            f.showPage = true;
+            f.mode = 'hidden';
+            await mount();
+            expect(footerFinder, findsNothing);
+            expect(find.byType(ReaderPageInfo), findsNothing);
+            f.mode = 'overlay';
+            await mount();
+            expect(
+              tester.element(find.byKey(const ValueKey('reader-test-content'))),
+              same(childContext),
+            );
+            expect(find.byType(ReaderPageInfo), findsOneWidget);
+            expect(tester.takeException(), isNull);
+          } finally {
+            await tester.pumpWidget(const SizedBox());
+            await f.work.dispose();
+            f.favorites.dispose();
+          }
+        },
+      );
+    }
+  }
+
+  testWidgets(
+    'footer chapter capacity stays stable and grows without truncation',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(320, 568));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      double? reservedHeight;
+      for (final maxPage in [9, 99, 999, 10000, 99999, 100000]) {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: MediaQuery(
+              data: const MediaQueryData(
+                size: Size(320, 568),
+                textScaler: TextScaler.linear(3.2),
+                padding: EdgeInsets.fromLTRB(16, 24, 12, 20),
+              ),
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                child: ReaderInformationFooter(
+                  page: maxPage,
+                  maxPage: maxPage,
+                  showPage: true,
+                  showStatus: true,
+                  height: 18,
+                  fontSize: 11,
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+        final height = tester
+            .getSize(find.byType(ReaderInformationFooter))
+            .height;
+        reservedHeight ??= height;
+        if (maxPage <= 99999) {
+          expect(height, reservedHeight);
+        } else {
+          expect(height, greaterThanOrEqualTo(reservedHeight));
+        }
+        final page = find.text('$maxPage/$maxPage');
+        expect(page, findsOneWidget);
+        final paragraph = tester.renderObject<RenderParagraph>(page);
+        expect(paragraph.didExceedMaxLines, isFalse);
+        expect(tester.takeException(), isNull);
+      }
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets(
+    'compact footer honors configured heights and grows without overlap',
+    (tester) async {
+      const size = Size(667, 375);
+      await tester.binding.setSurfaceSize(size);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final f = _Fixture()
+        ..gallery = true
+        ..padding = const EdgeInsets.fromLTRB(16, 24, 12, 0)
+        ..footerHeight = 18
+        ..footerFontSize = 11
+        ..showChapter = false;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+            const MethodChannel('dev.fluttercommunity.plus/battery'),
+            (call) async =>
+                call.method == 'getBatteryLevel' ? 85 : 'discharging',
+          );
+      try {
+        Future<void> mount(double scale) async {
+          await tester.pumpWidget(f.build(scale, false));
+          await tester.pump();
+        }
+
+        double contentHeight() =>
+            tester.getRect(find.byType(ReaderInformationFooter)).height -
+            f.padding.bottom;
+
+        void expectBottomAligned(Finder finder) {
+          final targetBottom =
+              tester.getRect(find.byType(ReaderInformationFooter)).bottom -
+              f.padding.bottom;
+          expect(tester.getRect(finder).bottom, closeTo(targetBottom, 0.01));
+        }
+
+        await mount(1);
+        expect(contentHeight(), 18);
+        final page = find.text('4/12');
+        final status = find.byType(ReaderStatusInfo);
+        expectBottomAligned(page);
+        expectBottomAligned(status);
+
+        f.padding = const EdgeInsets.fromLTRB(16, 24, 12, 20);
+        await mount(1);
+        expect(contentHeight(), 18);
+        expectBottomAligned(page);
+        expectBottomAligned(status);
+
+        f.footerHeight = 15;
+        f.footerFontSize = 9;
+        await mount(1);
+        expect(contentHeight(), 15);
+
+        f.footerFontSize = 13;
+        f.showChapter = true;
+        f.title = 'A very long book title ' * 8;
+        f.chapterTitle = 'A very long chapter title ' * 8;
+        await mount(1);
+        final largeFontHeight = contentHeight();
+        expect(largeFontHeight, greaterThan(15));
+        final title = find.byKey(const ValueKey('reader-footer-title'));
+        expect(tester.renderObject<RenderParagraph>(title).maxLines, 1);
+        expect(tester.getRect(title).overlaps(tester.getRect(status)), isFalse);
+        expect(tester.getRect(page).overlaps(tester.getRect(status)), isFalse);
+        expectBottomAligned(title);
+        expectBottomAligned(status);
+        expectBottomAligned(page);
+
+        f.title = 'Book';
+        f.chapterTitle = 'Chapter';
+        await mount(1);
+        expect(contentHeight(), closeTo(largeFontHeight, 0.01));
+
+        f.title = 'A very long book title ' * 8;
+        f.chapterTitle = 'A very long chapter title ' * 8;
+        await tester.binding.setSurfaceSize(const Size(320, 568));
+        await mount(3.2);
+        expect(contentHeight(), greaterThan(largeFontHeight));
+        final titleRect = tester.getRect(title);
+        final pageRect = tester.getRect(page);
+        final statusRect = tester.getRect(status);
+        expect(titleRect.overlaps(statusRect), isFalse);
+        expect(pageRect.overlaps(statusRect), isFalse);
+        expect(titleRect.bottom, closeTo(pageRect.bottom, 0.01));
+        expect(pageRect.bottom, lessThan(statusRect.top));
+        expectBottomAligned(status);
+        expect(tester.takeException(), isNull);
+      } finally {
+        await tester.pumpWidget(const SizedBox());
+        await f.work.dispose();
+        f.favorites.dispose();
+      }
+    },
+  );
+
+  testWidgets('footer title follows shell data and the existing preference', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(375, 667));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final f = _Fixture()
+      ..gallery = true
+      ..showPage = false
+      ..showStatus = false
+      ..title = 'Reader widget book';
+    try {
+      Future<void> mount() async {
+        await tester.pumpWidget(f.build(1, false));
+        await tester.pump();
+      }
+
+      await mount();
+      expect(find.byType(ReaderInformationFooter), findsOneWidget);
+      expect(
+        find.text('Reader widget book｜A very long chapter title'),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('reader-footer-title')), findsOneWidget);
+
+      f.chapterTitle = null;
+      await mount();
+      expect(find.text('Reader widget book｜E2'), findsOneWidget);
+
+      f.hasChapters = false;
+      await mount();
+      expect(
+        find.descendant(
+          of: find.byType(ReaderInformationFooter),
+          matching: find.text('Reader widget book'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byType(ReaderInformationFooter),
+          matching: find.textContaining('｜'),
+        ),
+        findsNothing,
+      );
+
+      f.title = '  ';
+      f.hasChapters = true;
+      f.chapterTitle = 'Chapter without book title';
+      await mount();
+      expect(
+        find.descendant(
+          of: find.byType(ReaderInformationFooter),
+          matching: find.text('Chapter without book title'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byType(ReaderInformationFooter),
+          matching: find.textContaining('｜'),
+        ),
+        findsNothing,
+      );
+
+      f.showChapter = false;
+      f.showPage = true;
+      await mount();
+      expect(find.byType(ReaderInformationFooter), findsOneWidget);
+      expect(find.byKey(const ValueKey('reader-footer-title')), findsNothing);
+      expect(find.text('4/12'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.pumpWidget(const SizedBox());
+      await f.work.dispose();
+      f.favorites.dispose();
+    }
+  });
+
+  testWidgets('page-off title ellipsizes without displacing status or height', (
+    tester,
+  ) async {
+    const size = Size(320, 568);
+    await tester.binding.setSurfaceSize(size);
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final f = _Fixture()
+      ..gallery = true
+      ..showPage = false
+      ..showStatus = true
+      ..title = 'A very long book title for a narrow reader window ' * 5
+      ..chapterTitle =
+          'A very long chapter title for a narrow reader window ' * 5;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+          const MethodChannel('dev.fluttercommunity.plus/battery'),
+          (call) async => call.method == 'getBatteryLevel' ? 85 : 'discharging',
+        );
+    try {
+      Future<void> mount() async {
+        await tester.pumpWidget(f.build(3.2, false));
+        await tester.pump();
+      }
+
+      await mount();
+      final footer = find.byType(ReaderInformationFooter);
+      final title = find.byKey(const ValueKey('reader-footer-title'));
+      final status = find.byType(ReaderStatusInfo);
+      expect(footer, findsOneWidget);
+      expect(title, findsOneWidget);
+      expect(find.byType(ReaderPageInfo), findsNothing);
+      final titleParagraph = tester.renderObject<RenderParagraph>(title);
+      expect(titleParagraph.maxLines, 1);
+      expect(titleParagraph.didExceedMaxLines, isTrue);
+      final initialHeight = tester.getRect(footer).height;
+      final titleRect = tester.getRect(title);
+      final statusRect = tester.getRect(status);
+      expect(titleRect.overlaps(statusRect), isFalse);
+      expect(
+        statusRect.right,
+        lessThanOrEqualTo(size.width - f.padding.right - 12),
+      );
+
+      f.title = 'Book';
+      f.chapterTitle = 'Chapter';
+      await mount();
+      expect(tester.getRect(footer).height, initialHeight);
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.pumpWidget(const SizedBox());
+      await f.work.dispose();
+      f.favorites.dispose();
+    }
+  });
+
+  testWidgets('title-only footer reserves a large-text line without wrapping', (
+    tester,
+  ) async {
+    const size = Size(320, 568);
+    await tester.binding.setSurfaceSize(size);
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final f = _Fixture()
+      ..gallery = true
+      ..showPage = false
+      ..showStatus = false
+      ..title = 'A long book title in a narrow window ' * 5;
+    try {
+      Future<void> mount() async {
+        await tester.pumpWidget(f.build(3.2, false));
+        await tester.pump();
+      }
+
+      await mount();
+      final footer = find.byType(ReaderInformationFooter);
+      final title = find.byKey(const ValueKey('reader-footer-title'));
+      expect(footer, findsOneWidget);
+      expect(title, findsOneWidget);
+      final titleRect = tester.getRect(title);
+      final footerRect = tester.getRect(footer);
+      final paragraph = tester.renderObject<RenderParagraph>(title);
+      expect(paragraph.maxLines, 1);
+      expect(paragraph.didExceedMaxLines, isTrue);
+      expect(titleRect.height, greaterThan(11 * 3.2));
+      expect(
+        titleRect.bottom,
+        lessThanOrEqualTo(footerRect.bottom - f.padding.bottom),
+      );
+      final initialHeight = footerRect.height;
+
+      f.title = 'Book';
+      await mount();
+      expect(tester.getRect(footer).height, initialHeight);
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.pumpWidget(const SizedBox());
+      await f.work.dispose();
+      f.favorites.dispose();
+    }
+  });
+
   testWidgets('long page counts wrap without losing digits', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -259,6 +730,12 @@ class _Fixture {
   var padding = const EdgeInsets.fromLTRB(16, 24, 12, 20);
   bool showPage = true, showStatus = true, comments = false;
   int taps = 0;
+  bool gallery = false;
+  String mode = 'footer';
+  double footerHeight = 18, footerFontSize = 11;
+  bool showChapter = true, hasChapters = true;
+  String title = 'Book';
+  String? chapterTitle = 'A very long chapter title';
 
   Widget build(double scale, bool dark) => MaterialApp(
     theme: ThemeData(
@@ -282,16 +759,20 @@ class _Fixture {
                 data: ReaderShellData(
                   comicId: 'book',
                   sourceKey: 'local',
-                  title: 'Book',
-                  chapterTitle: 'A very long chapter title',
-                  hasChapters: true,
+                  title: title,
+                  chapterTitle: chapterTitle,
+                  hasChapters: hasChapters,
                   vertical: true,
-                  gallery: false,
+                  gallery: gallery,
                   animating: false,
                   onCommentsPage: comments,
                   swipeToCollect: false,
                   preferences: ReaderSettings.resolve(
                     global: {
+                      'readerInformationMode': mode,
+                      'readerFooterHeight': footerHeight,
+                      'readerFooterFontSize': footerFontSize,
+                      'readerFooterShowChapter': showChapter,
                       'showPageNumberInReader': showPage,
                       'enableClockAndBatteryInfoInReader': showStatus,
                     },
@@ -327,6 +808,7 @@ class _Fixture {
                 createChapterComments: () => null,
                 chapterNavigation: null,
                 child: GestureDetector(
+                  key: const ValueKey('reader-test-content'),
                   behavior: HitTestBehavior.opaque,
                   onTap: () => taps++,
                   child: const ColoredBox(color: Color(0xff758473)),

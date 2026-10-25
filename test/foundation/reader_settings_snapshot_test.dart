@@ -57,6 +57,112 @@ void main() {
       );
     },
   );
+
+  test('Leaf reader information defaults and validates legacy settings', () {
+    final defaults = ReaderSettings.resolve(global: {});
+    expect(defaults.readerInformationMode, 'footer');
+    expect(defaults.readerFooterHeight, 18.0);
+    expect(defaults.readerFooterHeight, isA<double>());
+    expect(defaults.readerFooterFontSize, 11.0);
+    expect(defaults.readerFooterFontSize, isA<double>());
+    expect(defaults.readerFooterShowChapter, isFalse);
+    expect(defaults.showPageNumberInReader, isTrue);
+    expect(defaults.enableClockAndBatteryInfoInReader, isTrue);
+
+    // A v1.18.1 backup has only the legacy switches. They continue to decide
+    // which contents appear when the new mode falls back to its default.
+    final legacy = ReaderSettings.resolve(
+      global: {
+        'showPageNumberInReader': false,
+        'enableClockAndBatteryInfoInReader': false,
+      },
+    );
+    expect(legacy.readerInformationMode, 'footer');
+    expect(legacy.showPageNumberInReader, isFalse);
+    expect(legacy.enableClockAndBatteryInfoInReader, isFalse);
+
+    final invalid = ReaderSettings.resolve(
+      global: {
+        'readerInformationMode': 'unknown',
+        'readerFooterHeight': 'large',
+        'readerFooterFontSize': double.infinity,
+        'readerFooterShowChapter': 'yes',
+      },
+    );
+    expect(invalid.readerInformationMode, 'footer');
+    expect(invalid.readerFooterHeight, 18.0);
+    expect(invalid.readerFooterFontSize, 11.0);
+    expect(invalid.readerFooterShowChapter, isFalse);
+
+    final bounded = ReaderSettings.resolve(
+      global: {'readerFooterHeight': 36, 'readerFooterFontSize': 14},
+    );
+    expect(bounded.readerFooterHeight, 25.0);
+    expect(bounded.readerFooterFontSize, 13.0);
+
+    final minimum = ReaderSettings.resolve(
+      global: {'readerFooterHeight': 14, 'readerFooterFontSize': 8},
+    );
+    expect(minimum.readerFooterHeight, 15.0);
+    expect(minimum.readerFooterFontSize, 9.0);
+  });
+
+  test(
+    'Leaf reader information settings inherit global, device, and comic',
+    () {
+      final global = {
+        'readerInformationMode': 'overlay',
+        'readerFooterHeight': 22,
+        'readerFooterFontSize': 12,
+        'readerFooterShowChapter': true,
+      };
+      final device = {
+        'enabled': true,
+        'readerInformationMode': 'hidden',
+        'readerFooterHeight': 24,
+        'readerFooterFontSize': 10,
+        'readerFooterShowChapter': false,
+      };
+      final comic = <String, Object?>{
+        'enabled': true,
+        'readerInformationMode': 'footer',
+        'readerFooterHeight': 25,
+      };
+
+      var resolved = ReaderSettings.resolve(
+        global: global,
+        device: device,
+        comic: comic,
+      );
+      expect(resolved.readerInformationMode, 'footer');
+      expect(resolved.readerFooterHeight, 25.0);
+      expect(resolved.readerFooterFontSize, 10.0);
+      expect(resolved.readerFooterShowChapter, isFalse);
+
+      comic['enabled'] = false;
+      resolved = ReaderSettings.resolve(
+        global: global,
+        device: device,
+        comic: comic,
+      );
+      expect(resolved.readerInformationMode, 'hidden');
+      expect(resolved.readerFooterHeight, 24.0);
+      expect(resolved.readerFooterFontSize, 10.0);
+      expect(resolved.readerFooterShowChapter, isFalse);
+
+      device['enabled'] = false;
+      resolved = ReaderSettings.resolve(
+        global: global,
+        device: device,
+        comic: comic,
+      );
+      expect(resolved.readerInformationMode, 'overlay');
+      expect(resolved.readerFooterHeight, 22.0);
+      expect(resolved.readerFooterFontSize, 12.0);
+      expect(resolved.readerFooterShowChapter, isTrue);
+    },
+  );
+
   test('scope precedence skips nulls and disabled overrides', () {
     final global = {'readerSideMargin': 5, 'limitImageWidth': true};
     final device = {'enabled': true, 'readerSideMargin': 10};

@@ -63,6 +63,10 @@ class _AboutSettingsState extends State<AboutSettings> {
 
   @override
   Widget build(BuildContext context) {
+    final updateService = ApplicationUpdateScope.of(context);
+    final isLeafAndroid = App.isAndroid;
+    final description =
+        "VeneraNext is a free and open-source app for comic reading.".tl;
     return SmoothCustomScrollView(
       slivers: [
         SliverAppbar(title: Text("About".tl)),
@@ -77,8 +81,12 @@ class _AboutSettingsState extends State<AboutSettings> {
                 borderRadius: BorderRadius.circular(136),
               ),
               clipBehavior: Clip.antiAlias,
-              child: const Image(
-                image: AssetImage("assets/app_icon.png"),
+              child: Image(
+                image: AssetImage(
+                  isLeafAndroid
+                      ? 'assets/leaf_icon.png'
+                      : 'assets/app_icon.png',
+                ),
                 filterQuality: FilterQuality.medium,
               ),
             ),
@@ -89,26 +97,29 @@ class _AboutSettingsState extends State<AboutSettings> {
             const SizedBox(height: 8),
             Text("V${App.version}", style: const TextStyle(fontSize: 16)),
             Text(
-              "VeneraNext is a free and open-source app for comic reading.".tl,
+              isLeafAndroid
+                  ? description.replaceFirst('VeneraNext', 'Leaf')
+                  : description,
             ),
             const SizedBox(height: 8),
           ],
         ).toSliver(),
-        ListTile(
-          title: Text("Check for updates".tl),
-          trailing: FilledButton(
-            onPressed: _checking == null ? _checkUpdate : null,
-            child: _checkingNetwork
-                ? SizedBox.square(
-                    dimension: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      semanticsLabel: 'Check for updates'.tl,
-                    ),
-                  )
-                : Text('Check'.tl),
-          ),
-        ).toSliver(),
+        if (updateService.isEnabled)
+          ListTile(
+            title: Text("Check for updates".tl),
+            trailing: FilledButton(
+              onPressed: _checking == null ? _checkUpdate : null,
+              child: _checkingNetwork
+                  ? SizedBox.square(
+                      dimension: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        semanticsLabel: 'Check for updates'.tl,
+                      ),
+                    )
+                  : Text('Check'.tl),
+            ),
+          ).toSliver(),
         ListTile(
           title: Text("Changelog".tl),
           trailing: const Icon(Icons.keyboard_arrow_right),
@@ -116,15 +127,20 @@ class _AboutSettingsState extends State<AboutSettings> {
             context.to(() => const ChangelogPage());
           },
         ).toSliver(),
-        SwitchSetting.preference(
-          title: "Check for updates on startup".tl,
-          preference: AppPreferences.checkUpdateOnStart,
-        ).toSliver(),
+        if (updateService.isEnabled)
+          SwitchSetting.preference(
+            title: "Check for updates on startup".tl,
+            preference: AppPreferences.checkUpdateOnStart,
+          ).toSliver(),
         ListTile(
           title: const Text("Github"),
           trailing: const Icon(Icons.open_in_new),
           onTap: () {
-            launchUrlString("https://github.com/CyrilPeng/venera-next");
+            launchUrlString(
+              isLeafAndroid
+                  ? 'https://github.com/typhoonwhale/VeneraNext-Leaf'
+                  : 'https://github.com/CyrilPeng/venera-next',
+            );
           },
         ).toSliver(),
         ListTile(

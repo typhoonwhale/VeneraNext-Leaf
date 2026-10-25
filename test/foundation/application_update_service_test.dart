@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:venera_next/foundation/application_update_service.dart';
 import 'package:venera_next/foundation/operation_failure.dart';
@@ -7,6 +10,113 @@ import 'package:venera_next/network/request_scope.dart';
 import '../support/application_update_adapter.dart';
 
 void main() {
+  test(
+    'Android update checks stay disabled without an owned release channel',
+    () async {
+      var createdClient = false;
+      final service = ApplicationUpdateService(
+        createClient: () {
+          createdClient = true;
+          throw StateError('disabled update checks must not create a client');
+        },
+        currentVersion: () => '1.0.0',
+        releaseRepository: null,
+      );
+
+      expect(service.isEnabled, isFalse);
+      expect(service.releasePageUrl, isNull);
+      expect(await service.check(), isNull);
+      expect(createdClient, isFalse);
+      await service.closeAndWait();
+    },
+  );
+
+  test(
+    'configured update channel queries its own GitHub release endpoint',
+    () async {
+      final adapter = ApplicationUpdateAdapter()..released.complete();
+      final service = ApplicationUpdateService(
+        createClient: () => Dio()..httpClientAdapter = adapter,
+        currentVersion: () => '1.0.0',
+        releaseRepository: 'typhoonwhale/VeneraNext-Leaf',
+      );
+
+      expect(
+        service.releasePageUrl,
+        'https://github.com/typhoonwhale/VeneraNext-Leaf/releases',
+      );
+      final result = service.check();
+      await adapter.entered.future;
+      expect(
+        Uri.parse(adapter.paths.single).path,
+        '/repos/typhoonwhale/VeneraNext-Leaf/releases/latest',
+      );
+      adapter.complete({'tag_name': 'v1.0.1'});
+      expect(await result, '1.0.1');
+      await service.closeAndWait();
+    },
+  );
+
+  test(
+    'a 404 latest with an empty Leaf release list means no update',
+    () async {
+      final adapter = _EmptyLeafReleaseAdapter()..released.complete();
+      final service = ApplicationUpdateService(
+        createClient: () => Dio()..httpClientAdapter = adapter,
+        currentVersion: () => '1.0.0',
+        releaseRepository: 'typhoonwhale/VeneraNext-Leaf',
+      );
+
+      final result = service.check();
+      await adapter.releasesEntered.future;
+      expect(adapter.paths.map((uri) => Uri.parse(uri).path), [
+        '/repos/typhoonwhale/VeneraNext-Leaf/releases/latest',
+        '/repos/typhoonwhale/VeneraNext-Leaf/releases',
+      ]);
+      adapter.complete([]);
+      expect(await result, isNull);
+      await service.closeAndWait();
+    },
+  );
+
+  test('a 404 from the Leaf releases list remains a failure', () async {
+    final adapter = _EmptyLeafReleaseAdapter()..released.complete();
+    final service = ApplicationUpdateService(
+      createClient: () => Dio()..httpClientAdapter = adapter,
+      currentVersion: () => '1.0.0',
+      releaseRepository: 'typhoonwhale/VeneraNext-Leaf',
+    );
+    final checked = expectLater(
+      service.check(),
+      throwsA(isA<OperationFailure>()),
+    );
+
+    await adapter.releasesEntered.future;
+    adapter.complete({'message': 'Not Found'}, status: 404);
+    await checked;
+    await service.closeAndWait();
+  });
+
+  for (final status in [403, 429]) {
+    test('Leaf update check preserves HTTP $status failures', () async {
+      final adapter = ApplicationUpdateAdapter()..released.complete();
+      final service = ApplicationUpdateService(
+        createClient: () => Dio()..httpClientAdapter = adapter,
+        currentVersion: () => '1.0.0',
+        releaseRepository: 'typhoonwhale/VeneraNext-Leaf',
+      );
+      final checked = expectLater(
+        service.check(),
+        throwsA(isA<OperationFailure>()),
+      );
+
+      await adapter.entered.future;
+      adapter.complete({'message': 'HTTP $status'}, status: status);
+      await checked;
+      await service.closeAndWait();
+    });
+  }
+
   test(
     'stable and preview requests preserve channel selection and wait for cleanup',
     () async {
@@ -20,8 +130,10 @@ void main() {
         final result = service.check().whenComplete(() => finished = true);
         await adapter.entered.future;
         expect(
-          adapter.paths.single.endsWith('releases/latest'),
-          current == '1.10.0',
+          Uri.parse(adapter.paths.single).path.endsWith(
+            current == '1.10.0' ? '/releases/latest' : '/releases',
+          ),
+          isTrue,
         );
         adapter.complete([
           {'tag_name': 'v1.12.0', 'draft': true},
@@ -203,4 +315,31 @@ void main() {
       await Future.wait([checked, closing]);
     },
   );
+}
+
+class _EmptyLeafReleaseAdapter extends ApplicationUpdateAdapter {
+  final releasesEntered = Completer<void>();
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) {
+    if (options.path.endsWith('/latest')) {
+      paths.add(options.path);
+      if (!entered.isCompleted) entered.complete();
+      return Future.value(
+        ResponseBody.fromString(
+          '{"message":"Not Found"}',
+          404,
+          headers: {
+            Headers.contentTypeHeader: ['application/json'],
+          },
+        ),
+      );
+    }
+    releasesEntered.complete();
+    return super.fetch(options, requestStream, cancelFuture);
+  }
 }

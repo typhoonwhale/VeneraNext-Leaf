@@ -153,4 +153,19 @@ void main() {
     expect(gesture, isNot(contains(ReaderSettingEffect.applyMode)));
     expect(gesture, isNot(contains(ReaderSettingEffect.detectLayout)));
   });
+
+  test('information display changes rebuild the reader shell layout', () {
+    for (final key in [
+      ReaderPreferences.readerInformationMode.key,
+      ReaderPreferences.readerFooterHeight.key,
+      ReaderPreferences.readerFooterFontSize.key,
+      ReaderPreferences.readerFooterShowChapter.key,
+      ReaderPreferences.showPageNumberInReader.key,
+      ReaderPreferences.enableClockAndBatteryInfoInReader.key,
+    ]) {
+      final effects = readerSettingEffects(key).toList();
+      expect(effects, contains(ReaderSettingEffect.rebuildShell), reason: key);
+      expect(effects.last, ReaderSettingEffect.rebuildReader);
+    }
+  });
 }

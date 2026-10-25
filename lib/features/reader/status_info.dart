@@ -32,7 +32,13 @@ ReaderBatteryRead _platformBatteryReader() {
 
 /// Displays optional telemetry retained by its original application and window.
 class ReaderStatusInfo extends StatefulWidget {
-  const ReaderStatusInfo({super.key, this.readBattery, this.now});
+  const ReaderStatusInfo({
+    super.key,
+    this.readBattery,
+    this.now,
+    this.footerFontSize,
+  });
+  final double? footerFontSize;
   final ReaderBatteryRead? readBattery;
   final DateTime Function()? now;
   @override
@@ -83,16 +89,25 @@ class _ReaderStatusInfoState extends State<ReaderStatusInfo> {
   }
 
   @override
-  Widget build(BuildContext context) => Wrap(
-    spacing: 10,
-    runSpacing: 2,
-    alignment: WrapAlignment.end,
-    crossAxisAlignment: WrapCrossAlignment.center,
-    children: [
-      ReaderInformationText(text: _owner!.polling.time),
-      if (_battery != null) _batteryInfo(_battery!.level),
-    ],
-  );
+  Widget build(BuildContext context) {
+    if (widget.footerFontSize case final size?) {
+      return Text(
+        '${_owner!.polling.time}${_battery == null ? '' : ' ${_battery!.level}%${_battery!.charging ? ' +' : ''}'}',
+        style: TextStyle(fontSize: size, height: 1.2),
+        textAlign: TextAlign.end,
+      );
+    }
+    return Wrap(
+      spacing: 10,
+      runSpacing: 2,
+      alignment: WrapAlignment.end,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        ReaderInformationText(text: _owner!.polling.time),
+        if (_battery != null) _batteryInfo(_battery!.level),
+      ],
+    );
+  }
 
   Widget _batteryInfo(int batteryLevel) {
     IconData batteryIcon;

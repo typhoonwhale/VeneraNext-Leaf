@@ -11,6 +11,80 @@ void main() {
     expect(appdata.settings['comicSourceListUrl'], isEmpty);
   });
 
+  test(
+    'reader information preferences round-trip through app-data import',
+    () async {
+      final dataDir = Directory.systemTemp.createTempSync(
+        'venera-reader-information-import-',
+      );
+      final checkpoint = appdata.captureImportCheckpoint();
+      addTearDown(() async {
+        await appdata.restoreImportCheckpoint(checkpoint, persist: false);
+        App.dataPath = Directory.systemTemp.path;
+        if (dataDir.existsSync()) dataDir.deleteSync(recursive: true);
+      });
+
+      App.dataPath = dataDir.path;
+      appdata.settings['disableSyncFields'] = '';
+      appdata.settings['readerInformationMode'] = 'footer';
+      appdata.settings['readerFooterHeight'] = 18.0;
+      appdata.settings['readerFooterFontSize'] = 11.0;
+      appdata.settings['readerFooterShowChapter'] = false;
+      File(p.join(dataDir.path, 'appdata.json')).writeAsStringSync(
+        jsonEncode({
+          'settings': {
+            'showPageNumberInReader': false,
+            'enableClockAndBatteryInfoInReader': false,
+          },
+          'searchHistory': <String>[],
+        }),
+      );
+      await appdata.loadDataForTesting(dataDir.path);
+      expect(appdata.settings['readerInformationMode'], 'footer');
+      expect(appdata.settings['readerFooterHeight'], 18.0);
+      expect(appdata.settings['readerFooterFontSize'], 11.0);
+      expect(appdata.settings['readerFooterShowChapter'], isFalse);
+
+      appdata.settings['readerInformationMode'] = 'overlay';
+      appdata.settings['readerFooterHeight'] = 22;
+      appdata.settings['readerFooterFontSize'] = 12;
+      appdata.settings['readerFooterShowChapter'] = true;
+
+      // Legacy backups do not contain Leaf fields. The existing merge import
+      // applies their legacy switches and leaves newer local fields untouched.
+      await appdata.syncData({
+        'settings': {
+          'showPageNumberInReader': false,
+          'enableClockAndBatteryInfoInReader': false,
+        },
+        'searchHistory': <String>[],
+      });
+      expect(appdata.settings['showPageNumberInReader'], isFalse);
+      expect(appdata.settings['enableClockAndBatteryInfoInReader'], isFalse);
+      expect(appdata.settings['readerInformationMode'], 'overlay');
+      expect(appdata.settings['readerFooterHeight'], 22);
+      expect(appdata.settings['readerFooterFontSize'], 12);
+      expect(appdata.settings['readerFooterShowChapter'], isTrue);
+
+      await appdata.syncData({
+        'settings': {
+          'readerInformationMode': 'hidden',
+          'readerFooterHeight': 25,
+          'readerFooterFontSize': 13,
+          'readerFooterShowChapter': false,
+        },
+        'searchHistory': <String>[],
+      });
+      final serialized = jsonDecode(
+        File('${dataDir.path}/appdata.json').readAsStringSync(),
+      )['settings'];
+      expect(serialized['readerInformationMode'], 'hidden');
+      expect(serialized['readerFooterHeight'], 25);
+      expect(serialized['readerFooterFontSize'], 13);
+      expect(serialized['readerFooterShowChapter'], isFalse);
+    },
+  );
+
   test('reader settings resolve from global, device, then comic scope', () {
     final previousDeviceId = appdata.settings['deviceId'];
     final previousDeviceSettings = appdata.settings['deviceSpecificSettings'];

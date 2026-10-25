@@ -536,12 +536,14 @@ class GalleryModeState extends State<ReaderGalleryView>
     if (photoViewController == null || initial == null) return;
     _longPressController = photoViewController;
     final target = initial * 1.75;
-    var size = widget.readerSize();
+    final box = context.findRenderObject()! as RenderBox;
+    final size = box.size;
+    final local = box.globalToLocal(location);
     Offset zoomPosition;
     if (!data.centerLongPressZoom) {
       zoomPosition = Offset(
-        size.width / 2 - location.dx,
-        size.height / 2 - location.dy,
+        size.width / 2 - local.dx,
+        size.height / 2 - local.dy,
       );
     } else {
       zoomPosition = Offset(0, 0);

@@ -1,8 +1,18 @@
+## This fork: BOOX Leaf5+ adaptation
+
+**Leaf (VeneraNext-Leaf) adapts VeneraNext for daily comic reading on the BOOX Leaf5+.** Priorities are a compact information footer that does not cover comic pages, readable E-Ink presentation, gesture navigation without an artificial bottom gap, and data-preserving updates using a stable Android package ID and signing key.
+
+Start with the [Leaf development plan](docs/LEAF_DEVELOPMENT_PLAN.md), [research and agent handoff index](docs/research/README.md), and [Android build guide](docs/LEAF_BUILD.md) (maintained in Chinese). Record future device investigations in `docs/research/`, distinguishing official documentation, user reports, code observations, and unverified assumptions.
+
+The VeneraNext badges, screenshots, platform descriptions and download links below are retained upstream references; they do not describe Leaf release availability or device validation status.
+
+---
+
 <div align="center">
   <a href="README.md">简体中文</a> | <strong>English</strong>
 
   <br>
-  <img src="assets/readme_logo.png" alt="VeneraNext" width="200" />
+  <img src="assets/leaf_icon.png" alt="Leaf" width="200" />
 
   # VeneraNext
 

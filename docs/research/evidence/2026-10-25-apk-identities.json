@@ -1,0 +1,80 @@
+{
+  "recordedAt": "2026-10-25",
+  "sourceBaseCommit": "77e12cf9b09e177b501fb5a7ab45ce58c07d8721",
+  "sourceWorktree": "included uncommitted Leaf adaptations",
+  "collection": "Copied from local aapt/apksigner/ZIP verification records; no device installation implied",
+  "releaseCertificateSha256": "ddf1ca6f03578cd9b41470670cd3a21637772ea9e3ceab4f6d9ea9c0e8d5e909",
+  "artifacts": [
+    {
+      "file": "Leaf-debug-arm64-v8a.apk",
+      "size": 113672033,
+      "sha256": "fbd8cf976f78e622a111c78dd2f8f742f20354442a8b499384dcf7bb94a03a4b",
+      "applicationId": "com.github.typhoonwhale.veneranext.leaf.debug",
+      "displayName": "Leaf",
+      "kind": "debug, not a signed release delivery",
+      "nativeLibraries": [
+        "lib/arm64-v8a/libVkLayer_khronos_validation.so",
+        "lib/arm64-v8a/libflutter-saf.so",
+        "lib/arm64-v8a/libflutter.so",
+        "lib/arm64-v8a/libflutter_7zip.so",
+        "lib/arm64-v8a/libirondash_engine_context_native.so",
+        "lib/arm64-v8a/liblodepng_flutter.so",
+        "lib/arm64-v8a/libpdfium.so",
+        "lib/arm64-v8a/libqjs.so",
+        "lib/arm64-v8a/librhttp.so",
+        "lib/arm64-v8a/libsqlite3.so",
+        "lib/arm64-v8a/libsuper_native_extensions.so",
+        "lib/arm64-v8a/libzip_flutter.so"
+      ],
+      "recordLabel": "早期Debug（增量打包存在冗余）"
+    },
+    {
+      "file": "Leaf-debug-arm64-v8a-compact.apk",
+      "size": 78466148,
+      "sha256": "841e3d320f4789df43c0e29080d628ed413fa10bc4f9478e19cac2c9af91f0dc",
+      "applicationId": "com.github.typhoonwhale.veneranext.leaf.debug",
+      "displayName": "Leaf",
+      "kind": "debug, not a signed release delivery",
+      "nativeLibraries": [
+        "lib/arm64-v8a/libVkLayer_khronos_validation.so",
+        "lib/arm64-v8a/libflutter-saf.so",
+        "lib/arm64-v8a/libflutter.so",
+        "lib/arm64-v8a/libflutter_7zip.so",
+        "lib/arm64-v8a/libirondash_engine_context_native.so",
+        "lib/arm64-v8a/liblodepng_flutter.so",
+        "lib/arm64-v8a/libpdfium.so",
+        "lib/arm64-v8a/libqjs.so",
+        "lib/arm64-v8a/librhttp.so",
+        "lib/arm64-v8a/libsqlite3.so",
+        "lib/arm64-v8a/libsuper_native_extensions.so",
+        "lib/arm64-v8a/libzip_flutter.so"
+      ],
+      "recordLabel": "去冗余Debug"
+    },
+    {
+      "file": "Leaf-1.18.1-2372-release-arm64-v8a.apk",
+      "size": 23374071,
+      "sha256": "f3282e1dfe6ac9a7b4f5d61ac9335cf80d32442657ad83482a4d77dd74caedb0",
+      "applicationId": "com.github.typhoonwhale.veneranext.leaf",
+      "displayName": "Leaf",
+      "versionName": "1.18.1",
+      "versionCode": 2372,
+      "kind": "release, signed with fixed Leaf key",
+      "nativeLibraries": [
+        "lib/arm64-v8a/libapp.so",
+        "lib/arm64-v8a/libflutter-saf.so",
+        "lib/arm64-v8a/libflutter.so",
+        "lib/arm64-v8a/libflutter_7zip.so",
+        "lib/arm64-v8a/libirondash_engine_context_native.so",
+        "lib/arm64-v8a/liblodepng_flutter.so",
+        "lib/arm64-v8a/libpdfium.so",
+        "lib/arm64-v8a/libqjs.so",
+        "lib/arm64-v8a/librhttp.so",
+        "lib/arm64-v8a/libsqlite3.so",
+        "lib/arm64-v8a/libsuper_native_extensions.so",
+        "lib/arm64-v8a/libzip_flutter.so"
+      ],
+      "recordLabel": "最新紧凑底栏Release"
+    }
+  ]
+}

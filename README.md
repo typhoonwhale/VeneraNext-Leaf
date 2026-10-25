@@ -1,8 +1,27 @@
+## 本 fork 的定位：适配文石 BOOX Leaf5+
+
+**Leaf（VeneraNext-Leaf）是基于 [VeneraNext](https://github.com/CyrilPeng/Venera-Next) 的定制分支，核心目标是适配文石 BOOX Leaf5+ 的日常漫画阅读。后续功能取舍、界面布局与升级方案，应以这台设备的实际使用体验为依据。**
+
+本项目优先解决以下需求：
+
+- **充分利用墨水屏阅读面积**：画廊正文与信息栏分区，信息不遮挡漫画；底栏紧凑、文字清晰，保留页码、时间、电量及可选的「书名｜章节名」。
+- **按真实设备导航方式适配**：目标设备使用手势导航，底部没有虚拟按键栏。文字底对齐，不人为预留固定白边；系统实际遮挡、文字缩放和横竖屏行为需要结合实机验证，不能拿通用手机模拟值当作 Leaf5+ 参数。
+- **保持阅读与升级连续性**：保留上游漫画源、收藏、历史、本地阅读与导入导出能力；长期试用采用固定包名、固定签名的 ARM64 Release 包迭代，尽量通过覆盖安装保留数据。
+- **维持清晰的 fork 身份**：应用名为 Leaf，图标保留原主体并带 Leaf 标记；Android 更新默认连接 [本仓库](https://github.com/typhoonwhale/VeneraNext-Leaf)。
+
+后续开发请先读 [Leaf 开发方案](docs/LEAF_DEVELOPMENT_PLAN.md) 与 [调研记录及 agent 接手入口](docs/research/README.md)，再核对当前分支、源码和设备状态。新调查统一追加到 `docs/research/`，记录日期、来源、结论和未验证项，避免反复推测或覆盖历史依据。
+
+截至 2026-10-25：独立底栏、标题和固定签名 Release 已实现；使用者确认上一版 Release 功能正常。最新紧凑底栏为高度 **15–25（默认18）**、字号 **9–13（默认11）**、文字底对齐；已通过相关自动验证，仍待该版实机反馈。数值是应用设计参数，单位为 Flutter 逻辑像素，不是设备硬件参数。
+
+> 下方保留的 VeneraNext 介绍、徽章、截图和各平台下载链接属于上游项目，不代表 Leaf 定制版的发布或验收状态。Leaf 的构建、包身份和升级规则见 [Leaf Android 构建说明](docs/LEAF_BUILD.md)；已交付本地测试包不等于已发布 GitHub Release。
+
+---
+
 <div align="center">
   <strong>简体中文</strong> | <a href="README.en.md">English</a>
   <br>
   <br>
-  <img src="assets/readme_logo.png" alt="VeneraNext" width="200" />
+  <img src="assets/leaf_icon.png" alt="Leaf" width="200" />
 
   # VeneraNext
 

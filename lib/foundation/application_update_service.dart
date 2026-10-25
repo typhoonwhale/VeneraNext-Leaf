@@ -13,20 +13,45 @@ class ApplicationUpdateService {
   ApplicationUpdateService({
     required Dio Function() createClient,
     required String Function() currentVersion,
+    this.releaseRepository = defaultReleaseRepository,
   }) : _createClient = createClient,
-       _currentVersion = currentVersion;
+       _currentVersion = currentVersion {
+    final configuredRepository = releaseRepository;
+    if (configuredRepository != null &&
+        !_repositoryPattern.hasMatch(configuredRepository)) {
+      throw ArgumentError.value(
+        releaseRepository,
+        'releaseRepository',
+        'Expected a GitHub owner/repository path',
+      );
+    }
+  }
+
+  static const defaultReleaseRepository = 'CyrilPeng/venera-next';
+  static const androidDefaultReleaseRepository = 'typhoonwhale/VeneraNext-Leaf';
+  static final _repositoryPattern = RegExp(
+    r'^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$',
+  );
 
   final Dio Function() _createClient;
   final String Function() _currentVersion;
+  final String? releaseRepository;
   final _pending = <RequestScope, Future<void>>{};
   final _cleanupFailures = <ApplicationUpdateCleanupFailure>[];
   bool _closed = false;
   Future<void>? _closing;
 
+  bool get isEnabled => releaseRepository != null;
+
+  String? get releasePageUrl => releaseRepository == null
+      ? null
+      : 'https://github.com/$releaseRepository/releases';
+
   Future<String?> check({RequestScope? scope}) {
     if (_closed) {
       return Future.error(StateError('Application updates are closed'));
     }
+    if (!isEnabled) return Future.value(null);
     final owned = RequestScope(parent: scope);
     final completion = Completer<String?>();
     final settled = completion.future
@@ -53,14 +78,42 @@ class ApplicationUpdateService {
     try {
       scope.check();
       final includePrerelease = allowsPrereleaseUpdates(version);
-      final response = await dio.get<Object?>(
+      final repository = releaseRepository!;
+      final isLeafStableCheck =
+          !includePrerelease &&
+          repository.toLowerCase() ==
+              androidDefaultReleaseRepository.toLowerCase();
+      final releasesUri = Uri.https(
+        'api.github.com',
+        '/repos/$repository/releases',
+        {'per_page': '20'},
+      );
+      var response = await dio.getUri<Object?>(
         includePrerelease
-            ? 'https://api.github.com/repos/CyrilPeng/venera-next/releases?per_page=20'
-            : 'https://api.github.com/repos/CyrilPeng/venera-next/releases/latest',
+            ? releasesUri
+            : Uri.https('api.github.com', '/repos/$repository/releases/latest'),
         cancelToken: scope.cancelToken,
-        options: Options(headers: {'Accept': 'application/vnd.github+json'}),
+        options: Options(
+          headers: {'Accept': 'application/vnd.github+json'},
+          validateStatus: isLeafStableCheck
+              ? (status) =>
+                    status != null &&
+                    ((status >= 200 && status < 300) || status == 404)
+              : null,
+        ),
       );
       scope.check();
+      if (isLeafStableCheck && response.statusCode == 404) {
+        // A new repository has no /latest release yet. Confirm with the
+        // collection endpoint: an empty list means no update, while missing
+        // repositories, permissions and HTTP errors remain failures.
+        response = await dio.getUri<Object?>(
+          releasesUri,
+          cancelToken: scope.cancelToken,
+          options: Options(headers: {'Accept': 'application/vnd.github+json'}),
+        );
+        scope.check();
+      }
       if (response.statusCode != 200) {
         throw FormatException(
           'Unexpected release status: ${response.statusCode}',

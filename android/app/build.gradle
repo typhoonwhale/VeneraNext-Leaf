@@ -27,9 +27,20 @@ if (flutterVersionName == null) {
 
 def keystorePropertiesFile = rootProject.file("key.properties")
 def keystoreProperties = new Properties()
-keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+if (keystorePropertiesFile.exists()) {
+    keystorePropertiesFile.withInputStream { keystoreProperties.load(it) }
+}
+
+def signingProperties = ["storeFile", "storePassword", "keyAlias", "keyPassword"]
+def configuredStoreFile = keystoreProperties.getProperty("storeFile")?.trim()
+def releaseStoreFile = configuredStoreFile ? file(configuredStoreFile) : null
+def releaseSigningAvailable = signingProperties.every {
+    keystoreProperties.getProperty(it)?.trim()
+} && releaseStoreFile?.isFile()
 
 android {
+    // Keep the upstream namespace because the Android Kotlin sources use it.
+    // The applicationId below is the installed app identity and must stay unique.
     namespace = "com.github.cyrilpeng.veneranext"
     compileSdk = flutter.compileSdkVersion
     ndkVersion "28.0.13004108"
@@ -58,22 +69,18 @@ android {
     }
 
     signingConfigs {
-        debug {
-            storeFile file(keystoreProperties['storeFile'])
-            storePassword keystoreProperties['storePassword']
-            keyAlias keystoreProperties['keyAlias']
-            keyPassword keystoreProperties['keyPassword']
-        }
         release {
-            keyAlias keystoreProperties['keyAlias']
-            keyPassword keystoreProperties['keyPassword']
-            storeFile file(keystoreProperties['storeFile'])
-            storePassword keystoreProperties['storePassword']
+            if (releaseSigningAvailable) {
+                keyAlias keystoreProperties.getProperty("keyAlias")
+                keyPassword keystoreProperties.getProperty("keyPassword")
+                storeFile releaseStoreFile
+                storePassword keystoreProperties.getProperty("storePassword")
+            }
         }
     }
 
     defaultConfig {
-        applicationId = "com.github.cyrilpeng.veneranext"
+        applicationId = "com.github.typhoonwhale.veneranext.leaf"
         // You can update the following values to match your application needs.
         // For more information, see: https://docs.flutter.dev/deployment/android#reviewing-the-gradle-build-configuration.
         minSdk = flutter.minSdkVersion
@@ -89,13 +96,15 @@ android {
             ndk {
                 abiFilters "armeabi-v7a", "arm64-v8a", "x86_64"
             }
-            signingConfig signingConfigs.release
+            if (releaseSigningAvailable) {
+                signingConfig signingConfigs.release
+            }
         }
         debug {
+            applicationIdSuffix ".debug"
             ndk {
                 abiFilters "armeabi-v7a", "arm64-v8a", "x86_64"
             }
-            signingConfig signingConfigs.debug
         }
     }
 
@@ -104,13 +113,13 @@ android {
             def abi = output.getFilter(com.android.build.OutputFile.ABI)
             if (variant.buildType.name == "release") {
                 if (abi != null) {
-                    outputFileName = "VeneraNext-${variant.versionName}-android-${abi}.apk"
+                    outputFileName = "VeneraNext-Leaf-${variant.versionName}-android-${abi}.apk"
                     def abiVersionCode = project.ext.abiCodes.get(abi)
                     if (abiVersionCode != null) {
                         versionCodeOverride = variant.versionCode * 10 + abiVersionCode
                     }
                 } else {
-                    outputFileName = "VeneraNext-${variant.versionName}-android.apk"
+                    outputFileName = "VeneraNext-Leaf-${variant.versionName}-android.apk"
                     versionCodeOverride = variant.versionCode * 10
                 }
             } else if (variant.buildType.name == "debug") {
@@ -134,4 +143,18 @@ flutter {
 dependencies {
     implementation "androidx.activity:activity-ktx:1.10.1"
     implementation 'androidx.documentfile:documentfile:1.0.1'
+}
+
+tasks.configureEach { task ->
+    if (task.name == "preReleaseBuild") {
+        task.doFirst {
+            if (!releaseSigningAvailable) {
+                throw new GradleException(
+                    "VeneraNext Leaf release builds require the fixed signing key. " +
+                    "Provide android/key.properties and its referenced keystore; " +
+                    "unsigned or temporary-key APKs are not upgradeable release packages."
+                )
+            }
+        }
+    }
 }

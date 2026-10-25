@@ -93,8 +93,17 @@ jobs:
           STORE_FILE: ${{ secrets.ANDROID_KEYSTORE }}
           PROPERTY_FILE: ${{ secrets.ANDROID_KEY_PROPERTIES }}
         run: |
-          echo "$STORE_FILE" | base64 --decode > android/keystore.jks
-          echo "$PROPERTY_FILE" > android/key.properties
+          set -euo pipefail
+          if [[ -z "${STORE_FILE:-}" || -z "${PROPERTY_FILE:-}" ]]; then
+            echo "::error::Android release requires this fork's fixed ANDROID_KEYSTORE and ANDROID_KEY_PROPERTIES secrets. Upstream signing secrets are unavailable to a fork."
+            exit 1
+          fi
+          printf '%s' "$STORE_FILE" | base64 --decode > android/keystore.jks
+          printf '%s\n' "$PROPERTY_FILE" > android/key.properties
+          if [[ ! -s android/keystore.jks ]]; then
+            echo "::error::ANDROID_KEYSTORE decoded to an empty file; refusing to build a release APK."
+            exit 1
+          fi
       - uses: actions/setup-java@v6
         with:
           distribution: 'oracle'

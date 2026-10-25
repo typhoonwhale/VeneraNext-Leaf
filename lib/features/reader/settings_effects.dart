@@ -87,7 +87,11 @@ Iterable<ReaderSettingEffect> readerSettingEffects(String key) sync* {
       key == ReaderPreferences.showChapterCommentsAtEnd.key ||
       key == ReaderPreferences.showSystemStatusBar.key ||
       key == ReaderPreferences.showPageNumberInReader.key ||
-      key == ReaderPreferences.enableClockAndBatteryInfoInReader.key) {
+      key == ReaderPreferences.enableClockAndBatteryInfoInReader.key ||
+      key == ReaderPreferences.readerInformationMode.key ||
+      key == ReaderPreferences.readerFooterHeight.key ||
+      key == ReaderPreferences.readerFooterFontSize.key ||
+      key == ReaderPreferences.readerFooterShowChapter.key) {
     yield ReaderSettingEffect.rebuildShell;
   }
   // Other settings (including future keys) still update view configuration.
