@@ -106,3 +106,11 @@ flutter test --no-pub test/foundation/application_update_service_test.dart
 ## 增量打包与交付体积
 
 AGP 增量更新 APK 时可能保留旧 ZIP 条目占用的空闲区域。若文件大小显著超过所有 ZIP 条目的压缩大小之和，在保存旧包身份和验证记录后移走生成的目标 APK，再执行同一构建命令即可重新打包；无需删除整个 Flutter/Gradle 缓存。交付前验证新包签名、ABI、版本以及与旧包的条目内容一致性。本轮重打包将同内容 Debug 包从 113.67 MB 降至 78.47 MB。
+
+## Leaf 正式发布
+
+首次公开发布为1.18.2（build240，ARM64 versionCode2402），发布到本仓库的GitHub Releases。Android检查更新比较Release标签和应用内版本号，忽略build后缀；因此每次正式发布都须递增 `release.json.version` 并同步 `pubspec.yaml`，仅增加build不会产生更新提示。发布标签使用 `v<version>`，更新说明来自CHANGELOG对应节。
+
+Leaf保留标签的元数据校验与质量工作流；此fork不运行继承的多平台自动Build/Release及AltStore后续发布任务。当前发布方式是本机使用固定签名构建ARM64包，核对版本、内置pubspec、证书、ABI和SHA-256后，上传GitHub Release草稿，再正式发布为Latest。不要上传keystore或key.properties；不要在没有同一签名的情况下改用临时签名。
+
+使用发布API回读 `releases/latest` 确认新版本与APK资产，再通过实际版本比较函数检查旧版本会提示更新、新版本不会自我提示。设备仍须能访问GitHub API和下载域名；更新按钮打开发布页，由用户下载并确认覆盖安装。

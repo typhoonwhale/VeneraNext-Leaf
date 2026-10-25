@@ -20,13 +20,14 @@ jobs:
     timeout-minutes: 10
     if: >-
       ${{
-        github.event_name == 'workflow_dispatch' ||
+        github.repository != 'typhoonwhale/VeneraNext-Leaf' &&
+        (github.event_name == 'workflow_dispatch' ||
         (
           github.event.workflow_run.conclusion == 'success' &&
           github.event.workflow_run.event == 'push' &&
           startsWith(github.event.workflow_run.head_branch, 'v') &&
           !contains(github.event.workflow_run.head_branch, '-')
-        )
+        ))
       }}
     steps:
       - name: 检出仓库
