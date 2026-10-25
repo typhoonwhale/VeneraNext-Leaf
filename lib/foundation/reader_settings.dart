@@ -117,6 +117,8 @@ class ReaderSettings {
       _values['enableClockAndBatteryInfoInReader'] as bool;
   String get readerInformationMode =>
       _values['readerInformationMode'] as String;
+
+  /// Bottom blank space in logical pixels; the legacy storage key is retained.
   double get readerFooterHeight => _values['readerFooterHeight'] as double;
   double get readerFooterFontSize => _values['readerFooterFontSize'] as double;
   bool get readerFooterShowChapter =>

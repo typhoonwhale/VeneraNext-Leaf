@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 import 'status_info.dart';
 
 /// A measured, opaque information region outside the reading gesture viewport.
-/// Reserve worst-case page/status text so ticks, battery reads and page turns
-/// never change the gallery extent. Narrow screens use two information rows.
+/// Reserve worst-case page/status widths; let actual text determine row height.
+/// Narrow screens use two information rows, followed by independent bottom space.
 class ReaderInformationFooter extends StatelessWidget {
   const ReaderInformationFooter({
     super.key,
@@ -13,7 +13,8 @@ class ReaderInformationFooter extends StatelessWidget {
     required this.maxPage,
     required this.showPage,
     required this.showStatus,
-    required this.height,
+    required this.bottomSpacing,
+    this.dividerGap = 2,
     required this.fontSize,
     this.title,
     this.chapterTitle,
@@ -24,7 +25,7 @@ class ReaderInformationFooter extends StatelessWidget {
 
   final int page, maxPage;
   final bool showPage, showStatus, hideInformation;
-  final double height, fontSize;
+  final double bottomSpacing, fontSize, dividerGap;
   final String? title;
   final String? chapterTitle;
 
@@ -99,24 +100,10 @@ class ReaderInformationFooter extends StatelessWidget {
                         contentWidth
                   : displayTitle.isNotEmpty &&
                         statusWidth + 12 + titleMinimumWidth > contentWidth);
-          final pageHeight = showPage
-              ? measure(pageSample, contentWidth).height
-              : 0.0;
-          final statusHeight = showStatus
-              ? measure(statusSample, contentWidth).height
-              : 0.0;
-          final titleHeight = displayTitle.isNotEmpty
-              ? measure('M', contentWidth).height
-              : 0.0;
-          final informationRowHeight = math.max(pageHeight, titleHeight);
-          final contentHeight = stacked
-              ? informationRowHeight + statusHeight + 4
-              : math.max(informationRowHeight, statusHeight);
-          final actualHeight = math.max(height, contentHeight + 1);
           Widget pageInfo() => LayoutBuilder(
             builder: (context, bounds) {
               return Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (showPage)
                     SizedBox(
@@ -144,83 +131,85 @@ class ReaderInformationFooter extends StatelessWidget {
             key: const ValueKey('reader-footer-status'),
             footerFontSize: fontSize,
           );
-          return SizedBox(
-            height: actualHeight + safe.bottom,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                SizedBox(
-                  height: 1,
-                  child: ColoredBox(
-                    key: const ValueKey('reader-footer-divider'),
-                    color: light ? Colors.black : theme.colorScheme.onSurface,
-                  ),
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(
+                height: 1,
+                child: ColoredBox(
+                  key: const ValueKey('reader-footer-divider'),
+                  color: light ? Colors.black : theme.colorScheme.onSurface,
                 ),
-                Expanded(
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(
-                      12 + safe.left,
-                      0,
-                      12 + safe.right,
-                      0,
-                    ),
-                    child: Visibility(
-                      visible: !hideInformation,
-                      maintainState: true,
-                      maintainAnimation: true,
-                      maintainSize: true,
-                      child: DefaultTextStyle.merge(
-                        style: style,
-                        child: stacked
-                            ? Column(
-                                mainAxisAlignment: MainAxisAlignment.end,
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  pageInfo(),
-                                  const SizedBox(height: 4),
-                                  Align(
-                                    alignment: Alignment.centerRight,
-                                    child: statusInfo(),
-                                  ),
-                                ],
-                              )
-                            : Row(
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                children: [
-                                  if (showPage || displayTitle.isNotEmpty)
-                                    Expanded(child: pageInfo())
-                                  else
-                                    const Spacer(),
-                                  if (showStatus) ...[
-                                    if (showPage)
-                                      const SizedBox(width: 12)
-                                    else if (displayTitle.isNotEmpty)
-                                      SizedBox(
-                                        width: math.min(
-                                          12,
-                                          math.max(
-                                            0,
-                                            contentWidth - statusWidth,
-                                          ),
-                                        ),
-                                      ),
-                                    SizedBox(
-                                      width: math.min(
-                                        statusWidth,
-                                        contentWidth,
-                                      ),
-                                      child: statusInfo(),
-                                    ),
-                                  ],
-                                ],
+              ),
+              SizedBox(
+                key: const ValueKey('reader-footer-divider-gap'),
+                height: dividerGap,
+              ),
+              Padding(
+                padding: EdgeInsets.fromLTRB(
+                  12 + safe.left,
+                  0,
+                  12 + safe.right,
+                  0,
+                ),
+                child: Visibility(
+                  key: const ValueKey('reader-footer-information'),
+                  visible: !hideInformation,
+                  maintainState: true,
+                  maintainAnimation: true,
+                  maintainSize: true,
+                  child: DefaultTextStyle.merge(
+                    style: style,
+                    child: stacked
+                        ? Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              pageInfo(),
+                              const SizedBox(height: 4),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: statusInfo(),
                               ),
-                      ),
-                    ),
+                            ],
+                          )
+                        : Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (showPage || displayTitle.isNotEmpty)
+                                Expanded(child: pageInfo())
+                              else
+                                const Spacer(),
+                              if (showStatus) ...[
+                                if (showPage)
+                                  const SizedBox(width: 12)
+                                else if (displayTitle.isNotEmpty)
+                                  SizedBox(
+                                    width: math.min(
+                                      12,
+                                      math.max(0, contentWidth - statusWidth),
+                                    ),
+                                  ),
+                                SizedBox(
+                                  width: math.min(statusWidth, contentWidth),
+                                  child: statusInfo(),
+                                ),
+                              ],
+                            ],
+                          ),
                   ),
                 ),
-                SizedBox(height: safe.bottom),
-              ],
-            ),
+              ),
+              SizedBox(
+                key: const ValueKey('reader-footer-bottom-spacing'),
+                height: bottomSpacing,
+              ),
+              SizedBox(
+                key: const ValueKey('reader-footer-safe-bottom'),
+                height: safe.bottom,
+              ),
+            ],
           );
         },
       ),

@@ -5,6 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:venera_next/foundation/app.dart';
 import 'package:venera_next/foundation/appdata.dart';
+import 'package:venera_next/foundation/reader_preference_store.dart';
+import 'package:venera_next/foundation/reader_preferences.dart';
 
 void main() {
   test('does not configure a comic source list by default', () {
@@ -42,6 +44,13 @@ void main() {
       await appdata.loadDataForTesting(dataDir.path);
       expect(appdata.settings['readerInformationMode'], 'footer');
       expect(appdata.settings['readerFooterHeight'], 18.0);
+      // Preserve the imported legacy value; the reader applies the new limit.
+      expect(
+        ReaderPreferenceStore(
+          settings: appdata.settings,
+        ).read(ReaderPreferences.readerFooterHeight),
+        15.0,
+      );
       expect(appdata.settings['readerFooterFontSize'], 11.0);
       expect(appdata.settings['readerFooterShowChapter'], isFalse);
 

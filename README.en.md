@@ -4,6 +4,8 @@
 
 Start with the [Leaf development plan](docs/LEAF_DEVELOPMENT_PLAN.md), [research and agent handoff index](docs/research/README.md), and [Android build guide](docs/LEAF_BUILD.md) (maintained in Chinese). Record future device investigations in `docs/research/`, distinguishing official documentation, user reports, code observations, and unverified assumptions.
 
+The footer uses a 1 logical-pixel divider, a fixed 2-pixel gap, natural text height, and adjustable bottom spacing (0–15, default 4), plus actual system safe-area insets. Font size (9–13, default 11) changes only the text region. See the [layout record and renders](docs/research/2026-10-26-footer-spacing.md).
+
 The VeneraNext badges, screenshots, platform descriptions and download links below are retained upstream references; they do not describe Leaf release availability or device validation status.
 
 ---

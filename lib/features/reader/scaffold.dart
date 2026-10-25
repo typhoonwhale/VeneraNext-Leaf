@@ -333,7 +333,7 @@ class ReaderScaffoldState extends State<ReaderScaffold> {
                 : null,
             showPage: preferences.showPageNumberInReader,
             showStatus: preferences.enableClockAndBatteryInfoInReader,
-            height: preferences.readerFooterHeight,
+            bottomSpacing: preferences.readerFooterHeight,
             fontSize: preferences.readerFooterFontSize,
             // Keep the gallery extent stable when swiping to/from comments.
             hideInformation: widget.data.onCommentsPage,

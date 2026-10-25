@@ -106,11 +106,13 @@ abstract final class ReaderPreferences {
     step: 1,
     integer: false,
   );
+  // Keep the persisted key for scope/import compatibility; this now controls
+  // only the blank space below the text, not the total footer height.
   static const readerFooterHeight = NumericPreference(
     'readerFooterHeight',
-    18.0,
-    min: 15,
-    max: 25,
+    4.0,
+    min: 0,
+    max: 15,
     step: 1,
     integer: false,
   );

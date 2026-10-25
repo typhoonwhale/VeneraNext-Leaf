@@ -1,0 +1,23 @@
+[
+  {
+    "value": 1.0,
+    "totalHeight": 19.0,
+    "textHeight": 13.0,
+    "topGap": 1.0,
+    "bottomGap": 4.0
+  },
+  {
+    "value": 2.0,
+    "totalHeight": 20.0,
+    "textHeight": 13.0,
+    "topGap": 2.0,
+    "bottomGap": 4.0
+  },
+  {
+    "value": 3.0,
+    "totalHeight": 21.0,
+    "textHeight": 13.0,
+    "topGap": 3.0,
+    "bottomGap": 4.0
+  }
+]

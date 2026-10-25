@@ -664,7 +664,7 @@ class _ReaderSettingsState extends SettingsSaveState<ReaderSettings> {
               useDeviceSettings: useDeviceSpecificSettings,
             ).toSliver(),
             SliderSetting.reader(
-              title: 'Reader information bar height'.tl,
+              title: 'Reader information bottom spacing'.tl,
               preference: ReaderPreferences.readerFooterHeight,
               valueFormatter: (value) => value.toInt().toString(),
               onChanged: () => widget.onChanged?.call('readerFooterHeight'),

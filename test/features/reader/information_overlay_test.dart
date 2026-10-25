@@ -99,11 +99,14 @@ void main() {
           final viewport = tester.getRect(
             find.byKey(const ValueKey('reader-content-viewport')),
           );
-          expect(footer.height, 18 + metrics.padding.bottom);
+          expect(
+            footer.height,
+            closeTo(1 + 2 + page.height + 4 + metrics.padding.bottom, 0.01),
+          );
           expect(footer.bottom, size.height - metrics.viewInsets.bottom);
           expect(
             page.bottom,
-            closeTo(footer.bottom - metrics.padding.bottom, 0.01),
+            closeTo(footer.bottom - metrics.padding.bottom - 4, 0.01),
           );
           expect(viewport.bottom, footer.top);
           expect(
@@ -359,7 +362,7 @@ void main() {
             );
             expect(visibility.visible, isFalse);
             f.comments = false;
-            f.footerHeight = 25;
+            f.footerHeight = 15;
             f.footerFontSize = 13;
             await mount();
             expect(
@@ -402,57 +405,53 @@ void main() {
     }
   }
 
-  testWidgets(
-    'footer chapter capacity stays stable and grows without truncation',
-    (tester) async {
-      await tester.binding.setSurfaceSize(const Size(320, 568));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
-      double? reservedHeight;
-      for (final maxPage in [9, 99, 999, 10000, 99999, 100000]) {
-        await tester.pumpWidget(
-          MaterialApp(
-            home: MediaQuery(
-              data: const MediaQueryData(
-                size: Size(320, 568),
-                textScaler: TextScaler.linear(3.2),
-                padding: EdgeInsets.fromLTRB(16, 24, 12, 20),
-              ),
-              child: Align(
-                alignment: Alignment.bottomCenter,
-                child: ReaderInformationFooter(
-                  page: maxPage,
-                  maxPage: maxPage,
-                  showPage: true,
-                  showStatus: true,
-                  height: 18,
-                  fontSize: 11,
-                ),
+  testWidgets('footer chapter capacity grows naturally without truncation', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(320, 568));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    double? reservedHeight;
+    for (final maxPage in [9, 99, 999, 10000, 99999, 100000]) {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MediaQuery(
+            data: const MediaQueryData(
+              size: Size(320, 568),
+              textScaler: TextScaler.linear(3.2),
+              padding: EdgeInsets.fromLTRB(16, 24, 12, 20),
+            ),
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: ReaderInformationFooter(
+                page: maxPage,
+                maxPage: maxPage,
+                showPage: true,
+                showStatus: true,
+                bottomSpacing: 4,
+                fontSize: 11,
               ),
             ),
           ),
-        );
-        await tester.pump();
-        final height = tester
-            .getSize(find.byType(ReaderInformationFooter))
-            .height;
-        reservedHeight ??= height;
-        if (maxPage <= 99999) {
-          expect(height, reservedHeight);
-        } else {
-          expect(height, greaterThanOrEqualTo(reservedHeight));
-        }
-        final page = find.text('$maxPage/$maxPage');
-        expect(page, findsOneWidget);
-        final paragraph = tester.renderObject<RenderParagraph>(page);
-        expect(paragraph.didExceedMaxLines, isFalse);
-        expect(tester.takeException(), isNull);
-      }
-      await tester.pumpWidget(const SizedBox());
-    },
-  );
+        ),
+      );
+      await tester.pump();
+      final height = tester
+          .getSize(find.byType(ReaderInformationFooter))
+          .height;
+      reservedHeight ??= height;
+      expect(height, greaterThanOrEqualTo(reservedHeight));
+      reservedHeight = height;
+      final page = find.text('$maxPage/$maxPage');
+      expect(page, findsOneWidget);
+      final paragraph = tester.renderObject<RenderParagraph>(page);
+      expect(paragraph.didExceedMaxLines, isFalse);
+      expect(tester.takeException(), isNull);
+    }
+    await tester.pumpWidget(const SizedBox());
+  });
 
   testWidgets(
-    'compact footer honors configured heights and grows without overlap',
+    'footer bottom spacing stays independent of natural text height',
     (tester) async {
       const size = Size(667, 375);
       await tester.binding.setSurfaceSize(size);
@@ -460,7 +459,7 @@ void main() {
       final f = _Fixture()
         ..gallery = true
         ..padding = const EdgeInsets.fromLTRB(16, 24, 12, 0)
-        ..footerHeight = 18
+        ..footerHeight = 4
         ..footerFontSize = 11
         ..showChapter = false;
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -482,12 +481,16 @@ void main() {
         void expectBottomAligned(Finder finder) {
           final targetBottom =
               tester.getRect(find.byType(ReaderInformationFooter)).bottom -
-              f.padding.bottom;
+              f.padding.bottom -
+              f.footerHeight;
           expect(tester.getRect(finder).bottom, closeTo(targetBottom, 0.01));
         }
 
         await mount(1);
-        expect(contentHeight(), 18);
+        expect(
+          contentHeight(),
+          closeTo(3 + tester.getSize(find.text('4/12')).height + 4, 0.01),
+        );
         final page = find.text('4/12');
         final status = find.byType(ReaderStatusInfo);
         expectBottomAligned(page);
@@ -495,14 +498,20 @@ void main() {
 
         f.padding = const EdgeInsets.fromLTRB(16, 24, 12, 20);
         await mount(1);
-        expect(contentHeight(), 18);
+        expect(
+          contentHeight(),
+          closeTo(3 + tester.getSize(find.text('4/12')).height + 4, 0.01),
+        );
         expectBottomAligned(page);
         expectBottomAligned(status);
 
         f.footerHeight = 15;
         f.footerFontSize = 9;
         await mount(1);
-        expect(contentHeight(), 15);
+        expect(
+          contentHeight(),
+          closeTo(3 + tester.getSize(find.text('4/12')).height + 15, 0.01),
+        );
 
         f.footerFontSize = 13;
         f.showChapter = true;
@@ -543,6 +552,114 @@ void main() {
         await f.work.dispose();
         f.favorites.dispose();
       }
+    },
+  );
+
+  testWidgets(
+    'footer separates divider gap, natural text, spacing and safe area',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(667, 568));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+            battery,
+            (call) async =>
+                call.method == 'getBatteryLevel' ? 85 : 'discharging',
+          );
+      Rect rect(String key) => tester.getRect(find.byKey(ValueKey(key)));
+      for (final width in [160.0, 667.0]) {
+        for (final safeBottom in [0.0, 20.0]) {
+          for (final content in [
+            (page: true, status: true, title: '中文 Book｜第十二章'),
+            (page: true, status: false, title: ''),
+            (page: false, status: true, title: ''),
+            (page: false, status: false, title: '中文 Book｜第十二章'),
+          ]) {
+            double? smallerTextHeight;
+            for (final fontSize in [9.0, 13.0]) {
+              double? firstTextHeight;
+              for (final spacing in [0.0, 4.0, 15.0]) {
+                await tester.pumpWidget(
+                  MaterialApp(
+                    home: MediaQuery(
+                      data: MediaQueryData(
+                        padding: EdgeInsets.only(bottom: safeBottom),
+                      ),
+                      child: Align(
+                        alignment: Alignment.bottomCenter,
+                        child: SizedBox(
+                          width: width,
+                          child: ReaderInformationFooter(
+                            page: 4,
+                            maxPage: 12,
+                            showPage: content.page,
+                            showStatus: content.status,
+                            title: content.title,
+                            bottomSpacing: spacing,
+                            fontSize: fontSize,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+                await tester.pump();
+                final divider = rect('reader-footer-divider');
+                final information = rect('reader-footer-information');
+                final bottom = rect('reader-footer-bottom-spacing');
+                final safe = rect('reader-footer-safe-bottom');
+                final footer = tester.getRect(
+                  find.byType(ReaderInformationFooter),
+                );
+                expect(divider.height, 1);
+                expect(information.top - divider.bottom, closeTo(2, 0.0001));
+                expect(rect('reader-footer-divider-gap').height, 2);
+                expect(bottom.top, information.bottom);
+                expect(bottom.height, spacing);
+                expect(safe.top, bottom.bottom);
+                expect(safe.height, safeBottom);
+                expect(safe.bottom, footer.bottom);
+                final textRects = find
+                    .descendant(
+                      of: find.byType(ReaderInformationFooter),
+                      matching: find.byType(Text),
+                    )
+                    .evaluate()
+                    .map(
+                      (element) =>
+                          tester.getRect(find.byWidget(element.widget)),
+                    );
+                final textBounds = textRects.reduce(
+                  (a, b) => a.expandToInclude(b),
+                );
+                if (width == 667) {
+                  for (final textRect in textRects) {
+                    expect(
+                      textRect.top,
+                      closeTo(information.top, 0.0001),
+                      reason: 'Mixed-script text rows share the fixed top gap.',
+                    );
+                  }
+                }
+                expect(textBounds.top, closeTo(information.top, 0.0001));
+                expect(textBounds.bottom, closeTo(information.bottom, 0.0001));
+                firstTextHeight ??= information.height;
+                expect(
+                  information.height,
+                  firstTextHeight,
+                  reason: 'Bottom spacing must not stretch text rows.',
+                );
+                expect(tester.takeException(), isNull);
+              }
+              if (smallerTextHeight != null) {
+                expect(firstTextHeight, greaterThan(smallerTextHeight));
+              }
+              smallerTextHeight = firstTextHeight;
+            }
+          }
+        }
+      }
+      await tester.pumpWidget(const SizedBox());
     },
   );
 
@@ -823,7 +940,7 @@ class _Fixture {
   int taps = 0;
   bool gallery = false;
   String mode = 'footer';
-  double footerHeight = 18, footerFontSize = 11;
+  double footerHeight = 4, footerFontSize = 11;
   bool showChapter = true, hasChapters = true;
   String title = 'Book';
   String? chapterTitle = 'A very long chapter title';

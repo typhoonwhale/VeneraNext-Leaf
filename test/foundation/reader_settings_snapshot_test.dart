@@ -61,7 +61,7 @@ void main() {
   test('Leaf reader information defaults and validates legacy settings', () {
     final defaults = ReaderSettings.resolve(global: {});
     expect(defaults.readerInformationMode, 'footer');
-    expect(defaults.readerFooterHeight, 18.0);
+    expect(defaults.readerFooterHeight, 4.0);
     expect(defaults.readerFooterHeight, isA<double>());
     expect(defaults.readerFooterFontSize, 11.0);
     expect(defaults.readerFooterFontSize, isA<double>());
@@ -90,20 +90,20 @@ void main() {
       },
     );
     expect(invalid.readerInformationMode, 'footer');
-    expect(invalid.readerFooterHeight, 18.0);
+    expect(invalid.readerFooterHeight, 4.0);
     expect(invalid.readerFooterFontSize, 11.0);
     expect(invalid.readerFooterShowChapter, isFalse);
 
     final bounded = ReaderSettings.resolve(
       global: {'readerFooterHeight': 36, 'readerFooterFontSize': 14},
     );
-    expect(bounded.readerFooterHeight, 25.0);
+    expect(bounded.readerFooterHeight, 15.0);
     expect(bounded.readerFooterFontSize, 13.0);
 
     final minimum = ReaderSettings.resolve(
-      global: {'readerFooterHeight': 14, 'readerFooterFontSize': 8},
+      global: {'readerFooterHeight': -1, 'readerFooterFontSize': 8},
     );
-    expect(minimum.readerFooterHeight, 15.0);
+    expect(minimum.readerFooterHeight, 0.0);
     expect(minimum.readerFooterFontSize, 9.0);
   });
 
@@ -112,21 +112,21 @@ void main() {
     () {
       final global = {
         'readerInformationMode': 'overlay',
-        'readerFooterHeight': 22,
+        'readerFooterHeight': 4,
         'readerFooterFontSize': 12,
         'readerFooterShowChapter': true,
       };
       final device = {
         'enabled': true,
         'readerInformationMode': 'hidden',
-        'readerFooterHeight': 24,
+        'readerFooterHeight': 8,
         'readerFooterFontSize': 10,
         'readerFooterShowChapter': false,
       };
       final comic = <String, Object?>{
         'enabled': true,
         'readerInformationMode': 'footer',
-        'readerFooterHeight': 25,
+        'readerFooterHeight': 15,
       };
 
       var resolved = ReaderSettings.resolve(
@@ -135,7 +135,7 @@ void main() {
         comic: comic,
       );
       expect(resolved.readerInformationMode, 'footer');
-      expect(resolved.readerFooterHeight, 25.0);
+      expect(resolved.readerFooterHeight, 15.0);
       expect(resolved.readerFooterFontSize, 10.0);
       expect(resolved.readerFooterShowChapter, isFalse);
 
@@ -146,7 +146,7 @@ void main() {
         comic: comic,
       );
       expect(resolved.readerInformationMode, 'hidden');
-      expect(resolved.readerFooterHeight, 24.0);
+      expect(resolved.readerFooterHeight, 8.0);
       expect(resolved.readerFooterFontSize, 10.0);
       expect(resolved.readerFooterShowChapter, isFalse);
 
@@ -157,7 +157,7 @@ void main() {
         comic: comic,
       );
       expect(resolved.readerInformationMode, 'overlay');
-      expect(resolved.readerFooterHeight, 22.0);
+      expect(resolved.readerFooterHeight, 4.0);
       expect(resolved.readerFooterFontSize, 12.0);
       expect(resolved.readerFooterShowChapter, isTrue);
     },
