@@ -1,0 +1,85 @@
+{
+  "date": "2026-10-25",
+  "method": "Read-only GitHub REST API repository/issue/pull/compare queries; public issue and PR title/body keyword filtering; selected record details read. Search is bounded and does not prove absence from all history/comments.",
+  "repositories": [
+    {
+      "repository": "CyrilPeng/Venera-Next",
+      "head": "91e651a8d1351bb78770f9a57ae2a30a76447650",
+      "issue_and_pr_record_count": 119,
+      "archived": false
+    },
+    {
+      "repository": "venera-app/venera",
+      "head": "a0eba914f4c2a84ac1bc925adec2baabe920b9be",
+      "issue_and_pr_record_count": 794,
+      "archived": true
+    }
+  ],
+  "selected": [
+    {
+      "html_url": "https://github.com/venera-app/venera/pull/754",
+      "number": 754,
+      "title": "Added ink screen adaptation option / 为框架增加了墨水屏适配选项",
+      "state": "open",
+      "updated_at": "2026-03-07T03:20:03Z",
+      "merged": false,
+      "merged_at": null
+    },
+    {
+      "html_url": "https://github.com/venera-app/venera/issues/745",
+      "number": 745,
+      "title": "[Bug]: 关闭页面动画后，滑动翻页仍然存在动画",
+      "state": "open",
+      "updated_at": "2026-01-08T06:14:13Z"
+    },
+    {
+      "html_url": "https://github.com/venera-app/venera/issues/834",
+      "number": 834,
+      "title": "[Enhancement]: 漫画翻页时增加白屏闪烁选项，用于消除墨水屏残影",
+      "state": "open",
+      "updated_at": "2026-03-25T06:52:51Z"
+    }
+  ],
+  "included_refresh_commit": "81fe47b26d4028733fce2fa836f783fbea2c532b",
+  "baseline_contains_refresh_commit": true,
+  "direct_upstream_since_v1_18_1": {
+    "status": "ahead",
+    "ahead_by": 8,
+    "behind_by": 0,
+    "total_commits": 8,
+    "commits": [
+      {
+        "sha": "4cb5c50466a162d2c518ef60141b17e302dbb4d8",
+        "subject": "fix(reader): 支持在条漫两侧留白区域滚动"
+      },
+      {
+        "sha": "265d32d305b426341de7ca3b5d94b86dc3db94a6",
+        "subject": "chore(altstore): 同步 v1.18.1 正式版分发信息"
+      },
+      {
+        "sha": "006f5f4f36eaed2cd42399f1020e5691cdd1d7c0",
+        "subject": "feat(download): 支持跳过不可用图片并保留缺页补下载"
+      },
+      {
+        "sha": "ccb5f608a861eac9e2c621aa978bd61405aabc69",
+        "subject": "fix(library): 刷新屏蔽结果并说明收藏与本地列表隐藏原因"
+      },
+      {
+        "sha": "122641ff0d62cfc3a5c0efd9fad247fa4faf6bd9",
+        "subject": "fix(reader): 预留瀑布流章节标题避免预取后画面下移"
+      },
+      {
+        "sha": "b73af242b8b5ee22037c6af4a85a2b7be3c2d8eb",
+        "subject": "feat(reader): 支持连续阅读放大后继续自动滚动"
+      },
+      {
+        "sha": "b73fadfc514920b5edf2c608ea4dbbcf67f4415f",
+        "subject": "fix(reader): 合并条漫两侧留白滚动修复（#113）"
+      },
+      {
+        "sha": "91e651a8d1351bb78770f9a57ae2a30a76447650",
+        "subject": "chore(release): 准备 v1.18.2-rc.1 预发布版"
+      }
+    ]
+  }
+}
