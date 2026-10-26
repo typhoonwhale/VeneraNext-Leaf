@@ -55,32 +55,50 @@ class FileDownloader {
     await file.writeAsString(_blocks.map((e) => e.toString()).join("\n"));
   }
 
-  Future<void> _readStatus() async {
-    var file = File("$savePath.download");
-    if (!await file.exists()) {
-      return;
+  /// Trust a status file only when its blocks exactly cover the current file.
+  Future<bool> _readStatus() async {
+    final List<_DownloadBlock> blocks;
+    try {
+      final lines = await File("$savePath.download").readAsLines();
+      blocks = lines.map((e) => _DownloadBlock.fromString(e)).toList();
+    } catch (_) {
+      return false;
     }
-
-    var lines = await file.readAsLines();
-    _blocks = lines.map((e) => _DownloadBlock.fromString(e)).toList();
+    var offset = 0;
+    for (final block in blocks) {
+      if (block.start != offset ||
+          block.end <= block.start ||
+          block.downloadedBytes < 0 ||
+          block.downloadedBytes > block.end - block.start) {
+        return false;
+      }
+      offset = block.end;
+    }
+    if (blocks.isEmpty || offset != _fileSize) return false;
+    _blocks = blocks;
+    return true;
   }
 
-  /// create file and write empty bytes
-  Future<void> _prepareFile() async {
+  /// Create the file and write empty bytes, or reuse a same-size partial file
+  /// that still has its status. Returns whether the partial file was reused.
+  Future<bool> _prepareFile() async {
     var file = File(savePath);
-    if (await file.exists()) {
-      if (file.lengthSync() == _fileSize &&
-          File("$savePath.download").existsSync()) {
-        _file = await file.open(mode: FileMode.append);
-        return;
-      } else {
-        await file.delete();
-      }
+    final status = File("$savePath.download");
+    if (await file.exists() &&
+        file.lengthSync() == _fileSize &&
+        status.existsSync()) {
+      _file = await file.open(mode: FileMode.append);
+      return true;
     }
+    // A status file never describes a newly created file. Remove it first so
+    // an interruption cannot pair it with the new zero-filled file.
+    if (await status.exists()) await status.delete();
+    if (await file.exists()) await file.delete();
 
     await file.create(recursive: true);
     _file = await file.open(mode: FileMode.append);
     await _file!.truncate(_fileSize);
+    return false;
   }
 
   Future<void> _createTasks() async {
@@ -88,15 +106,17 @@ class FileDownloader {
     var length = res.headers["content-length"]?.first;
     _fileSize = length == null ? 0 : int.parse(length);
 
-    await _prepareFile();
+    final resumed = await _prepareFile() && await _readStatus();
 
-    if (File("$savePath.download").existsSync()) {
-      await _readStatus();
+    if (resumed) {
       _currentBytes = _blocks.fold<int>(
         0,
         (previousValue, element) => previousValue + element.downloadedBytes,
       );
     } else {
+      // Damaged or mismatched status: download the whole file again.
+      final status = File("$savePath.download");
+      if (await status.exists()) await status.delete();
       if (_fileSize > 1024 * 1024 * 1024) {
         _kChunkSize = 64 * 1024 * 1024;
       } else if (_fileSize > 512 * 1024 * 1024) {
@@ -150,7 +170,16 @@ class FileDownloader {
       if (_currentBytes >= _fileSize) {
         await _file!.close();
         _file = null;
-        _reportStatus(resultStream);
+        if (_fileSize > 0) {
+          // Every block of a verified status was written before the process
+          // ended; finish instead of failing on each resume.
+          await File("$savePath.download").delete();
+          resultStream.add(
+            DownloadingStatus(_currentBytes, _fileSize, 0, true),
+          );
+        } else {
+          _reportStatus(resultStream);
+        }
         resultStream.close();
         return;
       }

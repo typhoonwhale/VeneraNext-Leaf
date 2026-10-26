@@ -29,6 +29,7 @@ import 'package:venera_next/foundation/sqlite_connection.dart';
 import 'download_task.dart';
 import 'download_task_storage.dart';
 import 'download_queue.dart';
+import 'archive_download_task.dart';
 import 'download_task_codec.dart';
 import 'package:venera_next/foundation/file_interaction.dart';
 
@@ -417,7 +418,18 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
       await ComicSourceManager().ensureInit();
     }
     _checkNotDisposed();
-    restoreDownloadingTasks();
+    if (restoreDownloadingTasks()) {
+      // Before any task can start and create a new workspace. Workspaces of
+      // an unreadable snapshot are never treated as orphans.
+      try {
+        ArchiveDownloadTask.removeOrphanWorkspaces(
+          App.cachePath,
+          downloadingTasks,
+        );
+      } catch (error, stack) {
+        Log.error('LocalManager', error, stack);
+      }
+    }
     // Initialization and UI do not wait for downloads to start.
     _downloadAutoResume = _resumeDownloadsByIntent();
   }
@@ -783,7 +795,8 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
     _downloadQueue.restorePausedTasks(tasks, pausedByUser: pausedByUser);
   }
 
-  void restoreDownloadingTasks() {
+  /// Returns false when the snapshot could not be restored.
+  bool restoreDownloadingTasks() {
     _storageAccess.check();
     try {
       final entries = _downloadTaskStore.restore(_taskSnapshotPath, (json) {
@@ -800,8 +813,10 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
           ],
         );
       }
+      return true;
     } catch (error, stack) {
       Log.error('LocalManager', error, stack);
+      return false;
     }
   }
 

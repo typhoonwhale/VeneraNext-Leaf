@@ -1531,8 +1531,9 @@ void main() {
       await previous;
       await task.pendingRun;
       await manager.pendingDownloadTaskWrites;
-      expect(transfers, 2);
-      expect(transferPaths[0], transferPaths[1]);
+      // The completed archive is reused; only extraction runs again.
+      expect(transfers, 1);
+      expect(extractions, 2);
       expect(File(transferPaths[0]).parent.existsSync(), isFalse);
       expect(task.isError, isFalse);
       expect(task.isPaused, isTrue);

@@ -1,3 +1,4 @@
+import 'archive_download_task.dart';
 import 'download_task.dart';
 import 'download_task_storage.dart';
 import 'images_download_task.dart';
@@ -10,6 +11,8 @@ DownloadTask? downloadTaskFromJson(
   switch (json['type']) {
     case 'ImagesDownloadTask':
       return ImagesDownloadTask.fromJson(storage, json);
+    case 'ArchiveDownloadTask':
+      return ArchiveDownloadTask.fromJson(storage, json);
     default:
       return null;
   }

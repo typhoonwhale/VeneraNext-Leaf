@@ -75,9 +75,13 @@ void main() {
     expect(File(savePath).existsSync(), isFalse);
   });
 
-  test(
-    'FileDownloader reports incomplete resume status without finish',
-    () async {
+  for (final (name, status, writeFile) in [
+    ('without its file', '0-${8 * 1024}-${8 * 1024}', false),
+    ('covering only part of the file', '0-${8 * 1024}-${8 * 1024}', true),
+    ('with unreadable text', 'not-a-block', true),
+    ('claiming more than a block', '0-${16 * 1024}-${32 * 1024}', true),
+  ]) {
+    test('FileDownloader downloads again for a status $name', () async {
       final dir = Directory.systemTemp.createTempSync('venera-downloader-');
       final bytes = List<int>.generate(16 * 1024, (index) => index % 251);
       final server = await _serveBytes(bytes);
@@ -89,9 +93,8 @@ void main() {
       });
 
       final savePath = '${dir.path}/download.bin';
-      await File(
-        '$savePath.download',
-      ).writeAsString('${0}-${8 * 1024}-${8 * 1024}');
+      if (writeFile) File(savePath).writeAsBytesSync(List.filled(16 * 1024, 0));
+      File('$savePath.download').writeAsStringSync(status);
       final downloader = FileDownloader(
         'http://127.0.0.1:${server.port}/download.bin',
         savePath,
@@ -99,22 +102,60 @@ void main() {
         chunkSize: 8 * 1024,
       );
 
-      Object? error;
-      final statuses = <DownloadingStatus>[];
-      try {
-        await for (final status in downloader.start()) {
-          statuses.add(status);
-        }
-      } catch (e) {
-        error = e;
-      }
+      final statuses = await downloader.start().toList();
 
-      expect(error, isA<Exception>());
-      expect(error.toString(), contains('Expected ${16 * 1024} bytes'));
-      expect(statuses.where((status) => status.isFinished), isEmpty);
-      await Future<void>.delayed(const Duration(milliseconds: 1100));
-    },
-  );
+      expect(statuses.first.downloadedBytes, 0);
+      expect(statuses.last.isFinished, isTrue);
+      expect(File(savePath).readAsBytesSync(), bytes);
+      expect(File('$savePath.download').existsSync(), isFalse);
+    });
+  }
+
+  test('FileDownloader resumes a consistent status and finishes', () async {
+    final dir = Directory.systemTemp.createTempSync('venera-downloader-');
+    final bytes = List<int>.generate(16 * 1024, (index) => index % 251);
+    final requested = <String?>[];
+    final server = await _serveBytes(bytes, onRange: requested.add);
+    addTearDown(() async {
+      await server.close(force: true);
+      if (dir.existsSync()) {
+        dir.deleteSync(recursive: true);
+      }
+    });
+
+    final savePath = '${dir.path}/download.bin';
+    File(savePath).writeAsBytesSync([
+      ...bytes.sublist(0, 8 * 1024),
+      ...List.filled(8 * 1024, 0),
+    ]);
+    File('$savePath.download').writeAsStringSync(
+      '0-${8 * 1024}-${8 * 1024}\n${8 * 1024}-${16 * 1024}-0',
+    );
+    final downloader = FileDownloader(
+      'http://127.0.0.1:${server.port}/download.bin',
+      savePath,
+      maxConcurrent: 1,
+      chunkSize: 8 * 1024,
+    );
+
+    final statuses = await downloader.start().toList();
+
+    expect(statuses.first.downloadedBytes, 8 * 1024);
+    expect(statuses.last.isFinished, isTrue);
+    expect(requested, ['bytes=${8 * 1024}-${16 * 1024 - 1}']);
+    expect(File(savePath).readAsBytesSync(), bytes);
+
+    // Every block written but interrupted before the status was removed.
+    File('$savePath.download').writeAsStringSync('0-${16 * 1024}-${16 * 1024}');
+    requested.clear();
+    final finished = await FileDownloader(
+      'http://127.0.0.1:${server.port}/download.bin',
+      savePath,
+    ).start().toList();
+    expect(finished.last.isFinished, isTrue);
+    expect(requested, isEmpty);
+    expect(File('$savePath.download').existsSync(), isFalse);
+  });
 
   test('FileDownloader closes stream when stopped during setup', () async {
     final dir = Directory.systemTemp.createTempSync('venera-downloader-');
@@ -204,10 +245,14 @@ Future<HttpServer> _serveBytes(
   Set<int> pausedRangeStarts = const {},
   void Function()? onPausedRangeStart,
   Future<void>? beforePausedRangeFinish,
+  void Function(String?)? onRange,
 }) async {
   final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
   unawaited(() async {
     await for (final request in server) {
+      if (request.method != 'HEAD') {
+        onRange?.call(request.headers.value(HttpHeaders.rangeHeader));
+      }
       await _handleRequest(
         request,
         data,
