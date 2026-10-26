@@ -91,10 +91,36 @@ class ValidateReleaseTests(unittest.TestCase):
         self.assertIn("Release metadata for v1.2.3 is valid", output)
 
     def test_release_rejects_malformed_and_mismatched_tags(self):
-        for tag in ("main", "v9.9.9", "v1.2.3-rc.1"):
+        for tag in (
+            "main",
+            "v9.9.9",
+            "v1.2.3-rc.1",
+            "v1.18.03",
+            "v01.18.3",
+            "v1.2.3-rc.01",
+            "v1.2.3-beta.1",
+        ):
             with self.subTest(tag=tag):
                 output = self.invoke(ref=f"refs/tags/{tag}", ref_type="tag", status=1)
                 self.assertIn("::error::", output)
+
+    def test_release_accepts_zero_and_multi_digit_version_components(self):
+        for version in ("0.0.0", "1.18.10", "1.2.3-rc.0"):
+            with self.subTest(version=version):
+                (self.root / "release.json").write_text(
+                    f'{{"version": "{version}", "build": 42}}\n', encoding="utf-8"
+                )
+                (self.root / "pubspec.yaml").write_text(
+                    "version: " + version + "+42\n"
+                    "flutter:\n  assets:\n    - pubspec.yaml\n",
+                    encoding="utf-8",
+                )
+                (self.root / "CHANGELOG.md").write_text(
+                    f"# Changelog\n\n## v{version}\n\n- Release notes\n",
+                    encoding="utf-8",
+                )
+                output = self.invoke("--tag", f"v{version}")
+                self.assertIn(f"Release metadata for v{version} is valid", output)
 
     def test_tag_build_cannot_opt_out_of_tag_validation(self):
         for tag in ("v1.2.3", "v9.9.9"):

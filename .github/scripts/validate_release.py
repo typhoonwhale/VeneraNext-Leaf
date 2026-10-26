@@ -7,6 +7,7 @@ from pathlib import Path
 from release_version import (
     ReleaseVersionError,
     check_release_files,
+    is_release_tag,
     load_release_config,
     release_tag,
 )
@@ -115,7 +116,7 @@ def main() -> None:
         tag = (
             args.tag if args.tag is not None else os.environ.get("GITHUB_REF_NAME", "")
         ).strip()
-    if not re.fullmatch(r"v\d+\.\d+\.\d+(?:-rc\.\d+)?", tag):
+    if not is_release_tag(tag):
         fail(f"Release tag must look like v1.2.3 or v1.2.3-rc.1, got {tag!r}")
 
     validate_pubspec_version(tag)

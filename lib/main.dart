@@ -158,7 +158,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   ApplicationMount? _mount;
   late final _followUpdates = createFollowUpdatesRuntime(_dataSync);
   late final _backgroundSync = BackgroundSync.platform(_dataSync);
+  late final _updateCheckSchedule = createUpdateCheckSchedule();
   late final _startupUpdates = createStartupUpdateCheck(
+    schedule: _updateCheckSchedule,
     sources: widget.host.sourceUpdates,
     checkApplication: (scope) async {
       if (!mounted || widget.host.isClosing) return;
@@ -505,6 +507,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               );
               widget = DataSyncScope(controller: _dataSync, child: widget);
               widget = ApplicationUpdateScope(
+                onManualCheck: _updateCheckSchedule.recordManualCheck,
                 service: this.widget.host.applicationUpdates,
                 download: this.widget.host.applicationUpdateDownload,
                 child: widget,

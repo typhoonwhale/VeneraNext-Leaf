@@ -281,6 +281,15 @@ void main() {
     [
       {'tag_name': 'garbage'},
     ],
+    [
+      {'tag_name': 'v1.18.03'},
+    ],
+    [
+      {'tag_name': 'v01.18.3'},
+    ],
+    [
+      {'tag_name': 'v1.18.3-rc.01'},
+    ],
     [null],
   ]) {
     test(

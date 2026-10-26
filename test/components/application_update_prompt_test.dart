@@ -82,6 +82,7 @@ void main() {
     VoidCallback? onExit,
     Brightness brightness = Brightness.light,
     double textScale = 1,
+    Future<void> Function()? onManualCheck,
   }) => MaterialApp(
     navigatorKey: navigatorKey,
     debugShowCheckedModeBanner: false,
@@ -97,6 +98,7 @@ void main() {
       ).copyWith(textScaler: TextScaler.linear(textScale)),
       child: ApplicationUpdateScope(
         service: service,
+        onManualCheck: onManualCheck,
         child: WindowFrame(child!, onExit: onExit ?? () {}),
       ),
     ),
@@ -106,6 +108,81 @@ void main() {
   void closeWindow(WidgetTester tester) =>
       (tester.state(find.byType(WindowFrame)) as WindowListener)
           .onWindowClose();
+
+  testUpdateWidgets(
+    'manual check records one attempt before network and failure',
+    (tester) async {
+      final saved = Completer<void>();
+      var attempts = 0;
+      late BuildContext context;
+      await tester.pumpWidget(
+        app(
+          Builder(
+            builder: (value) {
+              context = value;
+              return const Text('Home');
+            },
+          ),
+          onManualCheck: () {
+            attempts++;
+            return saved.future;
+          },
+        ),
+      );
+      final prompt = ApplicationUpdatePrompt(
+        context: context,
+        service: service,
+      );
+      final checking = prompt.check();
+      expect(identical(checking, prompt.check()), isTrue);
+      await tester.pump();
+      expect(attempts, 1);
+      expect(adapter.entered.isCompleted, isFalse);
+      saved.complete();
+      await waitFor(tester, () => adapter.entered.isCompleted);
+      adapter.response.completeError(StateError('offline'));
+      adapter.released.complete();
+      await tester.pumpAndSettle();
+      await checking;
+      expect(attempts, 1);
+      expect(messages, ['Failed to check for updates']);
+    },
+  );
+
+  testUpdateWidgets(
+    'closing joins accepted manual timestamp and starts no network',
+    (tester) async {
+      final saved = Completer<void>();
+      late BuildContext context;
+      await tester.pumpWidget(
+        app(
+          Builder(
+            builder: (value) {
+              context = value;
+              return const Text('Home');
+            },
+          ),
+          onManualCheck: () => saved.future,
+        ),
+      );
+      final prompt = ApplicationUpdatePrompt(
+        context: context,
+        service: service,
+      );
+      final checking = prompt.check();
+      var closed = false;
+      final closing = prompt.closeAndWait().then((_) => closed = true);
+      await tester.pump();
+      expect(closed, isFalse);
+      expect(adapter.entered.isCompleted, isFalse);
+      saved.complete();
+      await tester.pumpAndSettle();
+      await Future.wait([checking, closing]);
+      expect(closed, isTrue);
+      expect(adapter.entered.isCompleted, isFalse);
+      expect(messages, isEmpty);
+    },
+  );
 
   testUpdateWidgets(
     'about page disposal cancels its request and never sets state or shows late UI',

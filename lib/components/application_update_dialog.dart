@@ -184,10 +184,19 @@ class _ApplicationUpdateDialogState extends State<ApplicationUpdateDialog> {
             TextButton(
               onPressed: _closing ? null : _close,
               child: Text(
-                (downloading || verifying ? 'Cancel download' : 'Close').tl,
+                (downloading || verifying
+                        ? 'Cancel download'
+                        : installing || blocked || ready
+                        ? 'Close'
+                        : 'Update later')
+                    .tl,
               ),
             ),
-            if (widget.releasePageUrl != null)
+            if (widget.releasePageUrl != null &&
+                (!supported ||
+                    blocked ||
+                    error != null ||
+                    release?.assetError != null))
               TextButton(
                 onPressed: _closing
                     ? null
@@ -204,7 +213,7 @@ class _ApplicationUpdateDialogState extends State<ApplicationUpdateDialog> {
                 child: Text(
                   (state == ApplicationUpdateDownloadState.failed
                           ? 'Retry download'
-                          : 'Download update')
+                          : 'Update now')
                       .tl,
                 ),
               ),

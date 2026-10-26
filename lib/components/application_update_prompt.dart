@@ -18,12 +18,14 @@ class ApplicationUpdateScope extends InheritedWidget {
   const ApplicationUpdateScope({
     required this.service,
     this.download,
+    this.onManualCheck,
     required super.child,
     super.key,
   });
 
   final ApplicationUpdateService service;
   final ApplicationUpdateDownload? download;
+  final Future<void> Function()? onManualCheck;
 
   static ApplicationUpdateService of(BuildContext context) => context
       .dependOnInheritedWidgetOfExactType<ApplicationUpdateScope>()!
@@ -32,16 +34,22 @@ class ApplicationUpdateScope extends InheritedWidget {
   @override
   bool updateShouldNotify(ApplicationUpdateScope oldWidget) =>
       !identical(service, oldWidget.service) ||
-      !identical(download, oldWidget.download);
+      !identical(download, oldWidget.download) ||
+      !identical(onManualCheck, oldWidget.onManualCheck);
 }
 
 /// One check and its optional dialog belong to the original page and window.
 /// Closing joins HTTP cleanup, cancels delay, and removes only its own dialog.
 class ApplicationUpdatePrompt {
+  // One service belongs to one application host. Keep presentation ownership
+  // beside the prompt so a retired window cannot clear another prompt's files.
+  static final _owners = Expando<ApplicationUpdatePrompt>();
+
   ApplicationUpdatePrompt({
     required BuildContext context,
     required this.service,
     ApplicationUpdateDownload? download,
+    Future<void> Function()? onManualCheck,
     RequestScope? parent,
     bool Function()? isActive,
   }) : download =
@@ -49,6 +57,11 @@ class ApplicationUpdatePrompt {
            context
                .getInheritedWidgetOfExactType<ApplicationUpdateScope>()
                ?.download,
+       onManualCheck =
+           onManualCheck ??
+           context
+               .getInheritedWidgetOfExactType<ApplicationUpdateScope>()
+               ?.onManualCheck,
        _context = context,
        _navigator = Navigator.of(context, rootNavigator: true),
        _route = ModalRoute.of(context),
@@ -58,6 +71,7 @@ class ApplicationUpdatePrompt {
 
   final ApplicationUpdateService service;
   final ApplicationUpdateDownload? download;
+  final Future<void> Function()? onManualCheck;
   bool _presentedDownload = false;
   final BuildContext _context;
   final NavigatorState _navigator;
@@ -85,6 +99,24 @@ class ApplicationUpdatePrompt {
   }) {
     final checking = _checking;
     if (checking != null) return checking;
+    if (!_active) {
+      _scope.dispose();
+      return _checking = Future.value();
+    }
+    final previous = _owners[service];
+    if (silent && previous != null) {
+      _scope.dispose();
+      onChecked?.call();
+      return _checking = Future.value();
+    }
+    final joining =
+        previous != null &&
+        !previous._scope.isCancelled &&
+        previous._dialog?.isActive == true;
+    if (!joining) {
+      _owners[service] = this;
+      previous?.cancel();
+    }
     final done = Completer<void>();
     _checking = done.future;
     _window?.addCloseStartListener(cancel);
@@ -95,6 +127,8 @@ class ApplicationUpdatePrompt {
       silent: silent,
       delay: delay,
       onChecked: onChecked,
+      previous: previous,
+      joining: joining,
     ).then(done.complete, onError: done.completeError);
     return done.future;
   }
@@ -103,10 +137,26 @@ class ApplicationUpdatePrompt {
     required bool silent,
     required Duration delay,
     VoidCallback? onChecked,
+    ApplicationUpdatePrompt? previous,
+    bool joining = false,
   }) async {
     final context = _context;
     try {
       if (!context.mounted || !_active) return;
+      // Capture manual admission before awaiting the retired prompt's drain.
+      // Accepted persistence must finish even when this window closes.
+      await Future.wait<void>([
+        if (!silent) Future<void>.sync(() => onManualCheck?.call()),
+        if (!joining && previous != null) previous.closeAndWait(),
+      ]);
+      if (!context.mounted || !_active) return;
+      if (joining) {
+        onChecked?.call();
+        // The original prompt retains its UI and download. Cancelling this
+        // consumer only retires its wait, never the shared presentation.
+        await _scope.run(() => previous!._checking!);
+        return;
+      }
       if (download != null) {
         await _checkDownload(
           silent: silent,
@@ -185,6 +235,7 @@ class ApplicationUpdatePrompt {
         _window?.removeCloseStartListener(cancel);
         _window?.removeExitTask(closeAndWait);
         _scope.dispose();
+        if (identical(_owners[service], this)) _owners[service] = null;
       }
     }
   }

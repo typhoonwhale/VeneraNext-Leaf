@@ -11,7 +11,8 @@ void main() {
       var sources = 0;
       var applications = 0;
       final check = StartupUpdateCheck(
-        reserveCheck: () => reserved.future,
+        reserveSourceCheck: () => reserved.future,
+        reserveApplicationCheck: () => reserved.future,
         checkSources: () async {
           sources++;
         },
@@ -34,13 +35,14 @@ void main() {
   );
 
   test(
-    'shared source check keeps its owner while retired startup cannot continue',
+    'slow shared source does not block application and keeps its owner',
     () async {
       final sourceEntered = Completer<void>();
       final sourceDone = Completer<void>();
       var versions = 0;
       final check = StartupUpdateCheck(
-        reserveCheck: () async => true,
+        reserveSourceCheck: () async => true,
+        reserveApplicationCheck: () async => true,
         checkSources: () {
           sourceEntered.complete();
           return sourceDone.future;
@@ -52,12 +54,14 @@ void main() {
       );
       final started = check.start();
       await sourceEntered.future;
+      await pumpEventQueue();
+      expect(versions, 1);
       await check.closeAndWait();
       expect(sourceDone.isCompleted, isFalse);
       sourceDone.complete();
       await started;
       await pumpEventQueue();
-      expect(versions, 0);
+      expect(versions, 1);
     },
   );
 
@@ -65,7 +69,8 @@ void main() {
     final entered = Completer<void>();
     final released = Completer<void>();
     final check = StartupUpdateCheck(
-      reserveCheck: () async => true,
+      reserveSourceCheck: () async => true,
+      reserveApplicationCheck: () async => true,
       checkSources: () async {},
       checkApplication: (scope) async {
         entered.complete();
@@ -85,15 +90,19 @@ void main() {
   });
 
   test(
-    'reservation and setting preserve the source-before-application sequence',
+    'source reservation and application enablement are independent',
     () async {
       for (final reserved in [false, true]) {
         for (final enabled in [false, true]) {
           final events = <String>[];
           final check = StartupUpdateCheck(
-            reserveCheck: () async {
-              events.add('reserve');
+            reserveSourceCheck: () async {
+              events.add('reserveSource');
               return reserved;
+            },
+            reserveApplicationCheck: () async {
+              events.add('reserveApplication');
+              return true;
             },
             checkSources: () async {
               events.add('sources');
@@ -104,11 +113,15 @@ void main() {
             applicationCheckEnabled: () => enabled,
           );
           await check.start();
-          expect(events, [
-            'reserve',
-            if (reserved) 'sources',
-            if (reserved && enabled) 'version',
-          ]);
+          expect(
+            events,
+            unorderedEquals([
+              'reserveSource',
+              if (enabled) 'reserveApplication',
+              if (reserved) 'sources',
+              if (enabled) 'version',
+            ]),
+          );
           await check.closeAndWait();
         }
       }
@@ -120,13 +133,41 @@ void main() {
     () async {
       final failure = StateError('save failed');
       final check = StartupUpdateCheck(
-        reserveCheck: () async => throw failure,
+        reserveSourceCheck: () async => throw failure,
+        reserveApplicationCheck: () async => false,
         checkSources: () async => fail('no source check'),
         checkApplication: (_) async => fail('no version check'),
         applicationCheckEnabled: () => true,
       );
       await expectLater(check.start(), throwsA(same(failure)));
       await check.closeAndWait();
+    },
+  );
+  test(
+    'source failure does not block application and close waits its drain',
+    () async {
+      final entered = Completer<void>();
+      final drained = Completer<void>();
+      final failure = StateError('source failed');
+      final check = StartupUpdateCheck(
+        reserveSourceCheck: () async => true,
+        reserveApplicationCheck: () async => true,
+        checkSources: () async => throw failure,
+        checkApplication: (scope) async {
+          entered.complete();
+          await scope.whenCancelled;
+          await drained.future;
+        },
+        applicationCheckEnabled: () => true,
+      );
+      final result = expectLater(check.start(), throwsA(same(failure)));
+      await entered.future;
+      var closed = false;
+      final closing = check.closeAndWait().then((_) => closed = true);
+      await pumpEventQueue();
+      expect(closed, isFalse);
+      drained.complete();
+      await Future.wait([result, closing]);
     },
   );
 }

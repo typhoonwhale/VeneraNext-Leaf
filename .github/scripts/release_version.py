@@ -9,11 +9,24 @@ CONFIG_PATH = ROOT / "release.json"
 PUBSPEC_PATH = ROOT / "pubspec.yaml"
 CHANGELOG_PATH = ROOT / "CHANGELOG.md"
 
-VERSION_RE = re.compile(r"^\d+\.\d+\.\d+(?:-rc\.\d+)?$")
+VERSION_RE = re.compile(
+    r"(?:0|[1-9][0-9]*)\."
+    r"(?:0|[1-9][0-9]*)\."
+    r"(?:0|[1-9][0-9]*)"
+    r"(?:-rc\.(?:0|[1-9][0-9]*))?"
+)
 
 
 class ReleaseVersionError(RuntimeError):
     pass
+
+
+def is_release_version(version: str) -> bool:
+    return VERSION_RE.fullmatch(version) is not None
+
+
+def is_release_tag(tag: str) -> bool:
+    return tag.startswith("v") and is_release_version(tag[1:])
 
 
 def _read(path: Path) -> str:
@@ -39,7 +52,7 @@ def load_release_config() -> dict:
 
     version = config.get("version")
     build = config.get("build")
-    if not isinstance(version, str) or not VERSION_RE.fullmatch(version):
+    if not isinstance(version, str) or not is_release_version(version):
         raise ReleaseVersionError(
             "release.json version must look like 1.2.3 or 1.2.3-rc.1"
         )
