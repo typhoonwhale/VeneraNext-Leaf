@@ -176,6 +176,11 @@ class _ApplicationUpdateDialogState extends State<ApplicationUpdateDialog> {
                       color: Theme.of(context).colorScheme.error,
                     ),
                   ),
+                  if (_actionError == null && controller.errorDetail != null)
+                    Text(
+                      controller.errorDetail!,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
                 ],
               ],
             ),

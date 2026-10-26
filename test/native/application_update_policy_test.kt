@@ -35,19 +35,39 @@ fun main() {
     rejects { ApplicationUpdatePolicy.validateLibraries(valid + "lib/arm64-v8a/../libother.so") }
     rejects { ApplicationUpdatePolicy.validateLibraries(valid + "lib/arm64-v8a/libapp.so") }
     println("PASS: ARM64 release libraries, mixed ABI, missing app, traversal, duplicate library")
-    for (result in listOf(-1, 0, 1, 42)) {
-        check(ApplicationUpdatePolicy.resultStatus(true, false, result) == "installed")
-        check(ApplicationUpdatePolicy.resultStatus(false, false, result) == "unknown")
+    // PackageInstaller.STATUS_* values: PENDING_USER_ACTION -1, SUCCESS 0, FAILURE 1,
+    // BLOCKED 2, ABORTED 3, INVALID 4, CONFLICT 5, STORAGE 6, INCOMPATIBLE 7, TIMEOUT 8.
+    check(ApplicationUpdatePolicy.sessionResult(-1) == null)
+    check(ApplicationUpdatePolicy.sessionResult(0) == "installed")
+    check(ApplicationUpdatePolicy.sessionResult(3) == "cancelled")
+    for (status in listOf(1, 2, 4, 5, 6, 7, 8, 42)) {
+        check(ApplicationUpdatePolicy.sessionResult(status) == "failed")
     }
-    check(ApplicationUpdatePolicy.resultStatus(false, true, -1) == "unknown")
-    check(ApplicationUpdatePolicy.resultStatus(false, true, 0) == "cancelled")
-    check(ApplicationUpdatePolicy.resultStatus(false, true, 1) == "failed")
-    check(ApplicationUpdatePolicy.resultStatus(false, true, 42) == "unknown")
-    println("PASS: actual installed identity overrides callbacks; uncorrelated results never release ownership")
-    check(ApplicationUpdatePolicy.occupiesInstaller("unknown"))
-    check(ApplicationUpdatePolicy.occupiesInstaller("corrupt"))
-    check(!ApplicationUpdatePolicy.occupiesInstaller("installed"))
-    check(!ApplicationUpdatePolicy.occupiesInstaller("cancelled"))
-    check(!ApplicationUpdatePolicy.occupiesInstaller("failed"))
-    println("PASS: only proven terminal results release ownership")
+    println("PASS: session status codes map to installed, cancelled, failed or awaiting confirmation")
+    check(ApplicationUpdatePolicy.leftoverSession(committed = false, writing = false) == "abandon")
+    check(ApplicationUpdatePolicy.leftoverSession(committed = true, writing = false) == "pending")
+    check(ApplicationUpdatePolicy.leftoverSession(committed = false, writing = true) == "keep")
+    check(ApplicationUpdatePolicy.leftoverSession(committed = true, writing = true) == "keep")
+    println("PASS: leftover uncommitted sessions are abandoned except while this process writes one")
+    for (recorded in listOf(null, "cancelled", "failed")) {
+        check(ApplicationUpdatePolicy.attemptStatus(true, recorded, false, null) == "installed")
+    }
+    check(ApplicationUpdatePolicy.attemptStatus(false, "cancelled", false, true) == "cancelled")
+    check(ApplicationUpdatePolicy.attemptStatus(false, "failed", false, null) == "failed")
+    check(ApplicationUpdatePolicy.attemptStatus(false, null, true, null) == "pending")
+    check(ApplicationUpdatePolicy.attemptStatus(false, null, false, true) == "pending")
+    // Lost callback: once the session is gone or left uncommitted, the attempt has ended.
+    check(ApplicationUpdatePolicy.attemptStatus(false, null, false, null) == "failed")
+    check(ApplicationUpdatePolicy.attemptStatus(false, null, false, false) == "failed")
+    check(ApplicationUpdatePolicy.attemptStatus(false, "corrupt", false, null) == "failed")
+    println("PASS: installed identity first, then callbacks, then live session state")
+    check(ApplicationUpdatePolicy.launchConfirmation(waiting = true, resumed = true))
+    check(!ApplicationUpdatePolicy.launchConfirmation(waiting = true, resumed = false))
+    check(!ApplicationUpdatePolicy.launchConfirmation(waiting = false, resumed = true))
+    println("PASS: confirmation is deferred until the Activity is resumed")
+    check(ApplicationUpdatePolicy.occupiesInstaller("pending"))
+    for (status in listOf("installed", "cancelled", "failed", "unknown")) {
+        check(!ApplicationUpdatePolicy.occupiesInstaller(status))
+    }
+    println("PASS: only an active write or committed session keeps the attempt occupied")
 }

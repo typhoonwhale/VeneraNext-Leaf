@@ -465,4 +465,24 @@ void main() {
     expect(download.downloads, 1);
     expect(download.candidate?.version, '2.0.0');
   });
+  testWidgets('failed installation shows system reason and retries install', (
+    tester,
+  ) async {
+    final download = FakeDownload()
+      ..candidate = release
+      ..state = ApplicationUpdateDownloadState.ready
+      ..error = 'Installation failed'
+      ..errorDetail = 'INSTALL_FAILED_UPDATE_INCOMPATIBLE: signatures differ';
+    await show(tester, download, () {});
+    expect(find.text('Installation failed'), findsOneWidget);
+    expect(
+      find.text('INSTALL_FAILED_UPDATE_INCOMPATIBLE: signatures differ'),
+      findsOneWidget,
+    );
+    expect(find.text('Update now'), findsNothing);
+    await tester.tap(find.text('Install update'));
+    await tester.pump();
+    expect(download.installations, 1);
+    expect(download.downloads, 0);
+  });
 }

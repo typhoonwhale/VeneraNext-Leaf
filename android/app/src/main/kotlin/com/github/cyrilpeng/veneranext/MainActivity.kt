@@ -49,7 +49,6 @@ class MainActivity : FlutterFragmentActivity() {
     private var textShareHandler: ((String) -> Unit)? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        applicationUpdateBridge.restore(savedInstanceState)
         super.onCreate(savedInstanceState)
 
         if (intent?.action == Intent.ACTION_SEND) {
@@ -224,9 +223,10 @@ class MainActivity : FlutterFragmentActivity() {
         volumeChannel = null
     }
 
-    override fun onSaveInstanceState(outState: Bundle) {
-        applicationUpdateBridge.save(outState)
-        super.onSaveInstanceState(outState)
+    override fun onResume() {
+        super.onResume()
+        // A session confirmation received in the background is shown on return.
+        applicationUpdateBridge.resume()
     }
 
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {

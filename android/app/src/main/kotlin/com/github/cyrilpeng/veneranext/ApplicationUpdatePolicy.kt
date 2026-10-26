@@ -26,13 +26,35 @@ internal object ApplicationUpdatePolicy {
         }
     }
 
-    fun resultStatus(installed: Boolean, correlated: Boolean, resultCode: Int): String = when {
-        installed -> "installed"
-        !correlated -> "unknown"
-        resultCode == 0 -> "cancelled" // Activity.RESULT_CANCELED
-        resultCode == 1 -> "failed" // Activity.RESULT_FIRST_USER, documented install failure
-        else -> "unknown" // RESULT_OK is not package identity evidence.
+    /** Maps a PackageInstaller status; null means the session still awaits the user. */
+    fun sessionResult(status: Int): String? = when (status) {
+        -1 -> null // PackageInstaller.STATUS_PENDING_USER_ACTION
+        0 -> "installed" // STATUS_SUCCESS
+        3 -> "cancelled" // STATUS_FAILURE_ABORTED: declined or abandoned
+        else -> "failed" // FAILURE, BLOCKED, INVALID, CONFLICT, STORAGE, INCOMPATIBLE, TIMEOUT
     }
 
-    fun occupiesInstaller(status: String) = status !in setOf("installed", "cancelled", "failed")
+    /** Uncommitted sessions are leftovers of an interrupted write; committed ones own their copy. */
+    fun leftoverSession(committed: Boolean, writing: Boolean): String = when {
+        writing -> "keep"
+        committed -> "pending"
+        else -> "abandon"
+    }
+
+    /**
+     * A committed session no longer reads the local APK, so only an active write or a live
+     * committed session keeps the attempt open. A vanished session without a recorded
+     * callback has ended without installing the target.
+     */
+    fun attemptStatus(installed: Boolean, recorded: String?, writing: Boolean,
+                      sessionCommitted: Boolean?): String = when {
+        installed -> "installed"
+        recorded == "installed" || recorded == "cancelled" || recorded == "failed" -> recorded
+        writing || sessionCommitted == true -> "pending"
+        else -> "failed"
+    }
+
+    fun launchConfirmation(waiting: Boolean, resumed: Boolean) = waiting && resumed
+
+    fun occupiesInstaller(status: String) = status == "pending"
 }

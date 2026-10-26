@@ -38,15 +38,23 @@ class ApplicationUpdateInspection {
       );
 }
 
+/// Status is installed, cancelled, failed, pending (session still active) or
+/// unknown (not the recorded attempt). Failures may carry the system message.
 class ApplicationUpdateInstallationResult {
-  const ApplicationUpdateInstallationResult(this.attemptId, this.status);
+  const ApplicationUpdateInstallationResult(
+    this.attemptId,
+    this.status, [
+    this.message,
+  ]);
   final String attemptId;
   final String status;
+  final String? message;
   factory ApplicationUpdateInstallationResult.fromJson(
     Map<dynamic, dynamic> value,
   ) => ApplicationUpdateInstallationResult(
     value['attemptId'] as String,
     value['status'] as String,
+    value['message'] as String?,
   );
 }
 

@@ -31,6 +31,11 @@ void main() {
             case 'requestPermission':
               return true;
             case 'install':
+              return {
+                'attemptId': (call.arguments as Map)['attemptId'],
+                'status': 'failed',
+                'message': 'INSTALL_FAILED_INSUFFICIENT_STORAGE',
+              };
             case 'installationStatus':
               return {
                 'attemptId': (call.arguments as Map)['attemptId'],
@@ -51,14 +56,16 @@ void main() {
     expect(calls.last.arguments, {'partial': true});
     expect(await installer.canInstall(), true);
     expect(await installer.requestPermission(), true);
-    expect(
-      (await installer.install(version: '2.0.0', attemptId: 'one')).attemptId,
-      'one',
+    final installed = await installer.install(
+      version: '2.0.0',
+      attemptId: 'one',
     );
+    expect(installed.attemptId, 'one');
+    expect(installed.message, 'INSTALL_FAILED_INSUFFICIENT_STORAGE');
     expect(calls.last.arguments, {'version': '2.0.0', 'attemptId': 'one'});
-    expect(
-      (await installer.installationStatus(attemptId: 'one')).status,
-      'cancelled',
-    );
+    final status = await installer.installationStatus(attemptId: 'one');
+    expect(status.status, 'cancelled');
+    // Older bridges send no message field.
+    expect(status.message, isNull);
   });
 }

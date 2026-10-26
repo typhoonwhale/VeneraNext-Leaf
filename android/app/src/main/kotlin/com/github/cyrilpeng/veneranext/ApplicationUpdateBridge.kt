@@ -1,56 +1,41 @@
 package com.github.cyrilpeng.veneranext
 
-import android.content.ClipData
+import android.app.PendingIntent
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageInfo
+import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
-import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.FileProvider
+import androidx.lifecycle.Lifecycle
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodChannel
+import java.io.File
+import java.io.FileInputStream
 import java.security.MessageDigest
-import java.util.UUID
+import java.util.concurrent.Executors
 import java.util.zip.ZipFile
 
 /** Owns the system handoff independently from the Flutter engine and its pages. */
-internal class ApplicationUpdateBridge(private val activity: MainActivity) {
+internal class ApplicationUpdateBridge(private val activity: MainActivity) : ApplicationUpdateSessions.Listener {
     companion object {
-        private val processId = UUID.randomUUID().toString()
-        private const val STATE_ATTEMPT = "leaf.update.attempt"
-        private const val STATE_PROCESS = "leaf.update.process"
+        private val writer = Executors.newSingleThreadExecutor()
+        private val main = Handler(Looper.getMainLooper())
     }
 
-    private val preferences = activity.getSharedPreferences("application_update_handoff", 0)
+    private val preferences = activity.getSharedPreferences(ApplicationUpdateSessions.PREFERENCES, 0)
+    private val packageInstaller get() = activity.packageManager.packageInstaller
     private var channel: MethodChannel? = null
     private var installReply: MethodChannel.Result? = null
+    private var replyAttempt: String? = null
     private var permissionReply: MethodChannel.Result? = null
-    private var launchedAttempt: String? = null
-    private var sameProcess = true
 
-    // Fixed keys and unconditional lifecycle registration let Android restore pending results.
-    private val installer = activity.activityResultRegistry.register(
-        "leaf.update.installer", activity, ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        val id = launchedAttempt
-        val storedId = preferences.getString("attemptId", null)
-        if (id != null && id == storedId) {
-            val status = try {
-                ApplicationUpdatePolicy.resultStatus(targetInstalled(), sameProcess, result.resultCode)
-            } catch (_: Exception) { "unknown" }
-            // A persistence failure cannot release the on-disk ownership record.
-            val durableStatus = if (preferences.edit().putString("status", status).commit()) status else "unknown"
-            installReply?.success(receipt(id, durableStatus))
-        } else {
-            installReply?.success(receipt(id ?: "", "unknown"))
-        }
-        installReply = null
-        launchedAttempt = null
-    }
     private val permission = activity.activityResultRegistry.register(
         "leaf.update.permission", activity, ActivityResultContracts.StartActivityForResult()
     ) {
@@ -58,27 +43,17 @@ internal class ApplicationUpdateBridge(private val activity: MainActivity) {
         permissionReply = null
     }
 
-    fun restore(state: Bundle?) {
-        launchedAttempt = state?.getString(STATE_ATTEMPT)
-        sameProcess = state == null || state.getString(STATE_PROCESS) == processId
-    }
-
-    fun save(state: Bundle) {
-        state.putString(STATE_ATTEMPT, launchedAttempt)
-        state.putString(STATE_PROCESS, processId)
-    }
-
     fun attach(messenger: BinaryMessenger) {
         detach()
+        ApplicationUpdateSessions.listener = this
+        try { reconcileSessions() } catch (_: Exception) {}
         channel = MethodChannel(messenger, "leaf/application_update").also { channel ->
             channel.setMethodCallHandler { call, reply ->
                 try {
                     when (call.method) {
                         "current" -> {
                             val current = currentPackage()
-                            val previous = preferences.getString("attemptId", null)
-                            val installationPending = previous != null &&
-                                ApplicationUpdatePolicy.occupiesInstaller(status(previous))
+                            val installationPending = installationPending()
                             reply.success(mapOf("packageName" to current.packageName,
                                 "versionCode" to code(current), "versionName" to current.versionName,
                                 "debug" to isDebug(), "installationPending" to installationPending))
@@ -94,7 +69,7 @@ internal class ApplicationUpdateBridge(private val activity: MainActivity) {
                         "install" -> install(call.argument<String>("version"), call.argument<String>("attemptId"), reply)
                         "installationStatus" -> {
                             val id = call.argument<String>("attemptId") ?: throw IllegalArgumentException("Missing attempt ID")
-                            reply.success(receipt(id, status(id)))
+                            reply.success(receipt(id))
                         }
                         else -> reply.notImplemented()
                     }
@@ -108,10 +83,46 @@ internal class ApplicationUpdateBridge(private val activity: MainActivity) {
     fun detach() {
         channel?.setMethodCallHandler(null)
         channel = null
-        installReply?.success(receipt(launchedAttempt ?: "", "unknown"))
+        if (ApplicationUpdateSessions.listener === this) ApplicationUpdateSessions.listener = null
+        // The session outlives this engine; report its current state instead of a guess.
+        replyAttempt?.let { id ->
+            installReply?.success(try { receipt(id) } catch (_: Exception) { receipt(id, "unknown") })
+        }
         installReply = null
+        replyAttempt = null
         permissionReply?.success(false)
         permissionReply = null
+    }
+
+    /** Called from onResume, before the lifecycle reports RESUMED. */
+    fun resume() {
+        if (ApplicationUpdatePolicy.launchConfirmation(ApplicationUpdateSessions.hasConfirmation, true)) {
+            launchConfirmation()
+        }
+    }
+
+    override fun onConfirmation() {
+        val resumed = activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+        if (ApplicationUpdatePolicy.launchConfirmation(ApplicationUpdateSessions.hasConfirmation, resumed)) {
+            launchConfirmation()
+        }
+    }
+
+    override fun onFinished(attemptId: String, status: String, message: String?) {
+        if (attemptId != replyAttempt) return
+        installReply?.success(receipt(attemptId, status, message))
+        installReply = null
+        replyAttempt = null
+    }
+
+    private fun launchConfirmation() {
+        val (attempt, intent) = ApplicationUpdateSessions.takeConfirmation() ?: return
+        try {
+            activity.startActivity(intent)
+        } catch (error: Exception) {
+            ApplicationUpdateSessions.abandon(activity, preferences.getInt("sessionId", -1))
+            ApplicationUpdateSessions.finish(preferences, attempt, "failed", error.message)
+        }
     }
 
     private fun isDebug() = activity.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
@@ -164,7 +175,13 @@ internal class ApplicationUpdateBridge(private val activity: MainActivity) {
         return candidate
     }
 
-    private fun receipt(id: String, status: String) = mapOf("attemptId" to id, "status" to status)
+    private fun receipt(id: String, status: String, message: String? = null) =
+        mapOf("attemptId" to id, "status" to status, "message" to message)
+
+    private fun receipt(id: String): Map<String, String?> {
+        val status = status(id)
+        return receipt(id, status, if (status == "failed") preferences.getString("message", null) else null)
+    }
 
     private fun targetInstalled(): Boolean {
         val current = currentPackage()
@@ -173,48 +190,99 @@ internal class ApplicationUpdateBridge(private val activity: MainActivity) {
             expected == signatures(current) && code(current) >= preferences.getLong("versionCode", Long.MAX_VALUE)
     }
 
+    private fun committed(info: PackageInstaller.SessionInfo) = if (Build.VERSION.SDK_INT >= 29) {
+        info.isCommitted
+    } else {
+        // Recorded before commit(), so an interrupted commit is conservatively treated as pending.
+        info.sessionId == preferences.getInt("sessionId", -1) && preferences.getBoolean("committed", false)
+    }
+
+    private fun reconcileSessions() {
+        val writing = ApplicationUpdateSessions.writingAttempt != null
+        for (info in packageInstaller.mySessions) {
+            if (ApplicationUpdatePolicy.leftoverSession(committed(info), writing) == "abandon") {
+                ApplicationUpdateSessions.abandon(activity, info.sessionId)
+            }
+        }
+    }
+
+    private fun installationPending() = ApplicationUpdateSessions.writingAttempt != null ||
+        packageInstaller.mySessions.any { committed(it) }
+
     private fun status(id: String): String {
         if (preferences.getString("attemptId", null) != id) return "unknown"
-        if (targetInstalled()) return "installed"
-        val recorded = preferences.getString("status", "unknown")
-        return if (recorded == "cancelled" || recorded == "failed") recorded else "unknown"
+        val session = preferences.getInt("sessionId", -1)
+        val info = if (session < 0) null else packageInstaller.getSessionInfo(session)
+        return ApplicationUpdatePolicy.attemptStatus(targetInstalled(), preferences.getString("status", null),
+            ApplicationUpdateSessions.writingAttempt == id, info?.let { committed(it) })
     }
 
     private fun install(version: String?, id: String?, reply: MethodChannel.Result) {
         require(!id.isNullOrBlank() && id.length <= 128) { "Invalid installation attempt ID" }
         require(!version.isNullOrBlank()) { "Missing update version" }
         check(!isDebug()) { "Debug builds cannot install release updates" }
-        val previous = preferences.getString("attemptId", null)
-        if (previous == id) { reply.success(receipt(id, status(id))); return }
-        check(previous == null || !ApplicationUpdatePolicy.occupiesInstaller(status(previous))) {
-            "A previous installation has an unknown result"
-        }
-        check(installReply == null && launchedAttempt == null) { "Installer is already active" }
+        if (preferences.getString("attemptId", null) == id) { reply.success(receipt(id)); return }
+        reconcileSessions()
+        check(!installationPending()) { "A previous installation is still in progress" }
+        check(installReply == null) { "Installer is already active" }
         check(canInstall()) { "Installation permission has not been granted" }
         val candidate = inspect(false)
         check(candidate.versionName == version) { "Update version does not match release" }
         check(code(candidate) > code(currentPackage())) { "Update version code must be newer" }
-        val uri = FileProvider.getUriForFile(activity, "${activity.packageName}.updates", candidateFile(false))
-        val intent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
-            setDataAndType(uri, "application/vnd.android.package-archive")
-            clipData = ClipData.newRawUri("Leaf update", uri)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            putExtra(Intent.EXTRA_RETURN_RESULT, true)
-        }
-        // Commit before handoff, outside cacheDir, so missing Dart metadata cannot erase ownership.
-        check(preferences.edit().clear().putString("attemptId", id).putString("status", "unknown")
+        val file = candidateFile(false)
+        // Commit before creating the session, outside cacheDir, so restart can correlate it.
+        check(preferences.edit().clear().putString("attemptId", id)
             .putString("packageName", candidate.packageName).putLong("versionCode", code(candidate))
             .putStringSet("signatures", signatures(candidate)).commit()) { "Cannot persist installation handoff" }
-        launchedAttempt = id
-        sameProcess = true
+        ApplicationUpdateSessions.writingAttempt = id
         installReply = reply
+        replyAttempt = id
+        val context = activity.applicationContext
+        writer.execute {
+            val failure = try { writeSession(context, file, id); null } catch (error: Exception) { error }
+            main.post {
+                ApplicationUpdateSessions.writingAttempt = null
+                if (failure != null) {
+                    ApplicationUpdateSessions.finish(preferences, id, "failed",
+                        failure.message ?: "Cannot write installation session")
+                }
+            }
+        }
+    }
+
+    /** Streams the fixed candidate into a new session; runs off the main thread. */
+    private fun writeSession(context: Context, file: File, id: String) {
+        val installer = context.packageManager.packageInstaller
+        val length = file.length()
+        val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
+            setAppPackageName(context.packageName)
+            setSize(length)
+        }
+        val session = installer.createSession(params)
+        var committed = false
         try {
-            installer.launch(intent)
-        } catch (_: Exception) {
-            // Launch exceptions need not prove that an external reader never started.
-            installReply = null
-            launchedAttempt = null
-            reply.success(receipt(id, "unknown"))
+            check(preferences.edit().putInt("sessionId", session).commit()) { "Cannot persist installation session" }
+            installer.openSession(session).use { opened ->
+                FileInputStream(file).use { input ->
+                    opened.openWrite("base.apk", 0, length).use { output ->
+                        input.copyTo(output)
+                        opened.fsync(output)
+                    }
+                }
+                check(preferences.edit().putBoolean("committed", true).commit()) { "Cannot persist installation session" }
+                // Explicit receiver; mutable so the installer can add status extras.
+                val flags = PendingIntent.FLAG_UPDATE_CURRENT or
+                    if (Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE else 0
+                val result = Intent(context, ApplicationUpdateReceiver::class.java)
+                    .putExtra(ApplicationUpdateSessions.EXTRA_ATTEMPT, id)
+                opened.commit(PendingIntent.getBroadcast(context, session, result, flags).intentSender)
+                committed = true
+            }
+        } catch (error: Exception) {
+            // After commit the system owns the session and reports through the receiver.
+            if (committed) return
+            ApplicationUpdateSessions.abandon(context, session)
+            throw error
         }
     }
 }

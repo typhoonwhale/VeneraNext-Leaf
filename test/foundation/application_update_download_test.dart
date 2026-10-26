@@ -17,6 +17,9 @@ class FakeInstaller implements ApplicationUpdateInstaller {
   bool permitted = true;
   Completer<void>? permission;
   String status = 'unknown';
+  String? message;
+  Object? installError;
+  final attempts = <String>[];
   Completer<ApplicationUpdateInstallationResult>? installation;
   @override
   Future<ApplicationUpdateIdentity> current() async =>
@@ -45,9 +48,15 @@ class FakeInstaller implements ApplicationUpdateInstaller {
   Future<ApplicationUpdateInstallationResult> install({
     required String version,
     required String attemptId,
-  }) async => installation == null
-      ? ApplicationUpdateInstallationResult(attemptId, status)
-      : installation!.future;
+  }) async {
+    attempts.add(attemptId);
+    if (installError != null) throw installError!;
+    if (status == 'installed') installedCode = 2;
+    return installation == null
+        ? ApplicationUpdateInstallationResult(attemptId, status, message)
+        : installation!.future;
+  }
+
   @override
   Future<ApplicationUpdateInstallationResult> installationStatus({
     required String attemptId,
@@ -287,22 +296,40 @@ void main() {
   );
 
   test(
-    'startup removes partial but preserves complete orphan and blocks replacement',
+    'startup removes partial and discards unverifiable orphan without a session',
     () async {
       await file('update.apk').parent.create(recursive: true);
-      await file('update.apk').writeAsBytes(bytes);
+      await file('update.apk').writeAsString('orphan');
       await file('update.apk.part').writeAsString('partial');
-      controller = make(
-        BytesAdapter(() => Stream.value(Uint8List.fromList(bytes))),
+      final adapter = BytesAdapter(
+        () => Stream.value(Uint8List.fromList(bytes)),
       );
+      controller = make(adapter);
       await controller.initialize();
-      expect(controller.state, ApplicationUpdateDownloadState.blocked);
+      expect(controller.state, ApplicationUpdateDownloadState.idle);
+      expect(await file('update.apk').exists(), false);
       expect(await file('update.apk.part').exists(), false);
       await controller.download(release());
-      await controller.cancelAndClear();
+      expect(controller.state, ApplicationUpdateDownloadState.ready);
       expect(await file('update.apk').readAsBytes(), bytes);
     },
   );
+
+  test('active session preserves an orphan and blocks replacement', () async {
+    await file('update.apk').parent.create(recursive: true);
+    await file('update.apk').writeAsBytes(bytes);
+    await file('update.apk.part').writeAsString('partial');
+    native.installationPending = true;
+    controller = make(
+      BytesAdapter(() => Stream.value(Uint8List.fromList(bytes))),
+    );
+    await controller.initialize();
+    expect(controller.state, ApplicationUpdateDownloadState.blocked);
+    expect(await file('update.apk.part').exists(), false);
+    await controller.download(release());
+    await controller.cancelAndClear();
+    expect(await file('update.apk').readAsBytes(), bytes);
+  });
 
   test(
     'installed same or newer version clears orphan without metadata or network',
@@ -417,6 +444,7 @@ void main() {
     () async {
       await file('update.apk').parent.create(recursive: true);
       await file('update.apk').writeAsBytes(bytes);
+      native.installationPending = true;
       controller = make(
         BytesAdapter(() => throw StateError('must not download')),
       );
@@ -426,24 +454,101 @@ void main() {
   );
 
   test(
-    'unknown handoff persists immutable candidate across close and restart',
+    'pending session keeps candidate across restart until the session ends',
     () async {
-      controller = make(
-        BytesAdapter(() => Stream.value(Uint8List.fromList(bytes))),
+      final adapter = BytesAdapter(
+        () => Stream.value(Uint8List.fromList(bytes)),
       );
+      controller = make(adapter);
       await controller.download(release());
+      native.status = 'pending';
       await controller.install();
       expect(controller.state, ApplicationUpdateDownloadState.blocked);
       await controller.closeAndWait();
       expect(await file('update.apk').exists(), true);
-      controller = make(
-        BytesAdapter(() => throw StateError('must not download')),
-      );
+      native.installationPending = true;
+      controller = make(adapter);
       await controller.initialize();
       expect(controller.state, ApplicationUpdateDownloadState.blocked);
       expect(controller.candidate?.version, '2.0.0');
+      await controller.initialize();
+      expect(controller.state, ApplicationUpdateDownloadState.blocked);
+      // The user declined in the system UI while Leaf was in the background.
+      native.installationPending = false;
+      await controller.initialize();
+      expect(controller.state, ApplicationUpdateDownloadState.ready);
+      expect(controller.candidate?.version, '2.0.0');
+      native.status = 'cancelled';
+      await controller.install();
+      expect(controller.state, ApplicationUpdateDownloadState.ready);
+      expect(adapter.calls, 1);
+      expect(native.attempts.toSet(), hasLength(2));
     },
   );
+
+  test('cancelled session retries from the local file', () async {
+    final adapter = BytesAdapter(() => Stream.value(Uint8List.fromList(bytes)));
+    controller = make(adapter);
+    await controller.download(release());
+    native.status = 'cancelled';
+    await controller.install();
+    expect(controller.state, ApplicationUpdateDownloadState.ready);
+    expect(controller.error, 'Installation cancelled');
+    expect(await file('update.apk').readAsBytes(), bytes);
+    native.status = 'installed';
+    await controller.install();
+    expect(adapter.calls, 1);
+    expect(native.attempts, hasLength(2));
+    expect(native.attempts.first, isNot(native.attempts.last));
+    expect(controller.state, ApplicationUpdateDownloadState.idle);
+    expect(await file('update.apk').exists(), false);
+    expect(await file('pending.json').exists(), false);
+  });
+
+  test('failed session keeps the package and exposes system message', () async {
+    controller = make(
+      BytesAdapter(() => Stream.value(Uint8List.fromList(bytes))),
+    );
+    await controller.download(release());
+    native.status = 'failed';
+    native.message = 'INSTALL_FAILED_INSUFFICIENT_STORAGE';
+    await controller.install();
+    expect(controller.state, ApplicationUpdateDownloadState.ready);
+    expect(controller.error, 'Installation failed');
+    expect(controller.errorDetail, 'INSTALL_FAILED_INSUFFICIENT_STORAGE');
+    expect(await file('update.apk').exists(), true);
+  });
+
+  test('installed result is confirmed by the installed version code', () async {
+    controller = make(
+      BytesAdapter(() => Stream.value(Uint8List.fromList(bytes))),
+    );
+    await controller.download(release());
+    native.status = 'unknown';
+    native.installation = Completer();
+    final installing = controller.install();
+    while (native.attempts.isEmpty) {
+      await Future<void>.delayed(Duration.zero);
+    }
+    native.installedCode = 2;
+    native.installation!.complete(
+      ApplicationUpdateInstallationResult(native.attempts.single, 'installed'),
+    );
+    await installing;
+    expect(controller.state, ApplicationUpdateDownloadState.idle);
+    expect(await file('update.apk').exists(), false);
+  });
+
+  test('native rejection without an active session does not block', () async {
+    controller = make(
+      BytesAdapter(() => Stream.value(Uint8List.fromList(bytes))),
+    );
+    await controller.download(release());
+    native.installError = StateError('Update version does not match release');
+    await controller.install();
+    expect(controller.state, ApplicationUpdateDownloadState.failed);
+    expect(await file('update.apk').exists(), false);
+  });
 
   test('close does not wait for system installation UI', () async {
     controller = make(

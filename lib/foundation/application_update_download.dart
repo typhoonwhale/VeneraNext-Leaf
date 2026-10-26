@@ -48,6 +48,10 @@ class ApplicationUpdateDownload extends ChangeNotifier {
   int progress = 0;
   int received = 0;
   String? error;
+
+  /// Untranslated system message accompanying [error], such as an installer
+  /// failure reason.
+  String? errorDetail;
   bool get isSupported => _supported;
   bool get busy =>
       state == ApplicationUpdateDownloadState.downloading ||
@@ -57,6 +61,8 @@ class ApplicationUpdateDownload extends ChangeNotifier {
   bool _initialized = false;
   bool _closed = false;
   bool _occupied = false;
+  // Blocked only by an installation session, which can end while Leaf runs.
+  bool _sessionPending = false;
   int _generation = 0;
   String? _attemptId;
   Future<void> _tail = Future.value();
@@ -67,9 +73,14 @@ class ApplicationUpdateDownload extends ChangeNotifier {
   File get _pending => File('${directory.path}/pending.json');
   File get _temporary => File('${directory.path}/pending.json.tmp');
 
-  void _set(ApplicationUpdateDownloadState value, [String? message]) {
+  void _set(
+    ApplicationUpdateDownloadState value, [
+    String? message,
+    String? detail,
+  ]) {
     state = value;
     error = message;
+    errorDetail = detail;
     if (!_closed) notifyListeners();
   }
 
@@ -125,7 +136,21 @@ class ApplicationUpdateDownload extends ChangeNotifier {
     await _temporary.rename(_pending.path);
   }
 
-  Future<void> initialize() => _serial(_initialize);
+  Future<void> initialize() => _serial(() async {
+    // Re-read the session before presenting a candidate it blocked earlier.
+    final recheck =
+        _sessionPending && state == ApplicationUpdateDownloadState.blocked;
+    if (recheck) {
+      _sessionPending = false;
+      _initialized = false;
+      _occupied = false;
+      state = ApplicationUpdateDownloadState.idle;
+      error = null;
+      errorDetail = null;
+    }
+    await _initialize();
+    if (recheck && !_closed) notifyListeners();
+  });
   Future<void> _initialize() async {
     if (_initialized) return;
     try {
@@ -135,14 +160,17 @@ class ApplicationUpdateDownload extends ChangeNotifier {
       final current = await installer.current();
       _supported = !current.debug;
       if (await _apk.exists()) {
-        // Static native inspection is valid even when the candidate is older.
         _occupied = true;
-        final inspection = await installer.inspect(partial: false);
-        if (inspection.installedVersionCode >= inspection.versionCode &&
-            !current.installationPending) {
-          _occupied = false;
-          await _clear();
-        } else {
+        try {
+          // Static native inspection is valid even when the candidate is older.
+          final inspection = await installer.inspect(partial: false);
+          if (inspection.installedVersionCode >= inspection.versionCode &&
+              !current.installationPending) {
+            _occupied = false;
+            await _clear();
+            _initialized = true;
+            return;
+          }
           final json =
               jsonDecode(await _pending.readAsString()) as Map<String, dynamic>;
           candidate = ApplicationUpdateRelease.fromJson(
@@ -151,30 +179,36 @@ class ApplicationUpdateDownload extends ChangeNotifier {
           );
           _attemptId = json['attemptId'] as String?;
           await _verify(_apk, partial: false, requireNewer: false);
-          if (json['phase'] == 'ready' &&
-              _attemptId == null &&
-              !current.installationPending) {
-            _occupied = false;
-          } else if (_attemptId != null) {
-            final result = await installer.installationStatus(
-              attemptId: _attemptId!,
-            );
-            if (result.attemptId == _attemptId &&
-                (result.status == 'cancelled' || result.status == 'failed')) {
-              _occupied = (await installer.current()).installationPending;
-            }
+        } catch (failure) {
+          // Committed sessions hold their own copy; without an active session
+          // nothing else reads this file, so an unverifiable one is discarded.
+          if (current.installationPending) {
+            _sessionPending = true;
+            rethrow;
           }
-          _set(
-            _occupied
-                ? ApplicationUpdateDownloadState.blocked
-                : ApplicationUpdateDownloadState.ready,
-            _occupied ? 'Previous installation is unconfirmed' : null,
+          Log.error(
+            'Application update',
+            'Discarding unverifiable candidate: ${failure.runtimeType}',
           );
+          _occupied = false;
+          await _clear();
+          _initialized = true;
+          return;
         }
+        // Session state, not the recorded phase, decides whether it is in use.
+        _occupied = current.installationPending;
+        _sessionPending = _occupied;
+        _set(
+          _occupied
+              ? ApplicationUpdateDownloadState.blocked
+              : ApplicationUpdateDownloadState.ready,
+          _occupied ? 'Previous installation is unconfirmed' : null,
+        );
       } else if (current.installationPending) {
-        // The OS may evict the APK without releasing the native handoff.
-        // Preserve the record and never overwrite that handoff's fixed path.
+        // The session holds its own copy after an eviction; keep the record
+        // and wait for that session instead of starting another.
         _occupied = true;
+        _sessionPending = true;
         _set(
           ApplicationUpdateDownloadState.blocked,
           'Previous installation is unconfirmed',
@@ -463,6 +497,7 @@ class ApplicationUpdateDownload extends ChangeNotifier {
         await _safeDirectory();
         if ((await installer.current()).installationPending) {
           _occupied = true;
+          _sessionPending = true;
           throw StateError('Previous installation is unconfirmed');
         }
         final inspection = await _verify(
@@ -491,6 +526,7 @@ class ApplicationUpdateDownload extends ChangeNotifier {
         if (result.status == 'cancelled' || result.status == 'failed') {
           _occupied = (await installer.current()).installationPending;
           if (_occupied) {
+            _sessionPending = true;
             _set(
               ApplicationUpdateDownloadState.blocked,
               'Previous installation is unconfirmed',
@@ -502,6 +538,7 @@ class ApplicationUpdateDownload extends ChangeNotifier {
           _set(
             ApplicationUpdateDownloadState.ready,
             'Installation ${result.status}',
+            result.status == 'failed' ? result.message : null,
           );
         } else {
           final inspection = await installer.inspect(partial: false);
@@ -510,6 +547,7 @@ class ApplicationUpdateDownload extends ChangeNotifier {
             await _clear();
             _set(ApplicationUpdateDownloadState.idle);
           } else {
+            _sessionPending = true;
             _set(
               ApplicationUpdateDownloadState.blocked,
               'Previous installation is unconfirmed',
@@ -523,6 +561,13 @@ class ApplicationUpdateDownload extends ChangeNotifier {
         'Install failed for ${candidate?.version}: ${failure.runtimeType}\n$stack',
       );
       queueHold?.call();
+      if (_occupied) {
+        // Only an active session keeps the file; otherwise nothing reads it.
+        try {
+          _occupied = (await installer.current()).installationPending;
+        } catch (_) {}
+        _sessionPending = _occupied;
+      }
       if (!_occupied) {
         await _serial(() async {
           try {
