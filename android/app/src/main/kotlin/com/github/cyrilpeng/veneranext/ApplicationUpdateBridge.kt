@@ -55,9 +55,15 @@ internal class ApplicationUpdateBridge(private val activity: MainActivity) : App
                         "current" -> {
                             val current = currentPackage()
                             val installationPending = installationPending()
+                            // Lets a rebuilt engine reopen or cancel a confirmation it never saw.
+                            val attempt = if (installationPending) preferences.getString("attemptId", null) else null
+                            val confirm = ApplicationUpdateSessions.confirmation
                             reply.success(mapOf("packageName" to current.packageName,
                                 "versionCode" to code(current), "versionName" to current.versionName,
-                                "debug" to isDebug(), "installationPending" to installationPending))
+                                "debug" to isDebug(), "installationPending" to installationPending,
+                                "attemptId" to attempt,
+                                "awaitingConfirmation" to (attempt != null && confirm?.attempt == attempt &&
+                                    ApplicationUpdateSessions.writingAttempt == null)))
                         }
                         "inspect" -> {
                             val candidate = inspect(call.argument<Boolean>("partial") == true)
@@ -259,8 +265,14 @@ internal class ApplicationUpdateBridge(private val activity: MainActivity) : App
         val recordedSession = preferences.getInt("sessionId", -1)
         for (info in packageInstaller.mySessions) {
             val committed = committed(info)
-            val decision = ApplicationUpdatePolicy.leftoverSession(committed, writing,
-                info.sessionId in ApplicationUpdateSessions.processSessions, committed && installedSafely())
+            val confirmationSession = ApplicationUpdateSessions.confirmation?.session
+            val owned = ApplicationUpdatePolicy.ownsSession(info.sessionId,
+                info.sessionId in ApplicationUpdateSessions.processSessions, confirmationSession)
+            val decision = ApplicationUpdatePolicy.leftoverSession(committed, writing, owned,
+                committed && installedSafely())
+            if (ApplicationUpdatePolicy.dropsConfirmation(decision, info.sessionId, confirmationSession)) {
+                ApplicationUpdateSessions.clearConfirmation(info.sessionId)
+            }
             when (decision) {
                 "abandon" -> ApplicationUpdateSessions.abandon(activity, info.sessionId)
                 "installed", "orphaned" -> {

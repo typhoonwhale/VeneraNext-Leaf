@@ -9,17 +9,27 @@ class ApplicationUpdateIdentity {
     required this.versionName,
     this.debug = false,
     this.installationPending = false,
+    this.attemptId,
+    this.awaitingConfirmation = false,
   });
   final int versionCode;
   final String versionName;
   final bool debug;
   final bool installationPending;
+
+  /// The recorded attempt while [installationPending].
+  final String? attemptId;
+
+  /// The system confirmation of [attemptId] can be reopened or cancelled.
+  final bool awaitingConfirmation;
   factory ApplicationUpdateIdentity.fromJson(Map<dynamic, dynamic> value) =>
       ApplicationUpdateIdentity(
         versionCode: value['versionCode'] as int,
         versionName: value['versionName'] as String,
         debug: value['debug'] == true,
         installationPending: value['installationPending'] == true,
+        attemptId: value['attemptId'] as String?,
+        awaitingConfirmation: value['awaitingConfirmation'] == true,
       );
 }
 

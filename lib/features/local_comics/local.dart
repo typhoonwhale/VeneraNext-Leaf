@@ -420,7 +420,8 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
     _checkNotDisposed();
     if (restoreDownloadingTasks()) {
       // Before any task can start and create a new workspace. Workspaces of
-      // an unreadable snapshot are never treated as orphans.
+      // an unreadable snapshot, or of entries that could not be decoded now
+      // (e.g. their comic source is unavailable), are never orphans.
       try {
         ArchiveDownloadTask.removeOrphanWorkspaces(
           App.cachePath,
@@ -566,6 +567,8 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
   void dispose() {
     if (_notifierDisposed) return;
     _disposed = true;
+    // Disposal is not a normal exit: an unsettled auto-resume keeps its marker.
+    _stopWatchingAutoResume?.call();
     // Do not discard a handle or publish a replacement owner if close fails.
     _database?.dispose();
     _database = null;
@@ -744,6 +747,8 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
       await preparation;
       await manager.saveCurrentDownloadingTasks();
       await manager.pendingDownloadTaskWrites;
+      // Suspension paused the auto-resumed task, which removes its marker.
+      await manager._downloadAutoResumeMarkerRemoval;
       return () => manager._downloadQueue.releaseSuspension(preparation);
     } catch (_) {
       manager._downloadQueue.releaseSuspension(preparation);
@@ -795,12 +800,15 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
     _downloadQueue.restorePausedTasks(tasks, pausedByUser: pausedByUser);
   }
 
-  /// Returns false when the snapshot could not be restored.
+  /// Returns false when the snapshot could not be restored completely,
+  /// including when any entry could not be decoded.
   bool restoreDownloadingTasks() {
     _storageAccess.check();
     try {
+      var complete = true;
       final entries = _downloadTaskStore.restore(_taskSnapshotPath, (json) {
         final task = _decodeDownloadTask(json, this);
+        if (task == null) complete = false;
         // Older snapshots and damaged values never resume a task by themselves.
         return task == null ? null : (task, json[_userPausedKey] != false);
       });
@@ -813,7 +821,7 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
           ],
         );
       }
-      return true;
+      return complete;
     } catch (error, stack) {
       Log.error('LocalManager', error, stack);
       return false;
@@ -823,11 +831,20 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
   String? _downloadAutoResumeMarkerPath;
   Future<void> _downloadAutoResume = Future.value();
 
+  /// Stops watching the automatically resumed task; the marker is kept.
+  VoidCallback? _stopWatchingAutoResume;
+  Future<void> _downloadAutoResumeMarkerRemoval = Future.value();
+
   /// Completes when the startup resume by user intent has been scheduled.
   Future<void> get pendingDownloadAutoResume => _downloadAutoResume;
 
-  /// The marker outlives a crash between writing it and scheduling the resume;
-  /// the next startup then leaves every task paused for manual resume.
+  /// Completes when a marker removal requested so far has finished.
+  Future<void> get pendingDownloadAutoResumeMarkerRemoval =>
+      _downloadAutoResumeMarkerRemoval;
+
+  /// The marker outlives a crash until the resumed task has proven stable
+  /// (see [_watchAutoResumedTask]); the next startup then leaves every task
+  /// paused for manual resume, once.
   Future<void> _resumeDownloadsByIntent() async {
     final marker = File(_downloadAutoResumeMarkerPath!);
     try {
@@ -844,11 +861,48 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
       await marker.writeAsString('', flush: true);
       if (!_disposed && !requiresStorageRecovery) {
         _downloadQueue.resumeByIntent();
+        if (_watchAutoResumedTask(first, marker)) return;
       }
       await marker.delete();
     } catch (error, stack) {
       Log.error('LocalManager', error, stack);
     }
+  }
+
+  /// Crashes come from the work after the synchronous start: native archive
+  /// extraction and image decoding. Keep the marker until the resumed task
+  /// reports progress (a received archive range or a saved image), stops
+  /// (paused by the user, the system or exit preparation, or failed), or
+  /// leaves the queue. An archive restored in its extraction phase makes no
+  /// progress before it completes, so a crash there is always covered.
+  /// Returns false when the task is already settled.
+  bool _watchAutoResumedTask(DownloadTask task, File marker) {
+    final initialProgress = task.progress;
+    bool settled() =>
+        task.isPaused ||
+        task.isError ||
+        task.progress != initialProgress ||
+        !downloadingTasks.any((current) => identical(current, task));
+    if (settled()) return false;
+    void check() {
+      final stop = _stopWatchingAutoResume;
+      if (stop == null || !settled()) return;
+      stop();
+      _downloadAutoResumeMarkerRemoval = marker.delete().then<void>(
+        (_) {},
+        onError: (Object error, StackTrace stack) =>
+            Log.error('LocalManager', error, stack),
+      );
+    }
+
+    task.addListener(check);
+    addListener(check);
+    _stopWatchingAutoResume = () {
+      _stopWatchingAutoResume = null;
+      task.removeListener(check);
+      removeListener(check);
+    };
+    return true;
   }
 
   void addTask(DownloadTask task) {

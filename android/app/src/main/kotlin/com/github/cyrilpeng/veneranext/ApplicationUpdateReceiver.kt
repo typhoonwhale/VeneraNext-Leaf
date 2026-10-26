@@ -72,6 +72,10 @@ internal object ApplicationUpdateSessions {
         if (confirmation?.attempt == attempt) confirmation = null
     }
 
+    fun clearConfirmation(session: Int) {
+        if (confirmation?.session == session) confirmation = null
+    }
+
     fun abandon(context: Context, session: Int) {
         try { context.packageManager.packageInstaller.abandonSession(session) } catch (_: Exception) {}
     }

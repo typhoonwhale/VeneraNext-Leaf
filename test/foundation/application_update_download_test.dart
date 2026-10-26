@@ -19,6 +19,10 @@ class FakeInstaller implements ApplicationUpdateInstaller {
   String status = 'unknown';
   String? message;
   Object? installError;
+  void Function()? onInstall;
+  void Function()? onCancel;
+  String? pendingAttempt;
+  bool confirmationOpen = false;
   final attempts = <String>[];
   final awaiting = StreamController<String>.broadcast();
   final reopened = <String>[];
@@ -35,6 +39,7 @@ class FakeInstaller implements ApplicationUpdateInstaller {
   @override
   Future<void> cancelInstallation({required String attemptId}) async {
     if (confirmationError != null) throw confirmationError!;
+    onCancel?.call();
     installation?.complete(
       ApplicationUpdateInstallationResult(attemptId, 'cancelled'),
     );
@@ -47,6 +52,8 @@ class FakeInstaller implements ApplicationUpdateInstaller {
         versionName: '1.0.0',
         debug: debug,
         installationPending: installationPending,
+        attemptId: installationPending ? pendingAttempt : null,
+        awaitingConfirmation: installationPending && confirmationOpen,
       );
   @override
   Future<ApplicationUpdateInspection> inspect({required bool partial}) async =>
@@ -69,6 +76,7 @@ class FakeInstaller implements ApplicationUpdateInstaller {
     required String attemptId,
   }) async {
     attempts.add(attemptId);
+    onInstall?.call();
     if (installError != null) throw installError!;
     if (status == 'installed') installedCode = 2;
     return installation == null
@@ -598,16 +606,124 @@ void main() {
     expect(await file('update.apk').exists(), false);
   });
 
+  test(
+    'native rejection before a session keeps a package that still verifies',
+    () async {
+      final adapter = BytesAdapter(
+        () => Stream.value(Uint8List.fromList(bytes)),
+      );
+      controller = make(adapter);
+      await controller.download(release());
+      // E.g. the install permission was revoked after the check.
+      native.installError = StateError(
+        'Installation permission has not been granted',
+      );
+      await controller.install();
+      expect(controller.state, ApplicationUpdateDownloadState.ready);
+      expect(controller.error, 'Unable to prepare installation');
+      expect(await file('update.apk').readAsBytes(), bytes);
+      final record =
+          jsonDecode(await file('pending.json').readAsString()) as Map;
+      expect(record['phase'], 'ready');
+      expect(record['attemptId'], isNull);
+      native.installError = null;
+      native.status = 'installed';
+      await controller.install();
+      expect(adapter.calls, 1);
+      expect(native.attempts, hasLength(2));
+      expect(controller.state, ApplicationUpdateDownloadState.idle);
+    },
+  );
+
   test('native rejection without an active session does not block', () async {
     controller = make(
       BytesAdapter(() => Stream.value(Uint8List.fromList(bytes))),
     );
     await controller.download(release());
-    native.installError = StateError('Update version does not match release');
+    // The local package no longer verifies, so it is discarded.
+    native.onInstall = () =>
+        file('update.apk').writeAsBytesSync(utf8.encode('tampered bytes!!!'));
+    native.installError = StateError('Cannot parse update APK');
     await controller.install();
     expect(controller.state, ApplicationUpdateDownloadState.failed);
     expect(await file('update.apk').exists(), false);
   });
+
+  test(
+    'own confirmation found after an engine rebuild can be reopened or cancelled',
+    () async {
+      final adapter = BytesAdapter(
+        () => Stream.value(Uint8List.fromList(bytes)),
+      );
+      controller = make(adapter);
+      await controller.download(release());
+      native.installation = Completer();
+      final installing = controller.install();
+      while (native.attempts.isEmpty) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      final attempt = native.attempts.single;
+      // The engine is destroyed while the system confirmation is open.
+      await controller.closeAndWait();
+      native.installation!.complete(
+        ApplicationUpdateInstallationResult(attempt, 'unknown'),
+      );
+      await installing;
+      native
+        ..installation = null
+        ..installationPending = true
+        ..pendingAttempt = attempt;
+
+      // Another application's attempt or no saved confirmation: plain block.
+      native.pendingAttempt = 'other';
+      native.confirmationOpen = true;
+      controller = make(adapter);
+      await controller.initialize();
+      expect(controller.state, ApplicationUpdateDownloadState.blocked);
+      expect(controller.awaitingConfirmation, false);
+      await controller.closeAndWait();
+      native
+        ..pendingAttempt = attempt
+        ..confirmationOpen = false;
+      controller = make(adapter);
+      await controller.initialize();
+      expect(controller.awaitingConfirmation, false);
+      await controller.closeAndWait();
+
+      native.confirmationOpen = true;
+      controller = make(adapter);
+      await controller.initialize();
+      expect(controller.state, ApplicationUpdateDownloadState.blocked);
+      expect(controller.awaitingConfirmation, true);
+      await controller.reopenConfirmation();
+      expect(native.reopened, [attempt]);
+      // The session is still open after the reopen, so both actions remain.
+      expect(controller.state, ApplicationUpdateDownloadState.blocked);
+      expect(controller.awaitingConfirmation, true);
+
+      native.confirmationError = StateError('abandon failed');
+      await controller.cancelInstallation();
+      expect(controller.state, ApplicationUpdateDownloadState.blocked);
+      expect(controller.awaitingConfirmation, true);
+      expect(controller.error, 'Unable to cancel installation');
+
+      native
+        ..confirmationError = null
+        ..onCancel = () {
+          native
+            ..installationPending = false
+            ..confirmationOpen = false;
+        };
+      await controller.cancelInstallation();
+      expect(controller.state, ApplicationUpdateDownloadState.ready);
+      expect(controller.awaitingConfirmation, false);
+      expect(await file('update.apk').readAsBytes(), bytes);
+      native.status = 'installed';
+      await controller.install();
+      expect(adapter.calls, 1);
+      expect(controller.state, ApplicationUpdateDownloadState.idle);
+    },
+  );
 
   test('close does not wait for system installation UI', () async {
     controller = make(

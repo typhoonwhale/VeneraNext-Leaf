@@ -483,6 +483,41 @@ void main() {
     expect(live.existsSync(), isTrue);
   });
 
+  test(
+    'an entry whose source is unavailable keeps every workspace once',
+    () async {
+      var manager = await start();
+      transfer = hangingTransfer;
+      manager.addTask(newTask(manager, 'a'));
+      await waitFor(() => transfers.isNotEmpty);
+      final live = File(transfers.single).parent;
+      final saved = entry(await crash(manager));
+      final orphan = Directory('${cache.path}/archive-download-orphan')
+        ..createSync();
+      // The comic source failed to load in this process.
+      ComicSourceManager().remove(_sourceKey);
+      writeSnapshot([
+        {...saved, 'userPaused': true},
+      ]);
+
+      manager = await start();
+      expect(manager.downloadingTasks, isEmpty);
+      expect(live.existsSync(), isTrue);
+      expect(orphan.existsSync(), isTrue);
+      await crash(manager);
+
+      // Fully decodable again: only the unreferenced workspace is removed.
+      ComicSourceManager().add(_testSource(_sourceKey));
+      writeSnapshot([
+        {...saved, 'userPaused': true},
+      ]);
+      manager = await start();
+      expect(restored(manager).isPaused, isTrue);
+      expect(live.existsSync(), isTrue);
+      expect(orphan.existsSync(), isFalse);
+    },
+  );
+
   test('older archive snapshots restore paused without ownership', () async {
     var manager = await start();
     final library = manager.path;

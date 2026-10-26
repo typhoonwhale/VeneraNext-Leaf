@@ -59,6 +59,23 @@ fun main() {
     check(ApplicationUpdatePolicy.orphanedResult(abandoned = true) == "cancelled")
     check(ApplicationUpdatePolicy.orphanedResult(abandoned = false) == "pending")
     println("PASS: orphaned committed sessions resolve to installed, cancelled, or stay pending if abandon fails")
+    // The receiver restarted the process after the committing one was killed and stored the
+    // confirmation; the new process has no committed-session record of its own.
+    check(ApplicationUpdatePolicy.ownsSession(7, committedByProcess = false, confirmationSession = 7))
+    check(ApplicationUpdatePolicy.ownsSession(7, committedByProcess = true, confirmationSession = null))
+    check(!ApplicationUpdatePolicy.ownsSession(7, committedByProcess = false, confirmationSession = 8))
+    check(!ApplicationUpdatePolicy.ownsSession(7, committedByProcess = false, confirmationSession = null))
+    val received = ApplicationUpdatePolicy.ownsSession(7, false, 7)
+    check(leftover(committed = true, owned = received) == "pending")
+    check(!ApplicationUpdatePolicy.dropsConfirmation("pending", 7, 7))
+    check(!ApplicationUpdatePolicy.dropsConfirmation("keep", 7, 7))
+    // Any session ended during reconciliation clears its stored confirmation.
+    for (decision in listOf("orphaned", "installed", "abandon")) {
+        check(ApplicationUpdatePolicy.dropsConfirmation(decision, 7, 7))
+        check(!ApplicationUpdatePolicy.dropsConfirmation(decision, 7, 8))
+        check(!ApplicationUpdatePolicy.dropsConfirmation(decision, 7, null))
+    }
+    println("PASS: a received confirmation keeps its session pending; ended sessions drop their confirmation")
     for (recorded in listOf(null, "cancelled", "failed")) {
         check(ApplicationUpdatePolicy.attemptStatus(true, recorded, false, null) == "installed")
     }

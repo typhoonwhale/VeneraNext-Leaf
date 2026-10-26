@@ -89,7 +89,8 @@ class _ApplicationUpdateDialogState extends State<ApplicationUpdateDialog> {
       final downloading = state == ApplicationUpdateDownloadState.downloading;
       final verifying = state == ApplicationUpdateDownloadState.verifying;
       final ready = state == ApplicationUpdateDownloadState.ready;
-      final awaiting = installing && controller.awaitingConfirmation;
+      final awaiting =
+          (installing || blocked) && controller.awaitingConfirmation;
       final supported = controller.isSupported;
       final error = _actionError ?? controller.error;
       final canDownload =
@@ -163,10 +164,10 @@ class _ApplicationUpdateDialogState extends State<ApplicationUpdateDialog> {
                 if (installing || blocked) ...[
                   const SizedBox(height: 12),
                   Text(
-                    (blocked
-                            ? 'The previous installation has no confirmed result. The package is kept. Complete the system installation or update manually from the release page.'
-                            : awaiting
+                    (awaiting
                             ? 'The Android installation prompt was closed. Reopen it to continue, or cancel this installation.'
+                            : blocked
+                            ? 'The previous installation has no confirmed result. The package is kept. Complete the system installation or update manually from the release page.'
                             : 'Complete the permission or installation request in Android. The package will be kept.')
                         .tl,
                   ),

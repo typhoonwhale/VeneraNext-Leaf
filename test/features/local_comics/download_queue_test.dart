@@ -688,6 +688,71 @@ void main() {
   );
 
   test(
+    'adding work behind a user-paused head starts the first unpaused task',
+    () {
+      final paused = _Task('a', events);
+      final waiting = _Task('b', events);
+      final later = _Task('c', events);
+      queue.restorePausedTasks([paused, waiting], pausedByUser: [paused]);
+      queue.add(later);
+      expect(paused.isPaused, isTrue);
+      expect(waiting.isPaused, isFalse);
+      // Only the head runs, so the started task moves ahead of the skipped one.
+      expect(queue.tasks, [waiting, paused, later]);
+      expect(queue.isPausedByUser(paused), isTrue);
+      expect(events.where((event) => event == 'save'), hasLength(2));
+    },
+  );
+
+  test(
+    'completion and held starts advance past user-paused tasks only',
+    () async {
+      final head = _Task('a', events);
+      final paused = _Task('b', events);
+      final next = _Task('c', events);
+      final alsoPaused = _Task('d', events);
+      queue.restorePausedTasks(
+        [head, paused, next, alsoPaused],
+        pausedByUser: [paused, alsoPaused],
+      );
+      queue.resume(head);
+      queue.complete(head);
+      expect(queue.tasks, [next, paused, alsoPaused]);
+      expect(next.isPaused, isFalse);
+      expect(paused.isPaused, isTrue);
+
+      final release = queue.holdAutomaticStarts();
+      queue.complete(next);
+      release();
+      // Every remaining task was paused by the user: nothing starts.
+      expect(queue.tasks, [paused, alsoPaused]);
+      expect(paused.isPaused, isTrue);
+      expect(alsoPaused.isPaused, isTrue);
+      expect(queue.isPausedByUser(paused), isTrue);
+      expect(queue.isPausedByUser(alsoPaused), isTrue);
+    },
+  );
+
+  test(
+    'automatic advance never starts a second task beside a running head',
+    () async {
+      final first = _Task('a', events);
+      final moved = _Task('b', events);
+      final next = _Task('c', events);
+      queue.restorePausedTasks([first, moved], pausedByUser: [moved]);
+      queue.resume(first);
+      // Moving a task first is an explicit start, even of a user-paused one.
+      await queue.moveToFirst(moved);
+      await pumpEventQueue();
+      expect(moved.isPaused, isFalse);
+      queue.add(next);
+      expect(queue.tasks, [moved, first, next]);
+      expect(first.isPaused, isTrue);
+      expect(next.isPaused, isTrue);
+    },
+  );
+
+  test(
     'resume by intent starts an unpaused head through holds and suspension',
     () async {
       final head = _Task('a', events);

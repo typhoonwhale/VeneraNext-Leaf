@@ -533,4 +533,36 @@ void main() {
     expect(download.cleared, 0);
     expect(find.text('Install update'), findsOneWidget);
   });
+  testWidgets('blocked own confirmation offers reopen and cancel', (
+    tester,
+  ) async {
+    final download = FakeDownload()
+      ..candidate = release
+      ..state = ApplicationUpdateDownloadState.blocked
+      ..error = 'Previous installation is unconfirmed';
+    await show(tester, download, () {});
+    expect(find.text('Reopen installation confirmation'), findsNothing);
+    expect(find.text('Cancel installation'), findsNothing);
+    download
+      ..awaitingConfirmation = true
+      ..notifyListeners();
+    await tester.pump();
+    expect(
+      find.textContaining('installation prompt was closed'),
+      findsOneWidget,
+    );
+    expect(find.text('Close'), findsOneWidget);
+    await tester.tap(find.text('Reopen installation confirmation'));
+    await tester.pump();
+    expect(download.reopened, 1);
+    download
+      ..awaitingConfirmation = true
+      ..notifyListeners();
+    await tester.pump();
+    await tester.tap(find.text('Cancel installation'));
+    await tester.pump();
+    expect(download.cancelledInstallations, 1);
+    expect(download.cleared, 0);
+    expect(find.text('Install update'), findsOneWidget);
+  });
 }

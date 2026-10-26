@@ -88,9 +88,12 @@ void main() {
       var manager = await start();
       expect(restored['a']!.isPaused, isFalse);
       expect(restored['b']!.isPaused, isTrue);
-      expect(marker().existsSync(), isFalse);
+      // Kept until the resumed task proves stable; a user pause settles it.
+      expect(marker().existsSync(), isTrue);
 
       await manager.pauseDownload(restored['a']!, byUser: true);
+      await manager.pendingDownloadAutoResumeMarkerRemoval;
+      expect(marker().existsSync(), isFalse);
       await stop(manager);
       manager = await start();
       expect(restored['a']!.isPaused, isTrue);
@@ -115,10 +118,16 @@ void main() {
     final release = await LocalManager.prepareDownloadsForExit();
     expect(task.isPaused, isTrue);
     expect(readSnapshot().single['userPaused'], isFalse);
+    expect(marker().existsSync(), isFalse);
     release();
     await stop(manager);
     manager = await start();
     expect(restored['a']!.isPaused, isFalse);
+    // Exit preparation stops the resumed task and removes the marker.
+    expect(marker().existsSync(), isTrue);
+    final exit = await LocalManager.prepareDownloadsForExit();
+    expect(marker().existsSync(), isFalse);
+    exit();
   });
 
   test(
@@ -137,9 +146,77 @@ void main() {
       await stop(manager);
       manager = await start();
       expect(restored['a']!.isPaused, isFalse);
+      restored['a']!.advance();
+      await manager.pendingDownloadAutoResumeMarkerRemoval;
       expect(marker().existsSync(), isFalse);
     },
   );
+
+  test(
+    'a crash after the start but before the first progress skips one resume',
+    () async {
+      writeSnapshot([
+        {'type': 'fake', 'id': 'a', 'userPaused': false},
+        {'type': 'fake', 'id': 'b', 'userPaused': false},
+      ]);
+      var manager = await start();
+      final task = restored['a']!;
+      expect(task.isPaused, isFalse);
+      // The asynchronous work (extraction, decoding) is still running.
+      await pumpEventQueue();
+      expect(marker().existsSync(), isTrue);
+      // Notifications without progress do not settle the task.
+      task.notifyListeners();
+      manager.notifyListeners();
+      await manager.pendingDownloadAutoResumeMarkerRemoval;
+      expect(marker().existsSync(), isTrue);
+
+      // Process dies without exit preparation.
+      await stop(manager);
+      expect(marker().existsSync(), isTrue);
+      manager = await start();
+      expect(restored['a']!.isPaused, isTrue);
+      expect(restored['b']!.isPaused, isTrue);
+      expect(marker().existsSync(), isFalse);
+      expect(readSnapshot().map((entry) => entry['userPaused']), [
+        false,
+        false,
+      ]);
+
+      // Only once: the following start resumes again and progress settles it.
+      await stop(manager);
+      manager = await start();
+      expect(restored['a']!.isPaused, isFalse);
+      expect(marker().existsSync(), isTrue);
+      restored['a']!.advance();
+      await manager.pendingDownloadAutoResumeMarkerRemoval;
+      expect(marker().existsSync(), isFalse);
+      await stop(manager);
+      manager = await start();
+      expect(restored['a']!.isPaused, isFalse);
+    },
+  );
+
+  test('completing or failing the resumed task removes the marker', () async {
+    writeSnapshot([
+      {'type': 'fake', 'id': 'a', 'userPaused': false},
+    ]);
+    var manager = await start();
+    expect(marker().existsSync(), isTrue);
+    manager.removeTask(restored['a']!);
+    await manager.pendingDownloadAutoResumeMarkerRemoval;
+    expect(marker().existsSync(), isFalse);
+    await stop(manager);
+
+    writeSnapshot([
+      {'type': 'fake', 'id': 'a', 'userPaused': false},
+    ]);
+    manager = await start();
+    expect(marker().existsSync(), isTrue);
+    restored['a']!.fail();
+    await manager.pendingDownloadAutoResumeMarkerRemoval;
+    expect(marker().existsSync(), isFalse);
+  });
 
   test('automatic-start hold is a no-op without a live library', () {
     LocalManager.current?.dispose();
@@ -155,6 +232,20 @@ class _Task extends DownloadTask {
   @override
   final String id;
   bool paused = true;
+  bool error = false;
+  double _progress = 0;
+
+  void advance() {
+    _progress += 0.1;
+    notifyListeners();
+  }
+
+  void fail() {
+    paused = true;
+    error = true;
+    notifyListeners();
+  }
+
   @override
   ComicType get comicType => const ComicType(17);
   @override
@@ -166,11 +257,11 @@ class _Task extends DownloadTask {
   @override
   bool get isPaused => paused;
   @override
-  bool get isError => false;
+  bool get isError => error;
   @override
   int get speed => 0;
   @override
-  double get progress => 0;
+  double get progress => _progress;
   @override
   Future<void> get pendingCleanup => Future.value();
   @override

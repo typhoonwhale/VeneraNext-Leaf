@@ -121,7 +121,11 @@ class DownloadQueue {
     final stop = _pendingStop;
     if (stop == null) {
       _scheduledResumeRevision = null;
-      tasks.firstOrNull?.resume();
+      if (automatic) {
+        _startFirstNotPausedByUser();
+      } else {
+        tasks.firstOrNull?.resume();
+      }
     } else {
       _scheduledResumeRevision = revision;
       _scheduledResumeAutomatic = automatic;
@@ -134,6 +138,28 @@ class DownloadQueue {
             .catchError(reportError),
       );
     }
+  }
+
+  /// Automatic starts never run a task the user paused. Only the head runs, so
+  /// the first task the user did not pause moves ahead of the skipped ones,
+  /// which keep their relative order. A running head stays the only task run.
+  void _startFirstNotPausedByUser() {
+    final head = tasks.firstOrNull;
+    if (head == null) return;
+    if (!head.isPaused || !_pausedByUser.contains(head)) {
+      head.resume();
+      return;
+    }
+    final index = _tasks.indexWhere((task) => !_pausedByUser.contains(task));
+    if (index < 0) return;
+    if (index > 0) {
+      _tasks.insert(0, _tasks.removeAt(index));
+      final revision = ++_revision;
+      _publish();
+      // A listener reentering the queue owns the final scheduling decision.
+      if (revision != _revision) return;
+    }
+    _tasks.first.resume();
   }
 
   /// A queued start is still cancellable while an older task is stopping.

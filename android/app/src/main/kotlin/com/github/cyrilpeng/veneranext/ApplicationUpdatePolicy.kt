@@ -48,6 +48,18 @@ internal object ApplicationUpdatePolicy {
         else -> "orphaned"
     }
 
+    /**
+     * A session is this process's if it committed the session, or if the receiver stored its
+     * confirmation: after the committing process was killed, the receiver starts a new process
+     * whose confirmation can still be launched, so that session is not orphaned.
+     */
+    fun ownsSession(session: Int, committedByProcess: Boolean, confirmationSession: Int?) =
+        committedByProcess || confirmationSession == session
+
+    /** A session ended during reconciliation must not leave its confirmation to be launched. */
+    fun dropsConfirmation(decision: String, session: Int, confirmationSession: Int?) =
+        confirmationSession == session && decision != "keep" && decision != "pending"
+
     /** Result recorded for the attempt after handling an orphaned committed session. */
     fun orphanedResult(abandoned: Boolean): String = if (abandoned) "cancelled" else "pending"
 

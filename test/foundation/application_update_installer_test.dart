@@ -20,6 +20,8 @@ void main() {
                 'versionName': '1.0.0',
                 'debug': false,
                 'installationPending': true,
+                'attemptId': 'attempt',
+                'awaitingConfirmation': true,
               };
             case 'inspect':
               return {
@@ -55,6 +57,8 @@ void main() {
   test('bridge uses fixed paths and correlated attempt identity', () async {
     expect((await installer.current()).debug, false);
     expect((await installer.current()).installationPending, true);
+    expect((await installer.current()).attemptId, 'attempt');
+    expect((await installer.current()).awaitingConfirmation, true);
     expect((await installer.inspect(partial: true)).versionCode, 2);
     expect(calls.last.arguments, {'partial': true});
     expect(await installer.canInstall(), true);

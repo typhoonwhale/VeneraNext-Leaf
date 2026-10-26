@@ -54,6 +54,8 @@ class ApplicationUpdateDownload extends ChangeNotifier {
   String? errorDetail;
 
   /// The system confirmation was left open; the user may reopen or cancel it.
+  /// Also set while [state] is blocked by this application's own session, such
+  /// as after the Flutter engine was rebuilt during the confirmation.
   bool awaitingConfirmation = false;
   bool get isSupported => _supported;
   bool get busy =>
@@ -208,6 +210,15 @@ class ApplicationUpdateDownload extends ChangeNotifier {
               : ApplicationUpdateDownloadState.ready,
           _occupied ? 'Previous installation is unconfirmed' : null,
         );
+        // No install call of this isolate awaits that session; offer its
+        // confirmation again when it belongs to the recorded attempt.
+        if (_occupied &&
+            current.awaitingConfirmation &&
+            current.attemptId != null &&
+            current.attemptId == _attemptId) {
+          awaitingConfirmation = true;
+          if (!_closed) notifyListeners();
+        }
       } else if (current.installationPending) {
         // The session holds its own copy after an eviction; keep the record
         // and wait for that session instead of starting another.
@@ -588,8 +599,24 @@ class ApplicationUpdateDownload extends ChangeNotifier {
         } catch (_) {}
         _sessionPending = _occupied;
       }
+      var kept = false;
       if (!_occupied) {
         await _serial(() async {
+          // A failure before any session exists, such as a revoked permission,
+          // leaves a package that still verifies available for retry.
+          if (!_closed && generation == _generation && candidate != null) {
+            try {
+              final inspection = await _verify(
+                _apk,
+                partial: false,
+                requireNewer: true,
+              );
+              _attemptId = null;
+              await _persist('ready', versionCode: inspection.versionCode);
+              kept = true;
+              return;
+            } catch (_) {}
+          }
           try {
             await _clear();
           } catch (_) {
@@ -600,6 +627,8 @@ class ApplicationUpdateDownload extends ChangeNotifier {
       _set(
         _occupied
             ? ApplicationUpdateDownloadState.blocked
+            : kept
+            ? ApplicationUpdateDownloadState.ready
             : ApplicationUpdateDownloadState.failed,
         _occupied
             ? 'Previous installation is unconfirmed'
@@ -625,9 +654,27 @@ class ApplicationUpdateDownload extends ChangeNotifier {
   ) async {
     final id = _attemptId;
     if (_closed || !awaitingConfirmation || id == null) return;
+    final blocked = state == ApplicationUpdateDownloadState.blocked;
     awaitingConfirmation = false;
     error = null;
     notifyListeners();
+    if (blocked) {
+      var failed = false;
+      try {
+        await action(id);
+      } catch (_) {
+        failed = true;
+      }
+      // No install call reports this session's result: read it again.
+      await initialize();
+      if (failed &&
+          !_closed &&
+          state == ApplicationUpdateDownloadState.blocked) {
+        error = failure;
+        notifyListeners();
+      }
+      return;
+    }
     try {
       await action(id);
     } catch (_) {
