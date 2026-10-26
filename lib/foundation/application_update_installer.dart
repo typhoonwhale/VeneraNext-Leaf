@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 
 /// Native checks always use fixed private update paths, never caller paths.
@@ -70,6 +72,15 @@ abstract class ApplicationUpdateInstaller {
   Future<ApplicationUpdateInstallationResult> installationStatus({
     required String attemptId,
   });
+
+  /// Attempt IDs whose system confirmation was left without a result.
+  Stream<String> get awaitingConfirmation;
+
+  /// Restarts the saved confirmation, or a new session from the local APK.
+  Future<void> reopenConfirmation({required String attemptId});
+
+  /// Abandons the open session; the pending [install] completes as cancelled.
+  Future<void> cancelInstallation({required String attemptId});
 }
 
 class MethodChannelApplicationUpdateInstaller
@@ -78,6 +89,27 @@ class MethodChannelApplicationUpdateInstaller
     this.channel = const MethodChannel('leaf/application_update'),
   });
   final MethodChannel channel;
+  static final _awaiting = StreamController<String>.broadcast();
+  static bool _listening = false;
+  @override
+  Stream<String> get awaitingConfirmation {
+    if (!_listening) {
+      _listening = true;
+      channel.setMethodCallHandler((call) async {
+        if (call.method == 'awaitingConfirmation') {
+          _awaiting.add((call.arguments as Map)['attemptId'] as String);
+        }
+      });
+    }
+    return _awaiting.stream;
+  }
+
+  @override
+  Future<void> reopenConfirmation({required String attemptId}) => channel
+      .invokeMethod<void>('reopenConfirmation', {'attemptId': attemptId});
+  @override
+  Future<void> cancelInstallation({required String attemptId}) => channel
+      .invokeMethod<void>('cancelInstallation', {'attemptId': attemptId});
   @override
   Future<ApplicationUpdateIdentity> current() async =>
       ApplicationUpdateIdentity.fromJson(

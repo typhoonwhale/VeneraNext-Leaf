@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageInstaller
 import android.os.Build
+import java.util.concurrent.ConcurrentHashMap
 
 /** Receives session results even when no Activity or Flutter engine is alive. */
 class ApplicationUpdateReceiver : BroadcastReceiver() {
@@ -24,14 +25,19 @@ internal object ApplicationUpdateSessions {
         fun onFinished(attemptId: String, status: String, message: String?)
     }
 
+    /** System confirmation for an open session; kept until a terminal result to allow reopening. */
+    class Confirmation(val attempt: String, val session: Int, val intent: Intent) {
+        var launched = false
+    }
+
     /** Attempt whose APK is being streamed into an uncommitted session by this process. */
     var writingAttempt: String? = null
     var listener: Listener? = null
-    private var confirmation: Pair<String, Intent>? = null
+    var confirmation: Confirmation? = null
+        private set
 
-    val hasConfirmation get() = confirmation != null
-
-    fun takeConfirmation(): Pair<String, Intent>? = confirmation.also { confirmation = null }
+    /** Sessions committed by this process; added before commit() on the writer thread. */
+    val processSessions: MutableSet<Int> = ConcurrentHashMap.newKeySet()
 
     fun receive(context: Context, intent: Intent) {
         val preferences = context.getSharedPreferences(PREFERENCES, 0)
@@ -58,8 +64,12 @@ internal object ApplicationUpdateSessions {
             return
         }
         // Kept until an Activity is resumed; starting UI from the background is not allowed.
-        confirmation = attempt to confirm
+        confirmation = Confirmation(attempt, session, confirm)
         listener?.onConfirmation()
+    }
+
+    fun clearConfirmation(attempt: String) {
+        if (confirmation?.attempt == attempt) confirmation = null
     }
 
     fun abandon(context: Context, session: Int) {
@@ -67,7 +77,7 @@ internal object ApplicationUpdateSessions {
     }
 
     fun finish(preferences: SharedPreferences, attempt: String, status: String, message: String?) {
-        if (confirmation?.first == attempt) confirmation = null
+        if (confirmation?.attempt == attempt) confirmation = null
         // The session has ended either way, so a failed write cannot keep it open.
         preferences.edit().putString("status", status).putString("message", message).commit()
         listener?.onFinished(attempt, status, message)

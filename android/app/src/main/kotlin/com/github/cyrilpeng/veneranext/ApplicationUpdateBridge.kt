@@ -12,6 +12,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import android.util.Log
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.Lifecycle
 import io.flutter.plugin.common.BinaryMessenger
@@ -67,6 +68,14 @@ internal class ApplicationUpdateBridge(private val activity: MainActivity) : App
                         "canInstall" -> reply.success(canInstall())
                         "requestPermission" -> requestPermission(reply)
                         "install" -> install(call.argument<String>("version"), call.argument<String>("attemptId"), reply)
+                        "reopenConfirmation" -> {
+                            reopenConfirmation(call.argument<String>("attemptId"))
+                            reply.success(null)
+                        }
+                        "cancelInstallation" -> {
+                            cancelInstallation(call.argument<String>("attemptId"))
+                            reply.success(null)
+                        }
                         "installationStatus" -> {
                             val id = call.argument<String>("attemptId") ?: throw IllegalArgumentException("Missing attempt ID")
                             reply.success(receipt(id))
@@ -95,16 +104,18 @@ internal class ApplicationUpdateBridge(private val activity: MainActivity) : App
     }
 
     /** Called from onResume, before the lifecycle reports RESUMED. */
-    fun resume() {
-        if (ApplicationUpdatePolicy.launchConfirmation(ApplicationUpdateSessions.hasConfirmation, true)) {
-            launchConfirmation()
-        }
-    }
+    fun resume() = handleConfirmation(true)
 
-    override fun onConfirmation() {
-        val resumed = activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
-        if (ApplicationUpdatePolicy.launchConfirmation(ApplicationUpdateSessions.hasConfirmation, resumed)) {
-            launchConfirmation()
+    override fun onConfirmation() =
+        handleConfirmation(activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))
+
+    private fun handleConfirmation(resumed: Boolean) {
+        val confirm = ApplicationUpdateSessions.confirmation
+        val waiting = confirm != null && confirm.attempt == preferences.getString("attemptId", null)
+        when (ApplicationUpdatePolicy.confirmationAction(waiting, confirm?.launched == true, resumed)) {
+            "launch" -> launchConfirmation()
+            // Never relaunch automatically; the user chooses to reopen or cancel.
+            "await" -> channel?.invokeMethod("awaitingConfirmation", mapOf("attemptId" to confirm!!.attempt))
         }
     }
 
@@ -116,13 +127,57 @@ internal class ApplicationUpdateBridge(private val activity: MainActivity) : App
     }
 
     private fun launchConfirmation() {
-        val (attempt, intent) = ApplicationUpdateSessions.takeConfirmation() ?: return
+        val confirm = ApplicationUpdateSessions.confirmation ?: return
         try {
-            activity.startActivity(intent)
+            activity.startActivity(confirm.intent)
+            confirm.launched = true
         } catch (error: Exception) {
-            ApplicationUpdateSessions.abandon(activity, preferences.getInt("sessionId", -1))
-            ApplicationUpdateSessions.finish(preferences, attempt, "failed", error.message)
+            ApplicationUpdateSessions.abandon(activity, confirm.session)
+            ApplicationUpdateSessions.finish(preferences, confirm.attempt, "failed", error.message)
         }
+    }
+
+    private fun requireOpenAttempt(id: String?): String {
+        require(!id.isNullOrBlank() && preferences.getString("attemptId", null) == id) { "Unknown installation attempt" }
+        check(ApplicationUpdateSessions.writingAttempt == null) { "Installation session is being written" }
+        check(status(id) == "pending") { "Installation is not awaiting confirmation" }
+        return id
+    }
+
+    private fun reopenConfirmation(attemptId: String?) {
+        val id = requireOpenAttempt(attemptId)
+        val confirm = ApplicationUpdateSessions.confirmation
+        if (confirm != null && confirm.attempt == id) {
+            try {
+                activity.startActivity(confirm.intent)
+                confirm.launched = true
+                return
+            } catch (error: Exception) {
+                Log.w("ApplicationUpdate", "Confirmation intent unavailable", error)
+            }
+        }
+        // Replace the unusable session from the verified local APK; an abandon failure
+        // propagates and leaves the session pending.
+        val previous = preferences.getInt("sessionId", -1)
+        if (previous >= 0 && packageInstaller.getSessionInfo(previous) != null) {
+            packageInstaller.abandonSession(previous)
+        }
+        ApplicationUpdateSessions.clearConfirmation(id)
+        try {
+            startSession(id)
+        } catch (error: Exception) {
+            // The old session is gone; end the attempt so the local APK can be retried.
+            ApplicationUpdateSessions.finish(preferences, id, "failed", error.message)
+        }
+    }
+
+    private fun cancelInstallation(attemptId: String?) {
+        val id = requireOpenAttempt(attemptId)
+        val session = preferences.getInt("sessionId", -1)
+        if (session >= 0 && packageInstaller.getSessionInfo(session) != null) {
+            packageInstaller.abandonSession(session)
+        }
+        ApplicationUpdateSessions.finish(preferences, id, "cancelled", null)
     }
 
     private fun isDebug() = activity.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
@@ -197,17 +252,37 @@ internal class ApplicationUpdateBridge(private val activity: MainActivity) : App
         info.sessionId == preferences.getInt("sessionId", -1) && preferences.getBoolean("committed", false)
     }
 
+    private fun installedSafely() = try { targetInstalled() } catch (_: Exception) { false }
+
     private fun reconcileSessions() {
         val writing = ApplicationUpdateSessions.writingAttempt != null
+        val recordedSession = preferences.getInt("sessionId", -1)
         for (info in packageInstaller.mySessions) {
-            if (ApplicationUpdatePolicy.leftoverSession(committed(info), writing) == "abandon") {
-                ApplicationUpdateSessions.abandon(activity, info.sessionId)
+            val committed = committed(info)
+            val decision = ApplicationUpdatePolicy.leftoverSession(committed, writing,
+                info.sessionId in ApplicationUpdateSessions.processSessions, committed && installedSafely())
+            when (decision) {
+                "abandon" -> ApplicationUpdateSessions.abandon(activity, info.sessionId)
+                "installed", "orphaned" -> {
+                    val abandoned = try {
+                        packageInstaller.abandonSession(info.sessionId)
+                        true
+                    } catch (error: Exception) {
+                        Log.w("ApplicationUpdate", "Cannot abandon orphaned session", error)
+                        false
+                    }
+                    val result = if (decision == "installed") "installed" else ApplicationUpdatePolicy.orphanedResult(abandoned)
+                    if (info.sessionId == recordedSession && result != "pending") {
+                        preferences.edit().putString("status", result).remove("message").commit()
+                    }
+                }
             }
         }
     }
 
+    // An installed target releases the update even if its stale session could not be abandoned.
     private fun installationPending() = ApplicationUpdateSessions.writingAttempt != null ||
-        packageInstaller.mySessions.any { committed(it) }
+        (packageInstaller.mySessions.any { committed(it) } && !installedSafely())
 
     private fun status(id: String): String {
         if (preferences.getString("attemptId", null) != id) return "unknown"
@@ -228,15 +303,26 @@ internal class ApplicationUpdateBridge(private val activity: MainActivity) : App
         check(canInstall()) { "Installation permission has not been granted" }
         val candidate = inspect(false)
         check(candidate.versionName == version) { "Update version does not match release" }
-        check(code(candidate) > code(currentPackage())) { "Update version code must be newer" }
-        val file = candidateFile(false)
         // Commit before creating the session, outside cacheDir, so restart can correlate it.
         check(preferences.edit().clear().putString("attemptId", id)
             .putString("packageName", candidate.packageName).putLong("versionCode", code(candidate))
             .putStringSet("signatures", signatures(candidate)).commit()) { "Cannot persist installation handoff" }
-        ApplicationUpdateSessions.writingAttempt = id
+        startSession(id)
+        // Results arrive through posted callbacks, so a synchronous failure above never replies twice.
         installReply = reply
         replyAttempt = id
+    }
+
+    /** Writes a new session for the recorded attempt from the fixed, re-inspected candidate. */
+    private fun startSession(id: String) {
+        val candidate = inspect(false)
+        check(preferences.getString("packageName", null) == candidate.packageName &&
+            preferences.getLong("versionCode", -1) == code(candidate)) { "Update package changed" }
+        check(code(candidate) > code(currentPackage())) { "Update version code must be newer" }
+        val file = candidateFile(false)
+        check(preferences.edit().remove("sessionId").remove("committed").remove("status")
+            .remove("message").commit()) { "Cannot persist installation handoff" }
+        ApplicationUpdateSessions.writingAttempt = id
         val context = activity.applicationContext
         writer.execute {
             val failure = try { writeSession(context, file, id); null } catch (error: Exception) { error }
@@ -275,12 +361,14 @@ internal class ApplicationUpdateBridge(private val activity: MainActivity) : App
                     if (Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE else 0
                 val result = Intent(context, ApplicationUpdateReceiver::class.java)
                     .putExtra(ApplicationUpdateSessions.EXTRA_ATTEMPT, id)
+                ApplicationUpdateSessions.processSessions.add(session)
                 opened.commit(PendingIntent.getBroadcast(context, session, result, flags).intentSender)
                 committed = true
             }
         } catch (error: Exception) {
             // After commit the system owns the session and reports through the receiver.
             if (committed) return
+            ApplicationUpdateSessions.processSessions.remove(session)
             ApplicationUpdateSessions.abandon(context, session)
             throw error
         }

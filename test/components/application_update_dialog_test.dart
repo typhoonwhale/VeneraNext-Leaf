@@ -22,7 +22,25 @@ class FakeDownload extends ApplicationUpdateDownload {
   int cleared = 0;
   int downloads = 0;
   int installations = 0;
+  int reopened = 0;
+  int cancelledInstallations = 0;
   Completer<void>? cleanup;
+  @override
+  Future<void> reopenConfirmation() async {
+    reopened++;
+    awaitingConfirmation = false;
+    notifyListeners();
+  }
+
+  @override
+  Future<void> cancelInstallation() async {
+    cancelledInstallations++;
+    state = ApplicationUpdateDownloadState.ready;
+    awaitingConfirmation = false;
+    error = 'Installation cancelled';
+    notifyListeners();
+  }
+
   @override
   bool get isSupported => supported;
   @override
@@ -484,5 +502,35 @@ void main() {
     await tester.pump();
     expect(download.installations, 1);
     expect(download.downloads, 0);
+  });
+  testWidgets('left confirmation offers reopen and cancel without relaunch', (
+    tester,
+  ) async {
+    final download = FakeDownload()
+      ..candidate = release
+      ..state = ApplicationUpdateDownloadState.installing;
+    await show(tester, download, () {});
+    expect(find.text('Reopen installation confirmation'), findsNothing);
+    download
+      ..awaitingConfirmation = true
+      ..notifyListeners();
+    await tester.pump();
+    expect(
+      find.textContaining('installation prompt was closed'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Reopen installation confirmation'));
+    await tester.pump();
+    expect(download.reopened, 1);
+    expect(find.text('Reopen installation confirmation'), findsNothing);
+    download
+      ..awaitingConfirmation = true
+      ..notifyListeners();
+    await tester.pump();
+    await tester.tap(find.text('Cancel installation'));
+    await tester.pump();
+    expect(download.cancelledInstallations, 1);
+    expect(download.cleared, 0);
+    expect(find.text('Install update'), findsOneWidget);
   });
 }

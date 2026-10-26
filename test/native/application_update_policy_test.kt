@@ -44,11 +44,21 @@ fun main() {
         check(ApplicationUpdatePolicy.sessionResult(status) == "failed")
     }
     println("PASS: session status codes map to installed, cancelled, failed or awaiting confirmation")
-    check(ApplicationUpdatePolicy.leftoverSession(committed = false, writing = false) == "abandon")
-    check(ApplicationUpdatePolicy.leftoverSession(committed = true, writing = false) == "pending")
-    check(ApplicationUpdatePolicy.leftoverSession(committed = false, writing = true) == "keep")
-    check(ApplicationUpdatePolicy.leftoverSession(committed = true, writing = true) == "keep")
+    fun leftover(committed: Boolean, writing: Boolean = false, owned: Boolean = false, installed: Boolean = false) =
+        ApplicationUpdatePolicy.leftoverSession(committed, writing, owned, installed)
+    check(leftover(committed = false) == "abandon")
+    check(leftover(committed = false, owned = true) == "abandon")
+    check(leftover(committed = false, writing = true) == "keep")
+    check(leftover(committed = true, writing = true) == "keep")
     println("PASS: leftover uncommitted sessions are abandoned except while this process writes one")
+    check(leftover(committed = true, owned = true) == "pending")
+    check(leftover(committed = true, owned = true, installed = true) == "pending")
+    // Committed by a previous process: its confirmation intent is gone.
+    check(leftover(committed = true, installed = true) == "installed")
+    check(leftover(committed = true) == "orphaned")
+    check(ApplicationUpdatePolicy.orphanedResult(abandoned = true) == "cancelled")
+    check(ApplicationUpdatePolicy.orphanedResult(abandoned = false) == "pending")
+    println("PASS: orphaned committed sessions resolve to installed, cancelled, or stay pending if abandon fails")
     for (recorded in listOf(null, "cancelled", "failed")) {
         check(ApplicationUpdatePolicy.attemptStatus(true, recorded, false, null) == "installed")
     }
@@ -61,10 +71,15 @@ fun main() {
     check(ApplicationUpdatePolicy.attemptStatus(false, null, false, false) == "failed")
     check(ApplicationUpdatePolicy.attemptStatus(false, "corrupt", false, null) == "failed")
     println("PASS: installed identity first, then callbacks, then live session state")
-    check(ApplicationUpdatePolicy.launchConfirmation(waiting = true, resumed = true))
-    check(!ApplicationUpdatePolicy.launchConfirmation(waiting = true, resumed = false))
-    check(!ApplicationUpdatePolicy.launchConfirmation(waiting = false, resumed = true))
-    println("PASS: confirmation is deferred until the Activity is resumed")
+    fun action(waiting: Boolean, launched: Boolean, resumed: Boolean) =
+        ApplicationUpdatePolicy.confirmationAction(waiting, launched, resumed)
+    check(action(waiting = true, launched = false, resumed = true) == "launch")
+    check(action(waiting = true, launched = false, resumed = false) == "none")
+    check(action(waiting = false, launched = false, resumed = true) == "none")
+    // Returning after leaving the system UI asks the user instead of relaunching it.
+    check(action(waiting = true, launched = true, resumed = true) == "await")
+    check(action(waiting = true, launched = true, resumed = false) == "none")
+    println("PASS: confirmation launches once when resumed; a later resume awaits the user")
     check(ApplicationUpdatePolicy.occupiesInstaller("pending"))
     for (status in listOf("installed", "cancelled", "failed", "unknown")) {
         check(!ApplicationUpdatePolicy.occupiesInstaller(status))

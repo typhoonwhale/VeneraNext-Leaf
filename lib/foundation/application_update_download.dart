@@ -52,6 +52,9 @@ class ApplicationUpdateDownload extends ChangeNotifier {
   /// Untranslated system message accompanying [error], such as an installer
   /// failure reason.
   String? errorDetail;
+
+  /// The system confirmation was left open; the user may reopen or cancel it.
+  bool awaitingConfirmation = false;
   bool get isSupported => _supported;
   bool get busy =>
       state == ApplicationUpdateDownloadState.downloading ||
@@ -81,6 +84,7 @@ class ApplicationUpdateDownload extends ChangeNotifier {
     state = value;
     error = message;
     errorDetail = detail;
+    awaitingConfirmation = false;
     if (!_closed) notifyListeners();
   }
 
@@ -512,10 +516,26 @@ class ApplicationUpdateDownload extends ChangeNotifier {
       });
       if (attempt == null || _closed || generation != _generation) return;
       queueHold?.call();
-      final result = await installer.install(
-        version: candidate!.version,
-        attemptId: attempt!,
-      );
+      final awaiting = installer.awaitingConfirmation.listen((id) {
+        if (id != attempt ||
+            _closed ||
+            generation != _generation ||
+            state != ApplicationUpdateDownloadState.installing) {
+          return;
+        }
+        awaitingConfirmation = true;
+        notifyListeners();
+      });
+      final ApplicationUpdateInstallationResult result;
+      try {
+        result = await installer.install(
+          version: candidate!.version,
+          attemptId: attempt!,
+        );
+      } finally {
+        await awaiting.cancel();
+        awaitingConfirmation = false;
+      }
       if (_closed || generation != _generation) return;
       await _serial(() async {
         if (_closed ||
@@ -585,6 +605,40 @@ class ApplicationUpdateDownload extends ChangeNotifier {
             ? 'Previous installation is unconfirmed'
             : 'Unable to prepare installation',
       );
+    }
+  }
+
+  Future<void> reopenConfirmation() => _resolveConfirmation(
+    (id) => installer.reopenConfirmation(attemptId: id),
+    'Unable to reopen installation confirmation',
+  );
+
+  /// The pending [install] then completes as cancelled and keeps the package.
+  Future<void> cancelInstallation() => _resolveConfirmation(
+    (id) => installer.cancelInstallation(attemptId: id),
+    'Unable to cancel installation',
+  );
+
+  Future<void> _resolveConfirmation(
+    Future<void> Function(String attemptId) action,
+    String failure,
+  ) async {
+    final id = _attemptId;
+    if (_closed || !awaitingConfirmation || id == null) return;
+    awaitingConfirmation = false;
+    error = null;
+    notifyListeners();
+    try {
+      await action(id);
+    } catch (_) {
+      if (_closed ||
+          id != _attemptId ||
+          state != ApplicationUpdateDownloadState.installing) {
+        return;
+      }
+      awaitingConfirmation = true;
+      error = failure;
+      notifyListeners();
     }
   }
 

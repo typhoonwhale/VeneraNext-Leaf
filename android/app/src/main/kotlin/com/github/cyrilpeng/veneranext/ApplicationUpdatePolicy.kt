@@ -34,12 +34,22 @@ internal object ApplicationUpdatePolicy {
         else -> "failed" // FAILURE, BLOCKED, INVALID, CONFLICT, STORAGE, INCOMPATIBLE, TIMEOUT
     }
 
-    /** Uncommitted sessions are leftovers of an interrupted write; committed ones own their copy. */
-    fun leftoverSession(committed: Boolean, writing: Boolean): String = when {
+    /**
+     * Uncommitted sessions are leftovers of an interrupted write. A committed session this
+     * process did not create has lost its confirmation intent with the old process, so it can
+     * never be confirmed: report the target if it is already installed, otherwise abandon it.
+     */
+    fun leftoverSession(committed: Boolean, writing: Boolean, ownedByProcess: Boolean,
+                        targetInstalled: Boolean): String = when {
         writing -> "keep"
-        committed -> "pending"
-        else -> "abandon"
+        !committed -> "abandon"
+        ownedByProcess -> "pending"
+        targetInstalled -> "installed"
+        else -> "orphaned"
     }
+
+    /** Result recorded for the attempt after handling an orphaned committed session. */
+    fun orphanedResult(abandoned: Boolean): String = if (abandoned) "cancelled" else "pending"
 
     /**
      * A committed session no longer reads the local APK, so only an active write or a live
@@ -54,7 +64,15 @@ internal object ApplicationUpdatePolicy {
         else -> "failed"
     }
 
-    fun launchConfirmation(waiting: Boolean, resumed: Boolean) = waiting && resumed
+    /**
+     * The confirmation is started once when an Activity is resumed. A later resume with the
+     * session still open means the user left the system UI; Dart then offers reopen or cancel.
+     */
+    fun confirmationAction(waiting: Boolean, launched: Boolean, resumed: Boolean): String = when {
+        !waiting || !resumed -> "none"
+        launched -> "await"
+        else -> "launch"
+    }
 
     fun occupiesInstaller(status: String) = status == "pending"
 }

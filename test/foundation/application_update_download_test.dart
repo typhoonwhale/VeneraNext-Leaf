@@ -20,7 +20,26 @@ class FakeInstaller implements ApplicationUpdateInstaller {
   String? message;
   Object? installError;
   final attempts = <String>[];
+  final awaiting = StreamController<String>.broadcast();
+  final reopened = <String>[];
+  Object? confirmationError;
   Completer<ApplicationUpdateInstallationResult>? installation;
+  @override
+  Stream<String> get awaitingConfirmation => awaiting.stream;
+  @override
+  Future<void> reopenConfirmation({required String attemptId}) async {
+    if (confirmationError != null) throw confirmationError!;
+    reopened.add(attemptId);
+  }
+
+  @override
+  Future<void> cancelInstallation({required String attemptId}) async {
+    if (confirmationError != null) throw confirmationError!;
+    installation?.complete(
+      ApplicationUpdateInstallationResult(attemptId, 'cancelled'),
+    );
+  }
+
   @override
   Future<ApplicationUpdateIdentity> current() async =>
       ApplicationUpdateIdentity(
@@ -485,6 +504,46 @@ void main() {
       expect(native.attempts.toSet(), hasLength(2));
     },
   );
+
+  test('left confirmation can be reopened or cancelled for retry', () async {
+    final adapter = BytesAdapter(() => Stream.value(Uint8List.fromList(bytes)));
+    controller = make(adapter);
+    await controller.download(release());
+    native.installation = Completer();
+    final installing = controller.install();
+    while (native.attempts.isEmpty) {
+      await Future<void>.delayed(Duration.zero);
+    }
+    final attempt = native.attempts.single;
+    native.awaiting.add('stale');
+    await pumpEventQueue();
+    expect(controller.awaitingConfirmation, false);
+    native.awaiting.add(attempt);
+    await pumpEventQueue();
+    expect(controller.awaitingConfirmation, true);
+    await controller.reopenConfirmation();
+    expect(native.reopened, [attempt]);
+    expect(controller.awaitingConfirmation, false);
+    expect(controller.state, ApplicationUpdateDownloadState.installing);
+    native.awaiting.add(attempt);
+    await pumpEventQueue();
+    native.confirmationError = StateError('abandon failed');
+    await controller.cancelInstallation();
+    expect(controller.awaitingConfirmation, true);
+    expect(controller.error, 'Unable to cancel installation');
+    native.confirmationError = null;
+    await controller.cancelInstallation();
+    await installing;
+    expect(controller.state, ApplicationUpdateDownloadState.ready);
+    expect(controller.error, 'Installation cancelled');
+    expect(controller.awaitingConfirmation, false);
+    native
+      ..installation = null
+      ..status = 'installed';
+    await controller.install();
+    expect(adapter.calls, 1);
+    expect(controller.state, ApplicationUpdateDownloadState.idle);
+  });
 
   test('cancelled session retries from the local file', () async {
     final adapter = BytesAdapter(() => Stream.value(Uint8List.fromList(bytes)));

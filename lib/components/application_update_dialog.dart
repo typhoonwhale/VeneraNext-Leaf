@@ -89,6 +89,7 @@ class _ApplicationUpdateDialogState extends State<ApplicationUpdateDialog> {
       final downloading = state == ApplicationUpdateDownloadState.downloading;
       final verifying = state == ApplicationUpdateDownloadState.verifying;
       final ready = state == ApplicationUpdateDownloadState.ready;
+      final awaiting = installing && controller.awaitingConfirmation;
       final supported = controller.isSupported;
       final error = _actionError ?? controller.error;
       final canDownload =
@@ -164,6 +165,8 @@ class _ApplicationUpdateDialogState extends State<ApplicationUpdateDialog> {
                   Text(
                     (blocked
                             ? 'The previous installation has no confirmed result. The package is kept. Complete the system installation or update manually from the release page.'
+                            : awaiting
+                            ? 'The Android installation prompt was closed. Reopen it to continue, or cancel this installation.'
                             : 'Complete the permission or installation request in Android. The package will be kept.')
                         .tl,
                   ),
@@ -222,6 +225,20 @@ class _ApplicationUpdateDialogState extends State<ApplicationUpdateDialog> {
                       .tl,
                 ),
               ),
+            if (awaiting) ...[
+              TextButton(
+                onPressed: _closing
+                    ? null
+                    : () => _perform(controller.cancelInstallation),
+                child: Text('Cancel installation'.tl),
+              ),
+              FilledButton(
+                onPressed: _closing
+                    ? null
+                    : () => _perform(controller.reopenConfirmation),
+                child: Text('Reopen installation confirmation'.tl),
+              ),
+            ],
             if (ready && supported)
               FilledButton(
                 onPressed: _closing ? null : () => _perform(controller.install),

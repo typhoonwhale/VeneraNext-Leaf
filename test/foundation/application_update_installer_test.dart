@@ -27,6 +27,9 @@ void main() {
                 'versionName': '2.0.0',
                 'installedVersionCode': 1,
               };
+            case 'reopenConfirmation':
+            case 'cancelInstallation':
+              return null;
             case 'canInstall':
             case 'requestPermission':
               return true;
@@ -67,5 +70,24 @@ void main() {
     expect(status.status, 'cancelled');
     // Older bridges send no message field.
     expect(status.message, isNull);
+  });
+  test('native confirmation notices and actions carry the attempt', () async {
+    final notices = <String>[];
+    final subscription = installer.awaitingConfirmation.listen(notices.add);
+    addTearDown(subscription.cancel);
+    await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .handlePlatformMessage(
+          channel.name,
+          channel.codec.encodeMethodCall(
+            const MethodCall('awaitingConfirmation', {'attemptId': 'one'}),
+          ),
+          (_) {},
+        );
+    expect(notices, ['one']);
+    await installer.reopenConfirmation(attemptId: 'one');
+    expect(calls.last.method, 'reopenConfirmation');
+    expect(calls.last.arguments, {'attemptId': 'one'});
+    await installer.cancelInstallation(attemptId: 'one');
+    expect(calls.last.method, 'cancelInstallation');
   });
 }
