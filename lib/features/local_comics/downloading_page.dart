@@ -131,7 +131,7 @@ class _DownloadingPageState extends State<DownloadingPage> {
                 ],
               ),
               onPressed: () {
-                manager.pauseDownload(first);
+                manager.pauseDownload(first, byUser: true);
               },
             ),
         ],

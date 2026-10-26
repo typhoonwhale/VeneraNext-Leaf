@@ -14,6 +14,8 @@ class FakeInstaller implements ApplicationUpdateInstaller {
   int installedCode = 1;
   bool debug = false;
   bool installationPending = false;
+  bool permitted = true;
+  Completer<void>? permission;
   String status = 'unknown';
   Completer<ApplicationUpdateInstallationResult>? installation;
   @override
@@ -32,9 +34,13 @@ class FakeInstaller implements ApplicationUpdateInstaller {
         installedVersionCode: installedCode,
       );
   @override
-  Future<bool> canInstall() async => true;
+  Future<bool> canInstall() async => permitted;
   @override
-  Future<bool> requestPermission() async => true;
+  Future<bool> requestPermission() async {
+    await permission?.future;
+    return permitted;
+  }
+
   @override
   Future<ApplicationUpdateInstallationResult> install({
     required String version,
@@ -108,6 +114,8 @@ void main() {
   late Directory root;
   late FakeInstaller native;
   late ApplicationUpdateDownload controller;
+  late Set<int> queueHolds;
+  var holdCount = 0;
   final bytes = utf8.encode('fixture APK bytes');
   ApplicationUpdateRelease release() => ApplicationUpdateRelease(
     version: '2.0.0',
@@ -129,11 +137,18 @@ void main() {
         installer: native,
         networkTimeout: const Duration(milliseconds: 100),
         dioFactory: () => Dio()..httpClientAdapter = adapter,
+        holdDownloadQueue: () {
+          final hold = ++holdCount;
+          queueHolds.add(hold);
+          return () => queueHolds.remove(hold);
+        },
       );
   File file(String name) => File('${root.path}/updates/$name');
   setUp(() async {
     root = await Directory.systemTemp.createTemp('leaf-updates-test-');
     native = FakeInstaller();
+    queueHolds = {};
+    holdCount = 0;
   });
   tearDown(() async {
     await controller.closeAndWait();
@@ -461,5 +476,88 @@ void main() {
     await controller.initialize();
     expect(controller.state, ApplicationUpdateDownloadState.blocked);
     expect(await outside.readAsString(), 'keep');
+  });
+
+  group('download queue hold', () {
+    BytesAdapter valid() =>
+        BytesAdapter(() => Stream.value(Uint8List.fromList(bytes)));
+
+    test('lasts from download until handoff to the installer', () async {
+      controller = make(valid());
+      final downloading = controller.download(release());
+      expect(queueHolds, {1});
+      await downloading;
+      expect(controller.state, ApplicationUpdateDownloadState.ready);
+      expect(queueHolds, {1});
+      native.installation = Completer();
+      final installing = controller.install();
+      while (queueHolds.isNotEmpty) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      native.installation!.complete(
+        const ApplicationUpdateInstallationResult('stale', 'cancelled'),
+      );
+      await installing;
+      expect(queueHolds, isEmpty);
+    });
+
+    test('ends with download or verification failure', () async {
+      controller = make(BytesAdapter(() => const Stream.empty(), status: 404));
+      await controller.download(release());
+      expect(controller.state, ApplicationUpdateDownloadState.failed);
+      expect(queueHolds, isEmpty);
+      await controller.closeAndWait();
+      controller = make(
+        BytesAdapter(() => Stream.value(Uint8List(bytes.length))),
+      );
+      await controller.download(release());
+      expect(controller.state, ApplicationUpdateDownloadState.failed);
+      expect(queueHolds, isEmpty);
+    });
+
+    test('ends with cancellation during transfer and with close', () async {
+      final chunks = StreamController<Uint8List>();
+      final adapter = BytesAdapter(() => chunks.stream);
+      controller = make(adapter);
+      final active = controller.download(release());
+      while (adapter.calls == 0) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      await controller.cancelAndClear();
+      expect(queueHolds, isEmpty);
+      await active;
+      await chunks.close();
+      await controller.closeAndWait();
+      controller = make(valid());
+      await controller.download(release());
+      expect(queueHolds, {2});
+      await controller.closeAndWait();
+      expect(queueHolds, isEmpty);
+    });
+
+    test('ends when install permission is denied', () async {
+      controller = make(valid());
+      await controller.download(release());
+      native.permitted = false;
+      await controller.install();
+      expect(controller.error, 'Permission to install updates was denied');
+      expect(queueHolds, isEmpty);
+    });
+
+    test('an older round cannot release the next round', () async {
+      controller = make(valid());
+      await controller.download(release());
+      native.permitted = false;
+      native.permission = Completer();
+      final installing = controller.install();
+      await Future<void>.delayed(Duration.zero);
+      await controller.cancelAndClear();
+      expect(queueHolds, isEmpty);
+      await controller.download(release());
+      expect(queueHolds, {2});
+      native.permission!.complete();
+      await installing;
+      expect(queueHolds, {2});
+    });
   });
 }

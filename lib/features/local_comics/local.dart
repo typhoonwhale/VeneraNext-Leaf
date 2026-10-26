@@ -40,6 +40,9 @@ import 'local_storage_guard.dart';
 import 'local_storage_migration.dart';
 import 'local_storage_relocation.dart';
 
+typedef DownloadTaskDecoder =
+    DownloadTask? Function(Map<String, dynamic>, DownloadTaskStorage);
+
 extension LocalComicFiles on LocalComic {
   File get coverFile => File(FilePath.join(baseDir, cover));
 
@@ -89,21 +92,31 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
     Database Function(String)? openDatabase,
     Future<void> Function()? initializeSources,
     LocalComicRelatedData? relatedData,
+    DownloadTaskDecoder? decodeDownloadTask,
   }) : _openDatabase = openDatabase ?? openSqliteDatabase,
        _initializeSources = initializeSources,
-       _providedRelatedData = relatedData;
+       _providedRelatedData = relatedData,
+       _decodeDownloadTask = decodeDownloadTask ?? _decodeKnownDownloadTask;
 
   /// A caller-owned library that does not replace the application's default.
   factory LocalManager.independent({
     Database Function(String)? openDatabase,
     Future<void> Function()? initializeSources,
     LocalComicRelatedData? relatedData,
+    DownloadTaskDecoder? decodeDownloadTask,
   }) => LocalManager._(
     openDatabase: openDatabase,
     initializeSources: initializeSources,
     relatedData: relatedData,
+    decodeDownloadTask: decodeDownloadTask,
   );
 
+  static DownloadTask? _decodeKnownDownloadTask(
+    Map<String, dynamic> json,
+    DownloadTaskStorage storage,
+  ) => downloadTaskFromJson(json, storage: storage);
+
+  final DownloadTaskDecoder _decodeDownloadTask;
   final Database Function(String) _openDatabase;
   final Future<void> Function()? _initializeSources;
   final LocalComicRelatedData? _providedRelatedData;
@@ -121,17 +134,20 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
     Database Function(String)? openDatabase,
     Future<void> Function()? initializeSources,
     LocalComicRelatedData? relatedData,
+    DownloadTaskDecoder? decodeDownloadTask,
   }) {
     if (_instance != null &&
         (openDatabase != null ||
             initializeSources != null ||
-            relatedData != null)) {
+            relatedData != null ||
+            decodeDownloadTask != null)) {
       throw StateError('Local manager dependencies are already bound');
     }
     return _instance ??= LocalManager._(
       openDatabase: openDatabase,
       initializeSources: initializeSources,
       relatedData: relatedData,
+      decodeDownloadTask: decodeDownloadTask,
     );
   }
 
@@ -362,6 +378,10 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
       App.dataPath,
       'downloading_tasks.json',
     );
+    _downloadAutoResumeMarkerPath = FilePath.join(
+      App.dataPath,
+      'download_auto_resume.pending',
+    );
     _database = _openDatabase('${App.dataPath}/local.db');
     _libraryPathFile = File(FilePath.join(App.dataPath, 'local_path'));
     LocalRepository(_rawDatabase).initialize();
@@ -398,6 +418,8 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
     }
     _checkNotDisposed();
     restoreDownloadingTasks();
+    // Initialization and UI do not wait for downloads to start.
+    _downloadAutoResume = _resumeDownloadsByIntent();
   }
 
   String findValidId(ComicType type) => _repository.findValidId(type);
@@ -684,7 +706,9 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
     _downloadQueue.resume(task);
   }
 
-  Future<void> pauseDownload(DownloadTask task) => _downloadQueue.pause(task);
+  /// Only the download page passes [byUser]; system pauses keep the intent.
+  Future<void> pauseDownload(DownloadTask task, {bool byUser = false}) =>
+      _downloadQueue.pause(task, byUser: byUser);
 
   Future<void> moveToFirst(DownloadTask task) {
     _storageAccess.check();
@@ -715,6 +739,11 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
     }
   }
 
+  /// Keep running downloads but stop the queue from starting tasks on its own
+  /// until the returned callback runs. Without a live library this is a no-op.
+  static VoidCallback holdAutomaticDownloadStarts() =>
+      _instance?._downloadQueue.holdAutomaticStarts() ?? () {};
+
   final _downloadTaskStore = DownloadTaskStore(
     onError: (error, stack) => Log.error('LocalManager', error, stack),
   );
@@ -734,25 +763,74 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
   @override
   Future<void> saveCurrentDownloadingTasks() => _downloadTaskStore.save(
     _taskSnapshotPath,
-    downloadingTasks.map((task) => task.toJson()),
+    downloadingTasks.map(
+      (task) => {
+        ...task.toJson(),
+        _userPausedKey: _downloadQueue.isPausedByUser(task),
+      },
+    ),
   );
 
+  /// Shared by every task kind, so task codecs do not carry queue intent.
+  static const _userPausedKey = 'userPaused';
+
   /// Install a fully decoded paused snapshot during initialization/recovery.
-  void restorePausedDownloads(Iterable<DownloadTask> tasks) {
+  void restorePausedDownloads(
+    Iterable<DownloadTask> tasks, {
+    Iterable<DownloadTask> pausedByUser = const [],
+  }) {
     _storageAccess.check();
-    _downloadQueue.restorePausedTasks(tasks);
+    _downloadQueue.restorePausedTasks(tasks, pausedByUser: pausedByUser);
   }
 
   void restoreDownloadingTasks() {
     _storageAccess.check();
     try {
-      final tasks = _downloadTaskStore.restore(
-        _taskSnapshotPath,
-        (json) => downloadTaskFromJson(json, storage: this),
-      );
-      if (tasks != null) {
-        restorePausedDownloads(tasks);
+      final entries = _downloadTaskStore.restore(_taskSnapshotPath, (json) {
+        final task = _decodeDownloadTask(json, this);
+        // Older snapshots and damaged values never resume a task by themselves.
+        return task == null ? null : (task, json[_userPausedKey] != false);
+      });
+      if (entries != null) {
+        restorePausedDownloads(
+          entries.map((entry) => entry.$1),
+          pausedByUser: [
+            for (final (task, paused) in entries)
+              if (paused) task,
+          ],
+        );
       }
+    } catch (error, stack) {
+      Log.error('LocalManager', error, stack);
+    }
+  }
+
+  String? _downloadAutoResumeMarkerPath;
+  Future<void> _downloadAutoResume = Future.value();
+
+  /// Completes when the startup resume by user intent has been scheduled.
+  Future<void> get pendingDownloadAutoResume => _downloadAutoResume;
+
+  /// The marker outlives a crash between writing it and scheduling the resume;
+  /// the next startup then leaves every task paused for manual resume.
+  Future<void> _resumeDownloadsByIntent() async {
+    final marker = File(_downloadAutoResumeMarkerPath!);
+    try {
+      if (await marker.exists()) {
+        Log.warning(
+          'LocalManager',
+          'Previous download auto-resume did not finish; downloads stay paused',
+        );
+        await marker.delete();
+        return;
+      }
+      final first = downloadingTasks.firstOrNull;
+      if (first == null || _downloadQueue.isPausedByUser(first)) return;
+      await marker.writeAsString('', flush: true);
+      if (!_disposed && !requiresStorageRecovery) {
+        _downloadQueue.resumeByIntent();
+      }
+      await marker.delete();
     } catch (error, stack) {
       Log.error('LocalManager', error, stack);
     }

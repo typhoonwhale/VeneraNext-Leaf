@@ -30,6 +30,7 @@ class ApplicationUpdateDownload extends ChangeNotifier {
     required this.dioFactory,
     ApplicationUpdateInstaller? installer,
     this.networkTimeout = const Duration(seconds: 30),
+    this.holdDownloadQueue,
   }) : directory = Directory('$cacheRoot/updates'),
        installer = installer ?? const MethodChannelApplicationUpdateInstaller();
 
@@ -38,6 +39,10 @@ class ApplicationUpdateDownload extends ChangeNotifier {
   final String repository;
   final Dio Function() dioFactory;
   final ApplicationUpdateInstaller installer;
+
+  /// Stops other downloads from starting on their own during one update round;
+  /// returns that round's release callback.
+  final VoidCallback Function()? holdDownloadQueue;
   ApplicationUpdateDownloadState state = ApplicationUpdateDownloadState.idle;
   ApplicationUpdateRelease? candidate;
   int progress = 0;
@@ -56,6 +61,7 @@ class ApplicationUpdateDownload extends ChangeNotifier {
   String? _attemptId;
   Future<void> _tail = Future.value();
   CancelToken? _cancel;
+  VoidCallback? _downloadQueueHold;
   File get _part => File('${directory.path}/update.apk.part');
   File get _apk => File('${directory.path}/update.apk');
   File get _pending => File('${directory.path}/pending.json');
@@ -214,6 +220,26 @@ class ApplicationUpdateDownload extends ChangeNotifier {
     return inspection;
   }
 
+  /// Each round releases only its own hold, so a stale callback from an older
+  /// round cannot lift the restriction of a newer one.
+  VoidCallback _holdDownloadQueue() {
+    _downloadQueueHold?.call();
+    VoidCallback? release;
+    try {
+      release = holdDownloadQueue?.call();
+    } catch (failure, stack) {
+      Log.error('Application update', failure, stack);
+    }
+    late final VoidCallback hold;
+    hold = () {
+      if (identical(_downloadQueueHold, hold)) _downloadQueueHold = null;
+      final callback = release;
+      release = null;
+      callback?.call();
+    };
+    return _downloadQueueHold = hold;
+  }
+
   void _checkCancellation() {
     if (_cancel?.isCancelled == true) throw StateError('Update cancelled');
   }
@@ -223,6 +249,7 @@ class ApplicationUpdateDownload extends ChangeNotifier {
     final generation = _generation;
     // Set synchronously so a second click cannot queue a second transfer.
     _set(ApplicationUpdateDownloadState.downloading);
+    final queueHold = _holdDownloadQueue();
     return _serial(() async {
       Dio? dio;
       RandomAccessFile? file;
@@ -395,6 +422,12 @@ class ApplicationUpdateDownload extends ChangeNotifier {
           );
         }
         _cancel = null;
+        // A verified package keeps the hold until it is handed to the installer.
+        if (_closed ||
+            generation != _generation ||
+            state != ApplicationUpdateDownloadState.ready) {
+          queueHold();
+        }
       }
     });
   }
@@ -406,6 +439,7 @@ class ApplicationUpdateDownload extends ChangeNotifier {
       return;
     }
     final generation = _generation;
+    final queueHold = _downloadQueueHold;
     _set(ApplicationUpdateDownloadState.installing);
     // Permission and system UI futures are outside the file lane: closing the
     // app must not wait indefinitely for a user to return from another app.
@@ -414,6 +448,7 @@ class ApplicationUpdateDownload extends ChangeNotifier {
         await installer.requestPermission();
         if (_closed || generation != _generation) return;
         if (!await installer.canInstall()) {
+          queueHold?.call();
           _set(
             ApplicationUpdateDownloadState.ready,
             'Permission to install updates was denied',
@@ -441,6 +476,7 @@ class ApplicationUpdateDownload extends ChangeNotifier {
         attempt = _attemptId;
       });
       if (attempt == null || _closed || generation != _generation) return;
+      queueHold?.call();
       final result = await installer.install(
         version: candidate!.version,
         attemptId: attempt!,
@@ -486,6 +522,7 @@ class ApplicationUpdateDownload extends ChangeNotifier {
         'Application update',
         'Install failed for ${candidate?.version}: ${failure.runtimeType}\n$stack',
       );
+      queueHold?.call();
       if (!_occupied) {
         await _serial(() async {
           try {
@@ -508,6 +545,7 @@ class ApplicationUpdateDownload extends ChangeNotifier {
 
   Future<void> cancelAndClear() {
     _generation++;
+    _downloadQueueHold?.call();
     _cancel?.cancel('Update cancelled');
     return _serial(() async {
       if (!_initialized) await _initialize();

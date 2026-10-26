@@ -21,8 +21,17 @@ class DownloadQueue {
   Future<void>? _pendingStop;
   int? _scheduledResumeRevision;
   Completer<void>? _suspension;
+  final _automaticStartHolds = <Object>{};
+  int? _heldAutomaticStartRevision;
+  bool _scheduledResumeAutomatic = false;
 
   bool get isSuspended => _suspension != null;
+
+  /// Persisted user intent; system suspension and exit preparation never
+  /// change it. Snapshot decoding treats missing or invalid intent as paused.
+  final _pausedByUser = Set<DownloadTask>.identity();
+
+  bool isPausedByUser(DownloadTask task) => _pausedByUser.contains(task);
 
   final List<DownloadTask> _tasks = [];
   late final List<DownloadTask> tasks = UnmodifiableListView(_tasks);
@@ -32,7 +41,10 @@ class DownloadQueue {
 
   /// Publish a complete paused snapshot during initialization/recovery, without
   /// starting tasks, notifying listeners or writing the snapshot back to disk.
-  void restorePausedTasks(Iterable<DownloadTask> restored) {
+  void restorePausedTasks(
+    Iterable<DownloadTask> restored, {
+    Iterable<DownloadTask> pausedByUser = const [],
+  }) {
     if (_suspension != null) throw StateError('Download queue is suspended');
     final revision = _revision;
     final snapshot = <DownloadTask>[];
@@ -50,6 +62,9 @@ class DownloadQueue {
     _tasks
       ..clear()
       ..addAll(snapshot);
+    _pausedByUser
+      ..clear()
+      ..addAll(pausedByUser.where((task) => _indexOf(task) >= 0));
     _revision++;
   }
 
@@ -70,7 +85,7 @@ class DownloadQueue {
     _tasks.add(task);
     final revision = ++_revision;
     _publish();
-    _resumeIfUnchanged(revision);
+    _resumeIfUnchanged(revision, automatic: true);
   }
 
   void complete(DownloadTask task) {
@@ -85,27 +100,35 @@ class DownloadQueue {
       final index = _indexOf(task);
       if (index < 0) return;
       _tasks.removeAt(index);
+      _pausedByUser.remove(task);
       final revision = ++_revision;
       _publish();
-      _resumeIfUnchanged(revision);
+      _resumeIfUnchanged(revision, automatic: true);
     } finally {
       _completing.remove(task);
     }
   }
 
-  void _resumeIfUnchanged(int revision) {
+  void _resumeIfUnchanged(int revision, {bool automatic = false}) {
     // A nested queue operation owns the final scheduling decision.
     if (_suspension != null || revision != _revision) return;
+    if (automatic && _automaticStartHolds.isNotEmpty) {
+      // The last released hold performs this start if nothing changed since.
+      _scheduledResumeRevision = null;
+      _heldAutomaticStartRevision = revision;
+      return;
+    }
     final stop = _pendingStop;
     if (stop == null) {
       _scheduledResumeRevision = null;
       tasks.firstOrNull?.resume();
     } else {
       _scheduledResumeRevision = revision;
+      _scheduledResumeAutomatic = automatic;
       unawaited(
         stop
             .then<void>(
-              (_) => _resumeIfUnchanged(revision),
+              (_) => _resumeIfUnchanged(revision, automatic: automatic),
               onError: (Object error, StackTrace stack) {},
             )
             .catchError(reportError),
@@ -117,24 +140,37 @@ class DownloadQueue {
   bool get isResumePending =>
       _pendingStop != null && _scheduledResumeRevision == _revision;
 
-  void resume(DownloadTask task) {
+  /// A manual resume records user intent and is allowed while automatic
+  /// starts are held; an automatic resume does neither.
+  void resume(DownloadTask task, {bool automatic = false}) {
     if (_suspension != null ||
         !identical(tasks.firstOrNull, task) ||
         !task.isPaused ||
         isResumePending) {
       return;
     }
+    if (!automatic && _pausedByUser.remove(task)) requestSave();
     final revision = ++_revision;
     _scheduledResumeRevision = revision;
     notifyChanged();
-    _resumeIfUnchanged(revision);
+    _resumeIfUnchanged(revision, automatic: automatic);
   }
 
-  Future<void> pause(DownloadTask task) {
+  /// Start the restored head only when the user had not paused it. Tasks
+  /// behind a user-paused head keep waiting, as they did before the restart.
+  void resumeByIntent() {
+    final first = tasks.firstOrNull;
+    if (first != null && !isPausedByUser(first)) {
+      resume(first, automatic: true);
+    }
+  }
+
+  Future<void> pause(DownloadTask task, {bool byUser = false}) {
     if (_suspension != null) return _suspension!.future;
     if (!identical(tasks.firstOrNull, task)) return Future.value();
     _revision++;
     _scheduledResumeRevision = null;
+    if (byUser && _pausedByUser.add(task)) requestSave();
     final stopped = _stopBeforeScheduling(task, task.pause);
     notifyChanged();
     return stopped;
@@ -158,7 +194,7 @@ class DownloadQueue {
     });
     // Do not replace a newer listener action with the pre-cancel start intent.
     if (keepPendingStart && _revision == before + 1) {
-      _resumeIfUnchanged(_revision);
+      _resumeIfUnchanged(_revision, automatic: _scheduledResumeAutomatic);
     }
     return stopped;
   }
@@ -167,6 +203,7 @@ class DownloadQueue {
     final index = _indexOf(task);
     if (index < 0) return;
     _tasks.removeAt(index);
+    _pausedByUser.remove(task);
     _revision++;
     _publish();
   }
@@ -190,6 +227,25 @@ class DownloadQueue {
     _publish();
     if (shouldResume) _resumeIfUnchanged(revision);
     return stopped;
+  }
+
+  /// Stop the queue from starting tasks on its own until this holder releases.
+  /// Running tasks continue and manual resume still works. Holders are
+  /// independent of each other and of [suspend]; release is idempotent.
+  void Function() holdAutomaticStarts() {
+    final hold = Object();
+    _automaticStartHolds.add(hold);
+    return () {
+      if (!_automaticStartHolds.remove(hold) ||
+          _automaticStartHolds.isNotEmpty) {
+        return;
+      }
+      final revision = _heldAutomaticStartRevision;
+      _heldAutomaticStartRevision = null;
+      if (revision == _revision) {
+        _resumeIfUnchanged(revision!, automatic: true);
+      }
+    };
   }
 
   /// Freeze admissions/scheduling and drain all accepted pause/cancel work.

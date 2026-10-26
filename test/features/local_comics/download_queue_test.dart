@@ -551,6 +551,161 @@ void main() {
       expect(events, isEmpty);
     },
   );
+
+  test(
+    'held queue keeps running work, skips automatic starts and allows manual resume',
+    () async {
+      final first = _Task('a', events);
+      final second = _Task('b', events);
+      final third = _Task('c', events);
+      queue.add(first);
+      final release = queue.holdAutomaticStarts();
+      queue.add(second);
+      queue.add(third);
+      expect(first.isPaused, isFalse);
+      queue.complete(first);
+      await pumpEventQueue();
+      expect(queue.tasks.first, second);
+      expect(second.isPaused, isTrue);
+      expect(queue.isResumePending, isFalse);
+      queue.resume(second);
+      expect(second.isPaused, isFalse);
+      queue.complete(second);
+      await pumpEventQueue();
+      expect(third.isPaused, isTrue);
+      release();
+      expect(third.isPaused, isFalse);
+      expect(events.where((event) => event.startsWith('resume:')), [
+        'resume:a',
+        'resume:b',
+        'resume:c',
+      ]);
+    },
+  );
+
+  test(
+    'automatic start deferred behind a stop stays held until release',
+    () async {
+      final gate = Completer<void>();
+      final first = _Task('a', events)..cleanup = gate.future;
+      final second = _Task('b', events);
+      queue.add(first);
+      queue.add(second);
+      final paused = queue.pause(first);
+      queue.complete(first);
+      expect(queue.isResumePending, isTrue);
+      final release = queue.holdAutomaticStarts();
+      gate.complete();
+      await paused;
+      await pumpEventQueue();
+      expect(second.isPaused, isTrue);
+      expect(queue.isResumePending, isFalse);
+      release();
+      expect(second.isPaused, isFalse);
+    },
+  );
+
+  test('a newer manual action supersedes the held automatic start', () {
+    final first = _Task('a', events);
+    final second = _Task('b', events);
+    queue.add(first);
+    final release = queue.holdAutomaticStarts();
+    queue.add(second);
+    queue.complete(first);
+    queue.pause(second, byUser: true);
+    release();
+    expect(second.isPaused, isTrue);
+  });
+
+  test('holders release independently and stale releases are no-ops', () {
+    final first = _Task('a', events);
+    final second = _Task('b', events);
+    queue.add(first);
+    final older = queue.holdAutomaticStarts();
+    final newer = queue.holdAutomaticStarts();
+    queue.add(second);
+    queue.complete(first);
+    older();
+    older();
+    expect(second.isPaused, isTrue);
+    final latest = queue.holdAutomaticStarts();
+    newer();
+    expect(second.isPaused, isTrue);
+    latest();
+    expect(second.isPaused, isFalse);
+  });
+
+  test('holds and suspension never release each other', () async {
+    final first = _Task('a', events);
+    final second = _Task('b', events);
+    queue.add(first);
+    final release = queue.holdAutomaticStarts();
+    queue.add(second);
+    queue.complete(first);
+    final suspension = queue.suspend();
+    await suspension;
+    release();
+    expect(queue.isSuspended, isTrue);
+    expect(second.isPaused, isTrue);
+    final again = queue.holdAutomaticStarts();
+    queue.releaseSuspension(suspension);
+    queue.add(_Task('c', events));
+    expect(second.isPaused, isTrue);
+    again();
+    expect(second.isPaused, isFalse);
+  });
+
+  test(
+    'only user pause and resume change persisted intent and request a save',
+    () async {
+      final first = _Task('a', events);
+      final second = _Task('b', events);
+      queue.restorePausedTasks([first, second], pausedByUser: [second]);
+      expect(queue.isPausedByUser(first), isFalse);
+      expect(queue.isPausedByUser(second), isTrue);
+      queue.resume(first);
+      await queue.pause(first);
+      await queue.suspend();
+      expect(queue.isPausedByUser(first), isFalse);
+      expect(events.where((event) => event == 'save'), isEmpty);
+      final restored = _Task('a', events);
+      queue = DownloadQueue(
+        commitComic: (_) {},
+        notifyChanged: () {},
+        requestSave: () => events.add('save'),
+        reportError: (error, stack) => events.add('error:$error'),
+      );
+      queue.restorePausedTasks([restored]);
+      queue.resume(restored);
+      await queue.pause(restored, byUser: true);
+      expect(queue.isPausedByUser(restored), isTrue);
+      queue.resumeByIntent();
+      expect(restored.isPaused, isTrue);
+      queue.resume(restored);
+      expect(queue.isPausedByUser(restored), isFalse);
+      expect(events.where((event) => event == 'save'), hasLength(2));
+    },
+  );
+
+  test(
+    'resume by intent starts an unpaused head through holds and suspension',
+    () async {
+      final head = _Task('a', events);
+      queue.restorePausedTasks([head]);
+      final release = queue.holdAutomaticStarts();
+      queue.resumeByIntent();
+      expect(head.isPaused, isTrue);
+      release();
+      expect(head.isPaused, isFalse);
+      final paused = _Task('b', events);
+      final waiting = _Task('c', events);
+      await queue.pause(head);
+      queue.restorePausedTasks([paused, waiting], pausedByUser: [paused]);
+      queue.resumeByIntent();
+      expect(paused.isPaused, isTrue);
+      expect(waiting.isPaused, isTrue);
+    },
+  );
 }
 
 class _Task extends DownloadTask {

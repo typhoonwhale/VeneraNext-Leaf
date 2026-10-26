@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -6,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:venera_next/features/local_comics/download_task.dart';
 import 'package:venera_next/features/local_comics/downloading_page.dart';
 import 'package:venera_next/features/local_comics/local.dart';
+import 'package:venera_next/foundation/app.dart';
 import 'package:venera_next/foundation/comic_type.dart';
 
 void main() {
@@ -67,7 +69,11 @@ void main() {
   testWidgets('page pause withdraws a start pending old cleanup', (
     tester,
   ) async {
+    // The page's pause is a user pause and saves the intent snapshot.
+    final root = Directory.systemTemp.createTempSync('downloading-page-');
+    App.dataPath = root.path;
     final manager = LocalManager();
+    addTearDown(() => root.deleteSync(recursive: true));
     final gate = Completer<void>();
     final task = _Task('a')..cleanup = gate.future;
     manager.restorePausedDownloads([task]);

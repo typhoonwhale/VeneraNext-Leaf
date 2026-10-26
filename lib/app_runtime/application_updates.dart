@@ -1,4 +1,5 @@
 import 'package:venera_next/features/comic_source/comic_source_api.dart';
+import 'package:venera_next/features/local_comics/local.dart';
 import 'package:venera_next/foundation/app.dart';
 import 'package:venera_next/foundation/appdata.dart';
 import 'package:venera_next/foundation/application_preferences.dart';
@@ -52,6 +53,7 @@ ApplicationUpdateDownload? createApplicationUpdateDownload(
     cacheRoot: cacheRoot ?? App.cachePath,
     repository: service.releaseRepository!,
     dioFactory: () => Dio()..httpClientAdapter = RHttpAdapter(),
+    holdDownloadQueue: LocalManager.holdAutomaticDownloadStarts,
   );
 }
 
