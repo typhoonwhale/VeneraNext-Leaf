@@ -305,6 +305,7 @@ class _NetworkSectionState extends State<NetworkFavoriteSection> {
           ),
         ),
         Shimmer(
+          enabled: !MediaQuery.disableAnimationsOf(context),
           child: Column(
             children: List.generate(3, (index) {
               return ListTile(

@@ -394,7 +394,18 @@ class __AnimatedDownloadingIconState extends State<_AnimatedDownloadingIcon>
       lowerBound: -1,
       vsync: this,
       duration: const Duration(milliseconds: 2000),
-    )..repeat();
+    );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _controller.stop();
+      _controller.value = 0;
+    } else if (!_controller.isAnimating) {
+      _controller.repeat();
+    }
   }
 
   @override

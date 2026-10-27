@@ -11,6 +11,31 @@ abstract final class EInkPreferences {
       GlobalPreferenceStore(appdata.settings).appearance.reduceMotion;
 }
 
+/// A [CircularProgressIndicator] that stops spinning when animations are
+/// disabled: an indeterminate indicator then shows a static half ring.
+/// Determinate progress is passed through unchanged.
+class EInkProgressIndicator extends StatelessWidget {
+  const EInkProgressIndicator({
+    super.key,
+    this.value,
+    this.strokeWidth = 4.0,
+    this.backgroundColor,
+  });
+
+  final double? value;
+  final double strokeWidth;
+  final Color? backgroundColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return CircularProgressIndicator(
+      value: value ?? (MediaQuery.disableAnimationsOf(context) ? 0.5 : null),
+      strokeWidth: strokeWidth,
+      backgroundColor: backgroundColor,
+    );
+  }
+}
+
 /// Theme-carried E-Ink flag and the shared selected-state colors.
 @immutable
 class EInkStyle extends ThemeExtension<EInkStyle> {

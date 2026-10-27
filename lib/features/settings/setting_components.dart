@@ -18,7 +18,7 @@ import 'package:venera_next/foundation/widget_utils.dart';
 
 const _savingIndicator = SizedBox.square(
   dimension: 18,
-  child: CircularProgressIndicator(strokeWidth: 2),
+  child: EInkProgressIndicator(strokeWidth: 2),
 );
 
 /// Own the actual save until it finishes, including during forced unmount.

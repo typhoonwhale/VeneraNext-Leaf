@@ -328,9 +328,12 @@ class _AnimatedImageState extends State<AnimatedImage>
       result = const Center();
     }
 
+    final fade = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : const Duration(milliseconds: 200);
     return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 200),
-      reverseDuration: const Duration(milliseconds: 200),
+      duration: fade,
+      reverseDuration: fade,
       child: result,
     );
   }

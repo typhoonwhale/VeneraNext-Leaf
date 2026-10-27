@@ -540,6 +540,9 @@ class _SingleBottomNaviWidgetState extends State<_SingleBottomNaviWidget>
   void didUpdateWidget(covariant _SingleBottomNaviWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.enabled != widget.enabled) {
+      controller.duration = MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : fastAnimationDuration;
       if (widget.enabled) {
         controller.forward(from: 0);
       } else {
@@ -799,7 +802,9 @@ class _NaviMainViewState extends State<_NaviMainView> {
             context: context,
             removeTop: shouldShowAppBar,
             child: AnimatedSwitcher(
-              duration: fastAnimationDuration,
+              duration: MediaQuery.disableAnimationsOf(context)
+                  ? Duration.zero
+                  : fastAnimationDuration,
               child: state.buildMainViewContent(),
             ),
           ),
