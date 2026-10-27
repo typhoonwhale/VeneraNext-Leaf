@@ -158,6 +158,39 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  testWidgets('a restored failure shows its saved message and details', (
+    tester,
+  ) async {
+    final manager = LocalManager();
+    final saved = _Task('saved')..label = 'Saved';
+    final legacy = _Task('legacy')..label = 'Legacy';
+    manager.restorePausedDownloads(
+      [saved, legacy],
+      states: {saved: DownloadTaskState.error, legacy: DownloadTaskState.error},
+      errorMessages: {saved: 'Error: source offline'},
+    );
+    await tester.pumpWidget(page());
+    expect(find.text('Error: source offline'), findsOneWidget);
+    // An older snapshot has no message: generic label, no details.
+    expect(find.text('Error'), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.more_horiz).last);
+    await tester.pumpAndSettle();
+    expect(find.text('Error details'), findsNothing);
+    await tester.tapAt(Offset.zero);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.more_horiz).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Error details'));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<SelectableText>(find.byType(SelectableText)).data,
+      'Error: source offline',
+    );
+    await tester.tap(find.text('Close'));
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(const SizedBox());
+  });
+
   for (final brightness in Brightness.values) {
     testWidgets(
       'full download error can be opened, scrolled and copied: $brightness',

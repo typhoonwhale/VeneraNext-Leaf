@@ -102,6 +102,8 @@ void main() {
       expect(saved.map((entry) => entry['id']).last, 'legacy');
       expect(saved.map((entry) => entry['state']), [...states()]);
       expect(states().last, 'normal');
+      // An older snapshot keeps the error state without a message.
+      expect(manager.downloadErrorMessage(restored['failed']!), isNull);
       expect(saved.every((entry) => !entry.containsKey('userPaused')), isTrue);
     },
   );
@@ -113,18 +115,24 @@ void main() {
     ]);
     var manager = await start();
     expect(restored['a']!.isPaused, isFalse);
-    restored['a']!.fail();
+    final reason = 'Error: ${'x' * 5000}';
+    restored['a']!.fail(reason);
     await pumpEventQueue();
     expect(restored['b']!.isPaused, isFalse);
     await manager.pendingDownloadAutoResumeMarkerRemoval;
     expect(marker().existsSync(), isFalse);
     await stop(manager);
     expect(readSnapshot().map((entry) => entry['state']), ['error', 'normal']);
+    final saved = readSnapshot().first['error'] as String;
+    expect(saved, hasLength(4000));
+    expect(reason, startsWith(saved));
+    expect(readSnapshot().last.containsKey('error'), isFalse);
 
     manager = await start();
     expect(restored['a']!.isPaused, isTrue);
     expect(restored['b']!.isPaused, isFalse);
     expect(manager.downloadState(restored['a']!), DownloadTaskState.error);
+    expect(manager.downloadErrorMessage(restored['a']!), saved);
     restored['b']!.advance();
     manager.removeTask(restored['b']!);
     await manager.pendingDownloadAutoResumeMarkerRemoval;
@@ -137,6 +145,7 @@ void main() {
     manager.resumeDownload(restored['a']!);
     expect(restored['a']!.isPaused, isFalse);
     expect(manager.downloadState(restored['a']!), DownloadTaskState.normal);
+    expect(manager.downloadErrorMessage(restored['a']!), isNull);
   });
 
   test(
@@ -312,7 +321,10 @@ class _Task extends DownloadTask {
     notifyListeners();
   }
 
-  void fail() {
+  String status = '';
+
+  void fail([String reason = 'Error: failed']) {
+    status = reason;
     paused = true;
     error = true;
     notifyListeners();
@@ -326,7 +338,7 @@ class _Task extends DownloadTask {
   @override
   String? get cover => null;
   @override
-  String get message => '';
+  String get message => status;
   @override
   bool get isPaused => paused;
   @override

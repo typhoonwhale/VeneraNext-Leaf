@@ -229,7 +229,7 @@ void main() {
   );
 
   test(
-    'cancel retains no-auto-advance behavior and ignores stale or recursive requests',
+    'canceling the running task advances and ignores stale or recursive requests',
     () async {
       final first = _Task('a', events);
       final next = _Task('b', events);
@@ -245,10 +245,43 @@ void main() {
       expect(events, isEmpty);
       await queue.cancel(first);
       await queue.cancel(first);
+      await pumpEventQueue();
       expect(cancels, 1);
       expect(queue.tasks, [next]);
+      expect(next.isPaused, isFalse);
+      expect(events.where((event) => event.startsWith('resume:')), [
+        'resume:b',
+      ]);
+    },
+  );
+
+  test(
+    'canceling the running task waits for cleanup and respects holds',
+    () async {
+      final gate = Completer<void>();
+      final first = _Task('a', events)..cleanup = gate.future;
+      final next = _Task('b', events);
+      final idle = _Task('c', events);
+      queue.add(first);
+      queue.add(next);
+      queue.add(idle);
+      final canceled = queue.cancel(first);
+      expect(queue.isResumePending, isTrue);
+      await pumpEventQueue();
       expect(next.isPaused, isTrue);
-      expect(events.where((event) => event.startsWith('resume:')), isEmpty);
+      final release = queue.holdAutomaticStarts();
+      gate.complete();
+      await canceled;
+      await pumpEventQueue();
+      expect(next.isPaused, isTrue);
+      release();
+      expect(next.isPaused, isFalse);
+
+      // An idle task is not running: canceling it starts nothing.
+      await queue.pause(next);
+      await queue.cancel(next);
+      await pumpEventQueue();
+      expect(idle.isPaused, isTrue);
     },
   );
 
@@ -693,9 +726,20 @@ void main() {
       queue.resume(restored);
       expect(queue.stateOf(restored), normal);
       expect(restored.isPaused, isFalse);
+      restored.status = 'Error: boom';
       queue.fail(restored);
       expect(queue.stateOf(restored), failed);
-      expect(events.where((event) => event == 'save'), hasLength(3));
+      expect(queue.errorMessageOf(restored), 'Error: boom');
+      queue.resume(restored);
+      expect(queue.errorMessageOf(restored), isNull);
+      await queue.pause(restored, byUser: true);
+      queue.restorePausedTasks(
+        [restored],
+        states: {restored: failed},
+        errorMessages: {restored: 'Error: saved'},
+      );
+      expect(queue.errorMessageOf(restored), 'Error: saved');
+      expect(events.where((event) => event == 'save'), hasLength(5));
     },
   );
 
@@ -899,8 +943,9 @@ class _Task extends DownloadTask {
   String get title => id;
   @override
   String? get cover => null;
+  String status = '';
   @override
-  String get message => '';
+  String get message => status;
   @override
   void cancel() {
     pause();

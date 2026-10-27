@@ -523,9 +523,29 @@ class ImagesDownloadTask extends DownloadTask with _TransferSpeedMixin {
     stopRecorder();
   }
 
+  /// Whether this task saved any page of [chapter], including prefetched
+  /// pages after the current index.
+  Future<bool> _hasSavedImages(String chapter) async {
+    final directory = Directory(
+      comic!.chapters == null
+          ? path!
+          : FilePath.join(path!, localChapterDirectoryName(chapter)),
+    );
+    if (!await directory.exists()) return false;
+    await for (final entity in directory.list()) {
+      final name = p.basename(entity.path);
+      if (entity is File &&
+          int.tryParse(p.basenameWithoutExtension(name)) != null &&
+          isComicImageFileName(name)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   /// Image addresses may expire, so a failed task gets fresh lists for the
   /// current and later chapters. The current chapter continues from its
-  /// progress only with the same image count. Returns whether the run may
+  /// progress only with the same image count, unless none of it was saved. Returns whether the run may
   /// continue; an interrupted refresh is repeated by the next run.
   Future<bool> _refreshRemainingImages(int generation) async {
     final images = _images!;
@@ -550,10 +570,16 @@ class ImagesDownloadTask extends DownloadTask with _TransferSpeedMixin {
         return false;
       }
       if (i == _chapter && res.data.length != images[key]!.length) {
-        // Downloaded pages would no longer match; keep them untouched.
-        _refreshImages = false;
-        _setError("Chapter content has changed. Cancel and download again.".tl);
-        return false;
+        final started = _index > 0 || await _hasSavedImages(key);
+        if (!_isCurrentRun(generation)) return false;
+        if (started) {
+          // Downloaded pages would no longer match; keep them untouched.
+          _refreshImages = false;
+          _setError(
+            "Chapter content has changed. Cancel and download again.".tl,
+          );
+          return false;
+        }
       }
       refreshed[key] = res.data;
     }

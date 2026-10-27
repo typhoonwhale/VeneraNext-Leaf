@@ -39,6 +39,11 @@ class DownloadQueue {
   DownloadTaskState stateOf(DownloadTask task) =>
       _parked[task] ?? DownloadTaskState.normal;
 
+  /// The message a failed task reported, kept with its error state.
+  final _errorMessages = Map<DownloadTask, String>.identity();
+
+  String? errorMessageOf(DownloadTask task) => _errorMessages[task];
+
   /// The only task the queue may run: the first normal task.
   DownloadTask? get activeTask {
     for (final task in _tasks) {
@@ -60,6 +65,7 @@ class DownloadQueue {
   void restorePausedTasks(
     Iterable<DownloadTask> restored, {
     Map<DownloadTask, DownloadTaskState> states = const {},
+    Map<DownloadTask, String> errorMessages = const {},
   }) {
     if (_suspension != null) throw StateError('Download queue is suspended');
     final revision = _revision;
@@ -79,9 +85,15 @@ class DownloadQueue {
       ..clear()
       ..addAll(snapshot);
     _parked.clear();
+    _errorMessages.clear();
     for (final MapEntry(key: task, value: state) in states.entries) {
       if (state != DownloadTaskState.normal && _indexOf(task) >= 0) {
         _parked[task] = state;
+      }
+    }
+    for (final MapEntry(key: task, value: message) in errorMessages.entries) {
+      if (_parked[task] == DownloadTaskState.error) {
+        _errorMessages[task] = message;
       }
     }
     _revision++;
@@ -120,6 +132,7 @@ class DownloadQueue {
       if (index < 0) return;
       _tasks.removeAt(index);
       _parked.remove(task);
+      _errorMessages.remove(task);
       final revision = ++_revision;
       _publish();
       _resumeIfUnchanged(revision, automatic: true);
@@ -179,6 +192,7 @@ class DownloadQueue {
   }
 
   void _resumeParked(DownloadTask task) {
+    _errorMessages.remove(task);
     if (_parked.remove(task) == DownloadTaskState.error) {
       task.retryAfterFailure();
     }
@@ -233,6 +247,7 @@ class DownloadQueue {
         (active && (state == DownloadTaskState.error || !task.isPaused));
     final automatic = active || _scheduledResumeAutomatic;
     _parked[task] = state;
+    if (state == DownloadTaskState.error) _errorMessages[task] = task.message;
     _scheduledResumeRevision = null;
     // A failed task has already stopped; only a user pause stops the task.
     final stopped = active && state == DownloadTaskState.paused
@@ -263,7 +278,10 @@ class DownloadQueue {
     if (_suspension != null) return _suspension!.future;
     if (_indexOf(task) < 0 || !_canceling.add(task)) return Future.value();
     final before = _revision;
-    final keepPendingStart = isResumePending && !identical(activeTask, task);
+    final active = identical(activeTask, task);
+    final keepPendingStart = isResumePending && !active;
+    // Canceling the running task, or one about to start, advances the queue.
+    final advance = active && (!task.isPaused || isResumePending);
     final stopped = _stopBeforeScheduling(task, () {
       try {
         task.cancel();
@@ -275,8 +293,11 @@ class DownloadQueue {
       }
     });
     // Do not replace a newer listener action with the pre-cancel start intent.
-    if (keepPendingStart && _revision == before + 1) {
-      _resumeIfUnchanged(_revision, automatic: _scheduledResumeAutomatic);
+    if ((keepPendingStart || advance) && _revision == before + 1) {
+      _resumeIfUnchanged(
+        _revision,
+        automatic: advance || _scheduledResumeAutomatic,
+      );
     }
     return stopped;
   }
@@ -286,6 +307,7 @@ class DownloadQueue {
     if (index < 0) return;
     _tasks.removeAt(index);
     _parked.remove(task);
+    _errorMessages.remove(task);
     _revision++;
     _publish();
   }

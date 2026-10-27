@@ -208,8 +208,12 @@ class _DownloadTaskTileState extends State<_DownloadTaskTile> {
     setState(() {});
   }
 
-  void _showErrorDetails() {
-    final message = widget.task.message;
+  /// A restored failure keeps its saved message, not the task's own.
+  String? get _errorMessage => widget.task.isError
+      ? widget.task.message
+      : widget.manager.downloadErrorMessage(widget.task);
+
+  void _showErrorDetails(String message) {
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
@@ -233,11 +237,12 @@ class _DownloadTaskTileState extends State<_DownloadTaskTile> {
   @override
   Widget build(BuildContext context) {
     final state = widget.state;
+    final errorMessage = _errorMessage;
     final String? status;
-    if (widget.task.isError) {
-      status = widget.task.message;
+    if (errorMessage != null) {
+      status = errorMessage;
     } else if (state == DownloadTaskState.error) {
-      // Restored failures keep their state, not their message.
+      // Snapshots from older versions keep the state without a message.
       status = "Error".tl;
     } else if (state == DownloadTaskState.paused) {
       status = "Paused".tl;
@@ -288,11 +293,11 @@ class _DownloadTaskTileState extends State<_DownloadTaskTile> {
                     ),
                     MenuButton(
                       entries: [
-                        if (widget.task.isError)
+                        if (errorMessage != null)
                           MenuEntry(
                             icon: Icons.error_outline,
                             text: 'Error details'.tl,
-                            onClick: _showErrorDetails,
+                            onClick: () => _showErrorDetails(errorMessage),
                           ),
                         MenuEntry(
                           icon: Icons.close,

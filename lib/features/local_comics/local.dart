@@ -685,6 +685,10 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
   DownloadTaskState downloadState(DownloadTask task) =>
       _downloadQueue.stateOf(task);
 
+  /// The failure message of a task in the error state, also after restart.
+  String? downloadErrorMessage(DownloadTask task) =>
+      _downloadQueue.errorMessageOf(task);
+
   bool isDownloading(String id, ComicType type) =>
       _downloadQueue.contains(id, type);
 
@@ -799,12 +803,20 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
       (task) => {
         ...task.toJson(),
         _stateKey: _downloadQueue.stateOf(task).name,
+        if (_downloadQueue.errorMessageOf(task) case final message?)
+          _errorKey: message.length > _maxErrorLength
+              ? message.substring(0, _maxErrorLength)
+              : message,
       },
     ),
   );
 
   /// Shared by every task kind, so task codecs do not carry queue state.
   static const _stateKey = 'state';
+
+  /// The failure message of a task in the error state.
+  static const _errorKey = 'error';
+  static const _maxErrorLength = 4000;
 
   /// Written by earlier versions instead of [_stateKey].
   static const _legacyUserPausedKey = 'userPaused';
@@ -827,9 +839,14 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
   void restorePausedDownloads(
     Iterable<DownloadTask> tasks, {
     Map<DownloadTask, DownloadTaskState> states = const {},
+    Map<DownloadTask, String> errorMessages = const {},
   }) {
     _storageAccess.check();
-    _downloadQueue.restorePausedTasks(tasks, states: states);
+    _downloadQueue.restorePausedTasks(
+      tasks,
+      states: states,
+      errorMessages: errorMessages,
+    );
   }
 
   /// Returns false when the snapshot could not be restored. Entries that
@@ -839,13 +856,20 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
     try {
       final entries = _downloadTaskStore.restore(_taskSnapshotPath, (json) {
         final task = _decodeDownloadTask(json, this);
-        return task == null ? null : (task, _decodeState(json));
+        if (task == null) return null;
+        final error = json[_errorKey];
+        return (task, _decodeState(json), error is String ? error : null);
       });
       if (entries != null) {
         restorePausedDownloads(
           entries.map((entry) => entry.$1),
           states: Map.identity()
             ..addEntries(entries.map((entry) => MapEntry(entry.$1, entry.$2))),
+          errorMessages: Map.identity()
+            ..addEntries([
+              for (final (task, _, error) in entries)
+                if (error != null) MapEntry(task, error),
+            ]),
         );
       }
       return true;

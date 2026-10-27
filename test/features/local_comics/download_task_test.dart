@@ -1220,7 +1220,7 @@ void main() {
     };
 
     /// Chapter c1 is complete and the first image of c2 is saved.
-    ImagesDownloadTask failedTask() {
+    ImagesDownloadTask failedTask({int index = 1, int downloaded = 3}) {
       ComicSourceManager().remove(sourceKey);
       ComicSourceManager().add(
         _testSource(
@@ -1253,9 +1253,9 @@ void main() {
           'path': root.path,
           'cover': 'file://${root.path}/cover.png',
           'images': oldImages,
-          'downloadedCount': 3,
+          'downloadedCount': downloaded,
           'totalCount': 5,
-          'index': 1,
+          'index': index,
           'chapter': 1,
         },
         loadImage: (key, _, _, _) async* {
@@ -1343,6 +1343,40 @@ void main() {
       expect(imageRequests, isEmpty);
       expect(task.toJson()['images'], oldImages);
     });
+
+    test(
+      'a changed count in an unstarted chapter takes the new list',
+      () async {
+        downloaded.deleteSync();
+        pages = {
+          'c2': ['new-2a', 'new-2b', 'new-2c'],
+          'c3': ['new-3a'],
+        };
+        final task = failedTask(index: 0, downloaded: 2);
+        await resumeAfterFailure(task);
+        expect(task.isError, isFalse);
+        expect(imageRequests, ['new-2a', 'new-2b', 'new-2c', 'new-3a']);
+        expect(storage.completed, [same(task)]);
+        expect(task.toJson()['totalCount'], 6);
+      },
+    );
+
+    test(
+      'a page saved ahead of the progress marks the chapter started',
+      () async {
+        // Prefetch saved page 0 although the progress still points at it.
+        pages = {
+          'c2': ['new-2a', 'new-2b', 'new-2c'],
+          'c3': ['new-3a'],
+        };
+        final task = failedTask(index: 0, downloaded: 2);
+        await resumeAfterFailure(task);
+        expect(task.isError, isTrue);
+        expect(imageRequests, isEmpty);
+        expect(task.toJson()['images'], oldImages);
+        expect(downloaded.readAsStringSync(), 'kept');
+      },
+    );
 
     test('an ordinary resume does not refetch', () async {
       pages = {
