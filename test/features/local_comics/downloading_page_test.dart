@@ -94,6 +94,76 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  testWidgets('per-second progress reaches the page at most every 3 seconds', (
+    tester,
+  ) async {
+    final manager = LocalManager();
+    final task = _Task('a')..label = 'Running';
+    manager.restorePausedDownloads([task]);
+    manager.resumeDownload(task);
+    await tester.pumpWidget(page());
+    double shownProgress() => tester
+        .widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator))
+        .value!;
+    final shown = <String>[];
+    void record() {
+      for (var i = 1; i <= 9; i++) {
+        if (find.text('$i/9').evaluate().isNotEmpty) {
+          if (shown.isEmpty || shown.last != '$i/9') shown.add('$i/9');
+        }
+      }
+    }
+
+    for (var i = 1; i <= 9; i++) {
+      task
+        ..status = '$i/9'
+        ..fraction = i / 9
+        ..bytesPerSecond = i * 1024
+        ..emit();
+      await tester.pump();
+      record();
+      if (i == 1) {
+        // The first update after a quiet period is shown at once.
+        expect(find.text('1/9'), findsOneWidget);
+        expect(find.text('1.00 KB/s'), findsOneWidget);
+      }
+      if (i == 2) {
+        expect(find.text('1/9'), findsOneWidget);
+        expect(shownProgress(), closeTo(1 / 9, 1e-9));
+        expect(find.text('1.00 KB/s'), findsOneWidget);
+      }
+      await tester.pump(const Duration(seconds: 1));
+      record();
+    }
+    // Updates at 0s, 1s ... 8s: shown at 0s, then the latest at 3s, 6s, 9s.
+    expect(shown, ['1/9', '3/9', '6/9', '9/9']);
+    expect(find.text('9/9'), findsOneWidget);
+    expect(shownProgress(), closeTo(1, 1e-9));
+    expect(find.text('9.00 KB/s'), findsOneWidget);
+
+    // A state change is shown at once, inside the interval.
+    task
+      ..status = 'unseen progress'
+      ..emit();
+    await tester.pump();
+    expect(find.text('unseen progress'), findsNothing);
+    task.pause();
+    await tester.pump();
+    expect(find.widgetWithText(OutlinedButton, 'Start'), findsOneWidget);
+    // A queue change is shown at once as well.
+    manager.pauseDownload(task, byUser: true);
+    await tester.pump();
+    expect(find.text('Paused / Failed'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, 'Continue'), findsOneWidget);
+
+    // A closed page leaves no listener or refresh behind.
+    await tester.pumpWidget(const SizedBox());
+    expect(task.listenerCount, 0);
+    task.emit();
+    await tester.pump(const Duration(seconds: 3));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('page pause all withdraws a start pending old cleanup', (
     tester,
   ) async {
@@ -295,6 +365,8 @@ class _Task extends DownloadTask {
   bool error = false;
   String status = 'Downloading';
   int resumes = 0;
+  int bytesPerSecond = 0;
+  double fraction = 0;
   Future<void>? cleanup;
 
   @override
@@ -323,9 +395,9 @@ class _Task extends DownloadTask {
   @override
   bool get isError => error;
   @override
-  int get speed => 0;
+  int get speed => bytesPerSecond;
   @override
-  double get progress => 0;
+  double get progress => fraction;
   @override
   Future<void> get pendingCleanup => cleanup ?? Future.value();
   @override

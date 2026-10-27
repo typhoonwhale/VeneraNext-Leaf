@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:venera_next/components/button.dart';
@@ -18,36 +20,60 @@ class DownloadingPage extends StatefulWidget {
   State<DownloadingPage> createState() => _DownloadingPageState();
 }
 
-class _DownloadingPageState extends State<DownloadingPage> {
-  DownloadTask? activeTask;
+/// Progress and speed reach the screen at most once per [interval], which
+/// keeps e-ink panels from refreshing every second. A state change refreshes
+/// at once and starts a new interval.
+class _RefreshThrottle {
+  _RefreshThrottle(this._refresh);
 
+  static const interval = Duration(seconds: 3);
+
+  final VoidCallback _refresh;
+  Timer? _cooldown;
+  bool _pending = false;
+
+  void progress() {
+    if (_cooldown != null) {
+      _pending = true;
+    } else {
+      now();
+    }
+  }
+
+  void now() {
+    _pending = false;
+    _cooldown?.cancel();
+    _cooldown = Timer(interval, () {
+      _cooldown = null;
+      if (_pending) now();
+    });
+    _refresh();
+  }
+
+  void dispose() {
+    _cooldown?.cancel();
+    _cooldown = null;
+  }
+}
+
+/// Rebuilds only for queue changes; each task's progress is handled by its
+/// own tile and the running speed by the top bar.
+class _DownloadingPageState extends State<DownloadingPage> {
   late final LocalManager manager = LocalManager();
 
   @override
   void initState() {
     super.initState();
     manager.addListener(update);
-    _syncActiveTask();
   }
 
   @override
   void dispose() {
     manager.removeListener(update);
-    activeTask?.removeListener(update);
     super.dispose();
   }
 
-  void _syncActiveTask() {
-    final current = manager.activeDownloadTask;
-    if (!identical(current, activeTask)) {
-      activeTask?.removeListener(update);
-      activeTask = current;
-      activeTask?.addListener(update);
-    }
-  }
-
   void update() {
-    _syncActiveTask();
     if (mounted) {
       setState(() {});
     }
@@ -64,7 +90,7 @@ class _DownloadingPageState extends State<DownloadingPage> {
           .add(task);
     }
     final items = <Widget>[
-      buildTop(),
+      _DownloadTopBar(manager: manager),
       if (normal.isNotEmpty) _buildHeader("Downloading / Queued".tl),
       for (final task in normal) _buildTile(task, DownloadTaskState.normal),
       if (parked.isNotEmpty) _buildHeader("Paused / Failed".tl),
@@ -91,8 +117,72 @@ class _DownloadingPageState extends State<DownloadingPage> {
         state: state,
         manager: manager,
       );
+}
 
-  Widget buildTop() {
+class _DownloadTopBar extends StatefulWidget {
+  const _DownloadTopBar({required this.manager});
+
+  final LocalManager manager;
+
+  @override
+  State<_DownloadTopBar> createState() => _DownloadTopBarState();
+}
+
+class _DownloadTopBarState extends State<_DownloadTopBar> {
+  LocalManager get manager => widget.manager;
+  DownloadTask? activeTask;
+  late final _throttle = _RefreshThrottle(() {
+    if (mounted) setState(() {});
+  });
+  (DownloadTask?, bool, bool)? _shown;
+
+  @override
+  void initState() {
+    super.initState();
+    manager.addListener(_onQueueChanged);
+    _syncActiveTask();
+  }
+
+  @override
+  void dispose() {
+    manager.removeListener(_onQueueChanged);
+    activeTask?.removeListener(_onTaskChanged);
+    _throttle.dispose();
+    super.dispose();
+  }
+
+  void _syncActiveTask() {
+    final current = manager.activeDownloadTask;
+    if (!identical(current, activeTask)) {
+      activeTask?.removeListener(_onTaskChanged);
+      activeTask = current;
+      activeTask?.addListener(_onTaskChanged);
+    }
+  }
+
+  void _onQueueChanged() {
+    _syncActiveTask();
+    _throttle.now();
+  }
+
+  (DownloadTask?, bool, bool) _state() => (
+    activeTask,
+    activeTask?.isPaused ?? true,
+    manager.isDownloadResumePending,
+  );
+
+  /// Only the speed changes without a state change.
+  void _onTaskChanged() {
+    if (_state() != _shown) {
+      _throttle.now();
+    } else {
+      _throttle.progress();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    _shown = _state();
     final active = manager.activeDownloadTask;
     final resumePending = manager.isDownloadResumePending;
     final idle = active == null || (active.isPaused && !resumePending);
@@ -180,6 +270,10 @@ class _DownloadTaskTile extends StatefulWidget {
 
 class _DownloadTaskTileState extends State<_DownloadTaskTile> {
   late DownloadTask task;
+  late final _throttle = _RefreshThrottle(() {
+    if (mounted) setState(() {});
+  });
+  (bool, bool, bool, String, String?)? _shown;
 
   @override
   void initState() {
@@ -191,6 +285,7 @@ class _DownloadTaskTileState extends State<_DownloadTaskTile> {
   @override
   void dispose() {
     task.removeListener(update);
+    _throttle.dispose();
     super.dispose();
   }
 
@@ -204,8 +299,21 @@ class _DownloadTaskTileState extends State<_DownloadTaskTile> {
     }
   }
 
+  (bool, bool, bool, String, String?) _state() => (
+    task.isPaused,
+    task.isError,
+    task.isWaitingToRetry,
+    task.title,
+    task.cover,
+  );
+
+  /// Progress, speed and progress messages change without a state change.
   void update() {
-    setState(() {});
+    if (_state() != _shown) {
+      _throttle.now();
+    } else {
+      _throttle.progress();
+    }
   }
 
   /// A restored failure keeps its saved message, not the task's own.
@@ -236,6 +344,7 @@ class _DownloadTaskTileState extends State<_DownloadTaskTile> {
 
   @override
   Widget build(BuildContext context) {
+    _shown = _state();
     final state = widget.state;
     final errorMessage = _errorMessage;
     final String? status;
