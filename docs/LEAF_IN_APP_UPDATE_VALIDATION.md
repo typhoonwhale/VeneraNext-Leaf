@@ -2,6 +2,22 @@
 
 2026-10-26，开发分支 `feature/leaf-in-app-update`，首版实施基线 `c93eee1`，首版开发版本 `1.18.3+241`（ARM64 versionCode `2412`）。本次不创建标签或发布 Release，公开版本仍为 1.18.2。需求以[正式方案](LEAF_IN_APP_UPDATE_DESIGN.md)为准。
 
+## 2026-10-27 下载恢复与安装会话（补充需求P5–P8、P10）
+
+需求见[正式方案](LEAF_IN_APP_UPDATE_DESIGN.md)“补充需求：下载恢复与安装方式”。提交：`7261c63`（下载状态意图与更新期间队列限制）、`a434ae1`（压缩包任务跨重启恢复与分段记录校验）、`6826e85`与`35416f9`（`PackageInstaller`会话安装及遗留会话、确认界面关闭处理）、`6c7bc99`（独立评审6项修复）、`14e0cdf`与`433b679`（搁置任务状态模型、出错后手动继续重拉图片列表、取消后推进）。
+
+自动验证（日志在任务目录 `evidence/in-app-update-p5-p10/`）：
+
+- 全量analyze无问题；`dart format` 1086个文件无改动。
+- `test/features/local_comics/` 555项通过，3项失败均为改动前即存在的 `import_presentation_test`（测试环境缺少目录选择插件）。
+- 更新下载、文件下载器、翻译及 `test/app_runtime/` 中下载、关闭、宿主与更新相关16个文件共125项通过、1项平台跳过。`headless_shutdown_process_test` 偶发卡住，重跑通过，在改动前基线3次均通过，根因未定位。
+- 原生策略测试（结果码映射、遗留会话决策、确认界面启动、占用判定）全部通过。
+- 未运行全仓测试；此前一次全仓尝试中JS引擎与图片配置相关49项失败，所涉文件未被本次改动修改，未在基线复跑。
+
+测试包：`VeneraNext-Leaf-1.18.3-android-arm64-v8a.apk`，23,431,347字节，SHA-256 `67a230cd68231aa6794cf8cf0fe40303205df0a080d51627eff6dd203388ca53`，versionCode仍为2422。合并后manifest含 `ApplicationUpdateReceiver`（`exported=false`），不含更新用FileProvider，保留 `REQUEST_INSTALL_PACKAGES`。
+
+未实机验证：文石系统会话安装（确认、取消后重试、成功、离开确认界面后返回、进程被结束后的遗留会话废弃）、重启后后台续下、压缩包恢复与SAF目录行为，对应方案D1–D11。完整应用内升级需要另一个versionCode更高的Release。
+
 ## 2026-10-26 后续调整（1.18.3+242）
 
 P1–P4已完成：发布脚本使用同一严格规则拒绝数字段前导零；源检查保留 `lastCheckUpdate`，应用使用独立的 `lastCheckApplicationUpdate`；主动检查在受理时持久化时间，即使联网失败也重置应用24小时计时。旧共享字段只归源检查，不迁入新的应用时间。关闭应用开关不消耗应用间隔，两个启动分支独立执行，源检查异常或耗时不会阻断应用请求。
