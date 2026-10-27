@@ -13,6 +13,7 @@ const appDataLocalFields = {
   'disableSyncFields',
   'deviceId',
   'lastSyncTime',
+  'eInkMode',
 };
 
 const appDataOptionalArchiveFields = {'backupWebdav', 'backupWebdavPath'};

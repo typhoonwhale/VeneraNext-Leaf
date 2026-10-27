@@ -12,6 +12,7 @@ import 'package:venera_next/foundation/app.dart';
 import 'package:venera_next/routing/app_navigation.dart';
 import 'package:venera_next/foundation/appdata.dart';
 import 'package:venera_next/foundation/context.dart';
+import 'package:venera_next/foundation/eink_theme.dart';
 import 'package:venera_next/foundation/translations.dart';
 import 'package:venera_next/foundation/widget_utils.dart';
 
@@ -187,6 +188,8 @@ class SelectSetting extends StatelessWidget {
     this.comicId,
     this.comicSource,
     this.useDeviceSettings = false,
+    this.enabled = true,
+    this.subtitle,
   });
 
   factory SelectSetting.preference({
@@ -196,6 +199,8 @@ class SelectSetting extends StatelessWidget {
     VoidCallback? onChanged,
     required Map<String, String> optionTranslation,
     String? help,
+    bool enabled = true,
+    String? subtitle,
   }) => SelectSetting(
     key: key,
     title: title,
@@ -204,6 +209,8 @@ class SelectSetting extends StatelessWidget {
     onChanged: onChanged,
     optionTranslation: optionTranslation,
     help: help,
+    enabled: enabled,
+    subtitle: subtitle,
   );
 
   factory SelectSetting.reader({
@@ -247,6 +254,10 @@ class SelectSetting extends StatelessWidget {
 
   final bool useDeviceSettings;
 
+  final bool enabled;
+
+  final String? subtitle;
+
   @override
   Widget build(BuildContext context) {
     return SizedBox(
@@ -264,6 +275,8 @@ class SelectSetting extends StatelessWidget {
               comicId: comicId,
               comicSource: comicSource,
               useDeviceSettings: useDeviceSettings,
+              enabled: enabled,
+              subtitle: subtitle,
             );
           } else {
             return _EndSelectorSelectSetting(
@@ -276,6 +289,8 @@ class SelectSetting extends StatelessWidget {
               comicId: comicId,
               comicSource: comicSource,
               useDeviceSettings: useDeviceSettings,
+              enabled: enabled,
+              subtitle: subtitle,
             );
           }
         },
@@ -295,6 +310,8 @@ class _DoubleLineSelectSettings extends StatefulWidget {
     this.comicId,
     this.comicSource,
     this.useDeviceSettings = false,
+    this.enabled = true,
+    this.subtitle,
   });
 
   final Preference<String?>? preference;
@@ -314,6 +331,10 @@ class _DoubleLineSelectSettings extends StatefulWidget {
   final String? comicSource;
 
   final bool useDeviceSettings;
+
+  final bool enabled;
+
+  final String? subtitle;
 
   @override
   State<_DoubleLineSelectSettings> createState() =>
@@ -368,9 +389,12 @@ class _DoubleLineSelectSettingsState
               ),
           ],
         ),
-        subtitle: Text(widget.optionTranslation[value] ?? "None"),
+        enabled: widget.enabled,
+        subtitle: Text(
+          widget.subtitle ?? widget.optionTranslation[value] ?? "None",
+        ),
         trailing: saving ? _savingIndicator : const Icon(Icons.arrow_drop_down),
-        onTap: saving
+        onTap: saving || !widget.enabled
             ? null
             : () {
                 var renderBox = context.findRenderObject() as RenderBox;
@@ -378,11 +402,20 @@ class _DoubleLineSelectSettingsState
                 var size = renderBox.size;
                 var rect = offset & size;
                 final target = field;
+                final eink = context.isEInk;
                 showMenu(
-                  elevation: 3,
-                  color: context.brightness == Brightness.light
+                  elevation: eink ? 0 : 3,
+                  color: eink
+                      ? context.colorScheme.surface
+                      : context.brightness == Brightness.light
                       ? const Color(0xFFF6F6F6)
                       : const Color(0xFF1E1E1E),
+                  shape: eink
+                      ? RoundedRectangleBorder(
+                          side: const BorderSide(color: Colors.black),
+                          borderRadius: BorderRadius.circular(4),
+                        )
+                      : null,
                   context: context,
                   position: RelativeRect.fromRect(
                     rect,
@@ -422,6 +455,8 @@ class _EndSelectorSelectSetting extends StatefulWidget {
     this.comicId,
     this.comicSource,
     this.useDeviceSettings = false,
+    this.enabled = true,
+    this.subtitle,
   });
 
   final Preference<String?>? preference;
@@ -441,6 +476,10 @@ class _EndSelectorSelectSetting extends StatefulWidget {
   final String? comicSource;
 
   final bool useDeviceSettings;
+
+  final bool enabled;
+
+  final String? subtitle;
 
   @override
   State<_EndSelectorSelectSetting> createState() =>
@@ -497,23 +536,28 @@ class _EndSelectorSelectSettingState
               ),
           ],
         ),
+        enabled: widget.enabled,
+        subtitle: widget.subtitle == null ? null : Text(widget.subtitle!),
         trailing: saving
             ? _savingIndicator
-            : Select(
-                current: options[value],
-                values: options.values.toList(),
-                minWidth: 64,
-                onTap: (index) {
-                  if (mounted &&
-                      target.matches(field) &&
-                      index >= 0 &&
-                      index < options.length) {
-                    final selected = options.keys.elementAt(index);
-                    if (widget.optionTranslation.containsKey(selected)) {
-                      unawaited(change(selected));
+            : IgnorePointer(
+                ignoring: !widget.enabled,
+                child: Select(
+                  current: options[value],
+                  values: options.values.toList(),
+                  minWidth: 64,
+                  onTap: (index) {
+                    if (mounted &&
+                        target.matches(field) &&
+                        index >= 0 &&
+                        index < options.length) {
+                      final selected = options.keys.elementAt(index);
+                      if (widget.optionTranslation.containsKey(selected)) {
+                        unawaited(change(selected));
+                      }
                     }
-                  }
-                },
+                  },
+                ),
               ),
       ),
     );
@@ -719,14 +763,16 @@ class _MultiPagesFilterState
           : const Duration(milliseconds: 500),
       dragChildBoxDecoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surfaceContainer,
-        boxShadow: const [
-          BoxShadow(
-            color: Colors.black12,
-            blurRadius: 5,
-            offset: Offset(0, 2),
-            spreadRadius: 2,
-          ),
-        ],
+        boxShadow: context.isEInk
+            ? null
+            : const [
+                BoxShadow(
+                  color: Colors.black12,
+                  blurRadius: 5,
+                  offset: Offset(0, 2),
+                  spreadRadius: 2,
+                ),
+              ],
       ),
       onReorder: (reorderFunc) {
         setState(() {

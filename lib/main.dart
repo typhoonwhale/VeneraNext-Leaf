@@ -18,6 +18,7 @@ import 'package:venera_next/features/follow_updates/follow_updates.dart';
 import 'package:venera_next/app_runtime/background_sync.dart';
 import 'package:venera_next/app_runtime/interactive_platform_bindings.dart';
 import 'package:venera_next/app_runtime/window_placement.dart';
+import 'package:venera_next/foundation/eink_theme.dart';
 import 'package:venera_next/foundation/global_preference_store.dart';
 import 'package:venera_next/foundation/application_preferences.dart';
 import 'dart:async';
@@ -304,61 +305,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     };
   }
 
-  ThemeData getTheme(
-    Color primary,
-    Color? secondary,
-    Color? tertiary,
-    Brightness brightness,
-  ) {
-    String? font;
-    List<String>? fallback;
-    if (App.isLinux || App.isWindows) {
-      font = 'Noto Sans CJK';
-      fallback = [
-        'Segoe UI',
-        'Noto Sans SC',
-        'Noto Sans TC',
-        'Noto Sans',
-        'Microsoft YaHei',
-        'PingFang SC',
-        'Arial',
-        'sans-serif',
-      ];
-    }
-    return ThemeData(
-      colorScheme: SeedColorScheme.fromSeeds(
-        primaryKey: primary,
-        secondaryKey: secondary,
-        tertiaryKey: tertiary,
-        brightness: brightness,
-        tones: FlexTones.vividBackground(brightness),
-      ),
-      fontFamily: font,
-      fontFamilyFallback: fallback,
-      elevatedButtonTheme: ElevatedButtonThemeData(
-        style: ButtonStyle(
-          mouseCursor: WidgetStatePropertyAll(SystemMouseCursors.click),
-        ),
-      ),
-      outlinedButtonTheme: OutlinedButtonThemeData(
-        style: ButtonStyle(
-          mouseCursor: WidgetStatePropertyAll(SystemMouseCursors.click),
-        ),
-      ),
-      textButtonTheme: TextButtonThemeData(
-        style: ButtonStyle(
-          mouseCursor: WidgetStatePropertyAll(SystemMouseCursors.click),
-        ),
-      ),
-      iconButtonTheme: IconButtonThemeData(
-        style: ButtonStyle(
-          mouseCursor: WidgetStatePropertyAll(SystemMouseCursors.click),
-        ),
-      ),
-      listTileTheme: ListTileThemeData(),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     if (_mount == null) {
@@ -396,20 +342,34 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           secondary = light.secondary;
           tertiary = light.tertiary;
         }
+        final appearance = GlobalPreferenceStore(appdata.settings).appearance;
+        final eink = appearance.einkTheme;
         return MaterialApp(
           title: App.isAndroid ? "Leaf" : "VeneraNext",
           home: home,
           debugShowCheckedModeBanner: false,
-          theme: getTheme(primary, secondary, tertiary, Brightness.light),
+          theme: getTheme(
+            primary,
+            secondary,
+            tertiary,
+            Brightness.light,
+            eink: eink,
+          ),
           navigatorKey: appNavigation.rootNavigatorKey,
-          darkTheme: getTheme(primary, secondary, tertiary, Brightness.dark),
-          themeMode: switch (GlobalPreferenceStore(
-            appdata.settings,
-          ).appearance.themeMode) {
-            'light' => ThemeMode.light,
-            'dark' => ThemeMode.dark,
-            _ => ThemeMode.system,
-          },
+          darkTheme: getTheme(
+            primary,
+            secondary,
+            tertiary,
+            Brightness.dark,
+            eink: eink,
+          ),
+          themeMode: eink
+              ? ThemeMode.light
+              : switch (appearance.themeMode) {
+                  'light' => ThemeMode.light,
+                  'dark' => ThemeMode.dark,
+                  _ => ThemeMode.system,
+                },
           color: Colors.transparent,
           localizationsDelegates: [
             GlobalMaterialLocalizations.delegate,
@@ -546,4 +506,63 @@ class _SystemUiProvider extends StatelessWidget {
       child: child,
     );
   }
+}
+
+ThemeData getTheme(
+  Color primary,
+  Color? secondary,
+  Color? tertiary,
+  Brightness brightness, {
+  bool eink = false,
+}) {
+  String? font;
+  List<String>? fallback;
+  if (App.isLinux || App.isWindows) {
+    font = 'Noto Sans CJK';
+    fallback = [
+      'Segoe UI',
+      'Noto Sans SC',
+      'Noto Sans TC',
+      'Noto Sans',
+      'Microsoft YaHei',
+      'PingFang SC',
+      'Arial',
+      'sans-serif',
+    ];
+  }
+  final theme = ThemeData(
+    colorScheme: eink
+        ? einkColorScheme()
+        : SeedColorScheme.fromSeeds(
+            primaryKey: primary,
+            secondaryKey: secondary,
+            tertiaryKey: tertiary,
+            brightness: brightness,
+            tones: FlexTones.vividBackground(brightness),
+          ),
+    fontFamily: font,
+    fontFamilyFallback: fallback,
+    elevatedButtonTheme: ElevatedButtonThemeData(
+      style: ButtonStyle(
+        mouseCursor: WidgetStatePropertyAll(SystemMouseCursors.click),
+      ),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: ButtonStyle(
+        mouseCursor: WidgetStatePropertyAll(SystemMouseCursors.click),
+      ),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: ButtonStyle(
+        mouseCursor: WidgetStatePropertyAll(SystemMouseCursors.click),
+      ),
+    ),
+    iconButtonTheme: IconButtonThemeData(
+      style: ButtonStyle(
+        mouseCursor: WidgetStatePropertyAll(SystemMouseCursors.click),
+      ),
+    ),
+    listTileTheme: ListTileThemeData(),
+  );
+  return eink ? applyEInkTheme(theme) : theme;
 }
