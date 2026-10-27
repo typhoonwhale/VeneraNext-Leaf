@@ -818,6 +818,7 @@
     "features/local_comics/archive_download_task.dart",
     "features/local_comics/download.dart",
     "features/local_comics/download_directory_allocator.dart",
+    "features/local_comics/download_output_marker.dart",
     "features/local_comics/download_queue.dart",
     "features/local_comics/download_retry.dart",
     "features/local_comics/download_task.dart",
