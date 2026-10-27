@@ -219,9 +219,13 @@ class OverlayWidgetState extends State<OverlayWidget> {
   }
 }
 
+AnimationStyle? _dialogAnimationStyle(BuildContext context) =>
+    MediaQuery.disableAnimationsOf(context) ? AnimationStyle.noAnimation : null;
+
 void showDialogMessage(BuildContext context, String title, String message) {
   showDialog(
     context: context,
+    animationStyle: _dialogAnimationStyle(context),
     builder: (context) => ContentDialog(
       title: title,
       content: Text(message).paddingHorizontal(16),
@@ -240,6 +244,7 @@ Future<void> showConfirmDialog({
 }) {
   return showDialog(
     context: context,
+    animationStyle: _dialogAnimationStyle(context),
     builder: (context) => ContentDialog(
       title: title,
       content: Text(content).paddingHorizontal(16).paddingVertical(8),
@@ -568,6 +573,7 @@ void showInfoDialog({
 }) {
   showDialog(
     context: context,
+    animationStyle: _dialogAnimationStyle(context),
     builder: (context) {
       return ContentDialog(
         title: title,

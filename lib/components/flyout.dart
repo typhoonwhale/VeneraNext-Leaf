@@ -111,13 +111,16 @@ class FlyoutState extends State<Flyout> {
     var rect = renderBox.localToGlobal(Offset.zero) & renderBox.size;
     var navigator =
         widget.navigator ?? Navigator.of(context, rootNavigator: true);
+    final noMotion = MediaQuery.disableAnimationsOf(context);
     navigator.push(
       PageRouteBuilder(
         fullscreenDialog: true,
         barrierDismissible: true,
         opaque: false,
-        transitionDuration: fastAnimationDuration,
-        reverseTransitionDuration: fastAnimationDuration,
+        transitionDuration: noMotion ? Duration.zero : fastAnimationDuration,
+        reverseTransitionDuration: noMotion
+            ? Duration.zero
+            : fastAnimationDuration,
         pageBuilder: (context, animation, secondaryAnimation) {
           var left = rect.left;
           var top = rect.bottom;

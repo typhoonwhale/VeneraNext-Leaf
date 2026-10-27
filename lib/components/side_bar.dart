@@ -252,6 +252,9 @@ Future<T?> showSideBar<T>(
           width: width,
           addTopPadding: addTopPadding,
           addBottomPadding: true,
+          transitionDuration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : const Duration(milliseconds: 300),
           onDispose: finish,
           isOwnerActive: isOwnerActive,
         );

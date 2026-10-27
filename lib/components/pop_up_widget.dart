@@ -96,7 +96,9 @@ class PopUpWidget<T> extends PopupRoute<T> {
   }
 
   @override
-  Duration get transitionDuration => const Duration(milliseconds: 350);
+  Duration get transitionDuration => EInkPreferences.reduceMotion
+      ? Duration.zero
+      : const Duration(milliseconds: 350);
 
   @override
   Widget buildTransitions(
