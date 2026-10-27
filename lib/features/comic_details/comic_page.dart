@@ -230,11 +230,15 @@ class _ComicPageState extends LoadingState<ComicPage, ComicDetails>
       floatingActionButton: showFAB
           ? FloatingActionButton(
               onPressed: () {
-                scrollController.animateTo(
-                  0,
-                  duration: const Duration(milliseconds: 200),
-                  curve: Curves.ease,
-                );
+                if (MediaQuery.disableAnimationsOf(context)) {
+                  scrollController.jumpTo(0);
+                } else {
+                  scrollController.animateTo(
+                    0,
+                    duration: const Duration(milliseconds: 200),
+                    curve: Curves.ease,
+                  );
+                }
               },
               child: const Icon(Icons.arrow_upward),
             )
@@ -954,6 +958,7 @@ class _ComicPageLoadingPlaceHolder extends StatelessWidget {
     }
 
     return Shimmer(
+      enabled: !MediaQuery.disableAnimationsOf(context),
       color: context.isDarkMode ? Colors.grey.shade700 : Colors.white,
       child: Column(
         children: [

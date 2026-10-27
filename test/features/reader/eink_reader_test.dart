@@ -7,6 +7,8 @@ import 'package:venera_next/features/reader/auto_reading.dart';
 import 'package:venera_next/features/reader/comic_image.dart';
 import 'package:venera_next/features/reader/information_footer.dart';
 import 'package:venera_next/features/reader/platform_effects_controller.dart';
+import 'package:venera_next/features/reader/progress_bar.dart';
+import 'package:venera_next/features/reader/top_bar.dart';
 import 'package:venera_next/features/reader/progress_navigation.dart';
 import 'package:venera_next/features/reader/scaffold.dart';
 import 'package:venera_next/features/reader/shell_data.dart';
@@ -227,6 +229,70 @@ void main() {
       expect(_count(tester, find.byType(BackdropFilter)), 0);
       expect(_count(tester, find.byType(ColorFiltered)), 0);
       expect(_count(tester, find.byType(ShaderMask)), 0);
+    } finally {
+      await tester.pumpWidget(const SizedBox());
+      await f.dispose();
+    }
+  });
+
+  testWidgets('T11 reader menu snaps open and closed in one frame in E-Ink', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(667, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final f = _Fixture();
+    try {
+      await tester.pumpWidget(
+        f.build(true, const ColoredBox(color: Color(0xff758473))),
+      );
+      await tester.pump();
+      final shell = tester.state<ReaderScaffoldState>(
+        find.byType(ReaderScaffold),
+      );
+      final top = find.byType(ReaderTopBar);
+      final bottom = find.byType(ReaderBottomBar);
+      final screen = tester.getRect(find.byType(ReaderScaffold));
+
+      bool opened() =>
+          tester.getRect(top).top == screen.top &&
+          tester.getRect(bottom).bottom == screen.bottom;
+      bool closed() =>
+          tester.getRect(top).bottom <= screen.top &&
+          tester.getRect(bottom).top >= screen.bottom;
+
+      expect(closed(), isTrue);
+      shell.openOrClose();
+      await tester.pump();
+      expect(opened(), isTrue);
+      // One trailing frame may flush bookkeeping; no ticker may remain.
+      await tester.pump();
+      expect(tester.binding.hasScheduledFrame, isFalse);
+      shell.openOrClose();
+      await tester.pump();
+      expect(closed(), isTrue);
+      // One trailing frame may flush bookkeeping; no ticker may remain.
+      await tester.pump();
+      expect(tester.binding.hasScheduledFrame, isFalse);
+
+      for (var i = 1; i <= 5; i++) {
+        shell.openOrClose();
+        await tester.pump();
+        expect(shell.isOpen, i.isOdd);
+        expect(opened(), i.isOdd);
+        expect(closed(), i.isEven);
+      }
+
+      expect(find.byType(BackdropFilter), findsNothing);
+      for (final bar in [top, bottom]) {
+        final fills = tester
+            .widgetList<Container>(
+              find.descendant(of: bar, matching: find.byType(Container)),
+            )
+            .map((c) => (c.decoration as BoxDecoration?)?.color)
+            .whereType<Color>();
+        expect(fills, isNotEmpty);
+        expect(fills.first.a, 1.0);
+      }
     } finally {
       await tester.pumpWidget(const SizedBox());
       await f.dispose();

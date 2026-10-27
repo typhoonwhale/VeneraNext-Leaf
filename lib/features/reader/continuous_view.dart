@@ -1151,11 +1151,15 @@ class ContinuousModeState extends State<ReaderContinuousView>
     if (_disposed || !mounted) return;
     final controller = navigation;
     var index = _waterfallIndexOfChapterPage(currentChapter, page) ?? page;
-    await itemScrollController.scrollTo(
-      index: index,
-      duration: const Duration(milliseconds: 200),
-      curve: Curves.ease,
-    );
+    if (MediaQuery.disableAnimationsOf(context)) {
+      itemScrollController.jumpTo(index: index);
+    } else {
+      await itemScrollController.scrollTo(
+        index: index,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.ease,
+      );
+    }
     if (_disposed || !mounted || !identical(navigation, controller)) return;
     // Keep the requested page pending until the final geometry is reported.
     await SchedulerBinding.instance.endOfFrame;
@@ -1281,15 +1285,18 @@ class ContinuousModeState extends State<ReaderContinuousView>
         event.logicalKey == LogicalKeyboardKey.arrowRight) {
       forward = false;
     }
-    if (forward == true) {
-      scrollController.animateTo(
-        scrollController.offset + context.height * 0.25,
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.ease,
+    if (forward == null) return;
+    final target =
+        scrollController.offset +
+        context.height * 0.25 * (forward == true ? 1 : -1);
+    if (MediaQuery.disableAnimationsOf(context)) {
+      final position = scrollController.position;
+      scrollController.jumpTo(
+        target.clamp(position.minScrollExtent, position.maxScrollExtent),
       );
-    } else if (forward == false) {
+    } else {
       scrollController.animateTo(
-        scrollController.offset - context.height * 0.25,
+        target,
         duration: const Duration(milliseconds: 200),
         curve: Curves.ease,
       );
