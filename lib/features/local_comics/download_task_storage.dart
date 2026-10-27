@@ -21,5 +21,8 @@ abstract interface class DownloadTaskStorage {
 
   void completeTask(DownloadTask task);
 
+  /// A task reports that its run failed and stopped.
+  void failTask(DownloadTask task);
+
   void removeTask(DownloadTask task);
 }

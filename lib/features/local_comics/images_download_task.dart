@@ -155,6 +155,13 @@ class ImagesDownloadTask extends DownloadTask with _TransferSpeedMixin {
     if (_isRunning) _retry?.wake();
   }
 
+  /// Set by a manual resume after a failure; the next run refetches the
+  /// image lists of the chapters that are not complete, once.
+  bool _refreshImages = false;
+
+  @override
+  void retryAfterFailure() => _refreshImages = true;
+
   @override
   void pause() {
     if (isPaused) return;
@@ -416,6 +423,13 @@ class ImagesDownloadTask extends DownloadTask with _TransferSpeedMixin {
       if (!_isCurrentRun(generation)) return;
     }
 
+    if (_refreshImages) {
+      if (_images != null && !await _refreshRemainingImages(generation)) {
+        return;
+      }
+      _refreshImages = false;
+    }
+
     if (_images == null) {
       if (comic!.chapters == null) {
         _message = "Fetching image list...".tl;
@@ -509,6 +523,48 @@ class ImagesDownloadTask extends DownloadTask with _TransferSpeedMixin {
     stopRecorder();
   }
 
+  /// Image addresses may expire, so a failed task gets fresh lists for the
+  /// current and later chapters. The current chapter continues from its
+  /// progress only with the same image count. Returns whether the run may
+  /// continue; an interrupted refresh is repeated by the next run.
+  Future<bool> _refreshRemainingImages(int generation) async {
+    final images = _images!;
+    final keys = images.keys.toList();
+    final refreshed = <String, List<String>>{};
+    for (var i = _chapter; i < keys.length; i++) {
+      final key = keys[i];
+      _message = "Fetching image list...".tl;
+      notifyListeners();
+      final res = await _runDownloadStepWithRetry(generation, () async {
+        var r = await source.loadComicPages!(
+          comicId,
+          comic!.chapters == null ? null : key,
+        );
+        return r.data;
+      });
+      if (!_isCurrentRun(generation)) return false;
+      if (res.error) {
+        Log.error("Download", res.errorMessage!);
+        _refreshImages = false;
+        _setError("Error: ${res.errorMessage}");
+        return false;
+      }
+      if (i == _chapter && res.data.length != images[key]!.length) {
+        // Downloaded pages would no longer match; keep them untouched.
+        _refreshImages = false;
+        _setError("Chapter content has changed. Cancel and download again.".tl);
+        return false;
+      }
+      refreshed[key] = res.data;
+    }
+    _images = {...images, ...refreshed};
+    _totalCount = _images!.values.fold(0, (sum, list) => sum + list.length);
+    _message = "$_downloadedCount/$_totalCount";
+    notifyListeners();
+    await _storage.saveCurrentDownloadingTasks();
+    return _isCurrentRun(generation);
+  }
+
   @override
   void onNextSecond(Timer t) {
     notifyListeners();
@@ -520,6 +576,7 @@ class ImagesDownloadTask extends DownloadTask with _TransferSpeedMixin {
     _isError = true;
     _message = message;
     notifyListeners();
+    _storage.failTask(this);
   }
 
   @override

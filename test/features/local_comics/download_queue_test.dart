@@ -655,19 +655,28 @@ void main() {
     expect(second.isPaused, isFalse);
   });
 
+  const normal = DownloadTaskState.normal;
+  const paused = DownloadTaskState.paused;
+  const failed = DownloadTaskState.error;
+  List<DownloadTaskState> states() => [
+    for (final task in queue.tasks) queue.stateOf(task),
+  ];
+  List<String> resumes() =>
+      events.where((event) => event.startsWith('resume:')).toList();
+
   test(
-    'only user pause and resume change persisted intent and request a save',
+    'only user pause, failure and manual resume change state and save',
     () async {
       final first = _Task('a', events);
       final second = _Task('b', events);
-      queue.restorePausedTasks([first, second], pausedByUser: [second]);
-      expect(queue.isPausedByUser(first), isFalse);
-      expect(queue.isPausedByUser(second), isTrue);
+      queue.restorePausedTasks([first, second], states: {second: paused});
+      expect(states(), [normal, paused]);
       queue.resume(first);
       await queue.pause(first);
       await queue.suspend();
-      expect(queue.isPausedByUser(first), isFalse);
+      expect(states(), [normal, paused]);
       expect(events.where((event) => event == 'save'), isEmpty);
+
       final restored = _Task('a', events);
       queue = DownloadQueue(
         commitComic: (_) {},
@@ -678,99 +687,183 @@ void main() {
       queue.restorePausedTasks([restored]);
       queue.resume(restored);
       await queue.pause(restored, byUser: true);
-      expect(queue.isPausedByUser(restored), isTrue);
+      expect(queue.stateOf(restored), paused);
       queue.resumeByIntent();
       expect(restored.isPaused, isTrue);
       queue.resume(restored);
-      expect(queue.isPausedByUser(restored), isFalse);
-      expect(events.where((event) => event == 'save'), hasLength(2));
+      expect(queue.stateOf(restored), normal);
+      expect(restored.isPaused, isFalse);
+      queue.fail(restored);
+      expect(queue.stateOf(restored), failed);
+      expect(events.where((event) => event == 'save'), hasLength(3));
     },
   );
 
-  test(
-    'adding work behind a user-paused head starts the first unpaused task',
-    () {
-      final paused = _Task('a', events);
-      final waiting = _Task('b', events);
-      final later = _Task('c', events);
-      queue.restorePausedTasks([paused, waiting], pausedByUser: [paused]);
-      queue.add(later);
-      expect(paused.isPaused, isTrue);
-      expect(waiting.isPaused, isFalse);
-      // Only the head runs, so the started task moves ahead of the skipped one.
-      expect(queue.tasks, [waiting, paused, later]);
-      expect(queue.isPausedByUser(paused), isTrue);
-      expect(events.where((event) => event == 'save'), hasLength(2));
-    },
-  );
+  test('automatic paths never start parked tasks', () async {
+    final userPaused = _Task('a', events);
+    final broken = _Task('b', events);
+    final waiting = _Task('c', events);
+    final later = _Task('d', events);
+    queue.restorePausedTasks(
+      [userPaused, broken, waiting],
+      states: {userPaused: paused, broken: failed},
+    );
+    queue.resumeByIntent();
+    expect(resumes(), ['resume:c']);
+    queue.add(later);
+    queue.complete(waiting);
+    // Adding behind the running task resumes only that running task again.
+    expect(resumes(), ['resume:c', 'resume:c', 'resume:d']);
+    // Parked tasks keep their place; nothing is reordered.
+    expect(queue.tasks, [userPaused, broken, later]);
+    final release = queue.holdAutomaticStarts();
+    queue.complete(later);
+    release();
+    queue.add(_Task('e', events)..onResumeFail = queue.fail);
+    await pumpEventQueue();
+    queue.resumeByIntent();
+    await pumpEventQueue();
+    expect(resumes(), ['resume:c', 'resume:c', 'resume:d', 'resume:e']);
+    expect(states(), [paused, failed, failed]);
+    expect(userPaused.isPaused && broken.isPaused, isTrue);
+  });
 
   test(
-    'completion and held starts advance past user-paused tasks only',
+    'user pause and failure of the running task advance the queue',
     () async {
-      final head = _Task('a', events);
-      final paused = _Task('b', events);
-      final next = _Task('c', events);
-      final alsoPaused = _Task('d', events);
-      queue.restorePausedTasks(
-        [head, paused, next, alsoPaused],
-        pausedByUser: [paused, alsoPaused],
-      );
-      queue.resume(head);
-      queue.complete(head);
-      expect(queue.tasks, [next, paused, alsoPaused]);
-      expect(next.isPaused, isFalse);
-      expect(paused.isPaused, isTrue);
-
-      final release = queue.holdAutomaticStarts();
-      queue.complete(next);
-      release();
-      // Every remaining task was paused by the user: nothing starts.
-      expect(queue.tasks, [paused, alsoPaused]);
-      expect(paused.isPaused, isTrue);
-      expect(alsoPaused.isPaused, isTrue);
-      expect(queue.isPausedByUser(paused), isTrue);
-      expect(queue.isPausedByUser(alsoPaused), isTrue);
-    },
-  );
-
-  test(
-    'automatic advance never starts a second task beside a running head',
-    () async {
-      final first = _Task('a', events);
-      final moved = _Task('b', events);
-      final next = _Task('c', events);
-      queue.restorePausedTasks([first, moved], pausedByUser: [moved]);
+      final gate = Completer<void>();
+      final first = _Task('a', events)..cleanup = gate.future;
+      final second = _Task('b', events);
+      final third = _Task('c', events);
+      final fourth = _Task('d', events);
+      queue.restorePausedTasks([first, second, third, fourth]);
       queue.resume(first);
-      // Moving a task first is an explicit start, even of a user-paused one.
-      await queue.moveToFirst(moved);
+      events.clear();
+      final stopped = queue.pause(first, byUser: true);
+      expect(events, ['pause:a', 'notify', 'save']);
+      expect(queue.isResumePending, isTrue);
       await pumpEventQueue();
-      expect(moved.isPaused, isFalse);
-      queue.add(next);
-      expect(queue.tasks, [moved, first, next]);
-      expect(first.isPaused, isTrue);
-      expect(next.isPaused, isTrue);
+      expect(resumes(), isEmpty);
+      gate.complete();
+      await stopped;
+      await pumpEventQueue();
+      expect(resumes(), ['resume:b']);
+      // The failed task stopped itself; the next start waits for its cleanup.
+      second.pause();
+      queue.fail(second);
+      await pumpEventQueue();
+      expect(resumes(), ['resume:b', 'resume:c']);
+      // A parked task that is not running never advances the queue.
+      await queue.pause(fourth, byUser: true);
+      await pumpEventQueue();
+      expect(resumes(), ['resume:b', 'resume:c']);
+      expect(states(), [paused, failed, normal, paused]);
+      expect(queue.activeTask, third);
     },
   );
 
   test(
-    'resume by intent starts an unpaused head through holds and suspension',
+    'manual resume moves a parked task to the end and starts it when idle',
     () async {
-      final head = _Task('a', events);
-      queue.restorePausedTasks([head]);
-      final release = queue.holdAutomaticStarts();
-      queue.resumeByIntent();
-      expect(head.isPaused, isTrue);
-      release();
-      expect(head.isPaused, isFalse);
-      final paused = _Task('b', events);
-      final waiting = _Task('c', events);
-      await queue.pause(head);
-      queue.restorePausedTasks([paused, waiting], pausedByUser: [paused]);
-      queue.resumeByIntent();
-      expect(paused.isPaused, isTrue);
-      expect(waiting.isPaused, isTrue);
+      final userPaused = _Task('a', events);
+      final running = _Task('b', events);
+      final broken = _Task('c', events);
+      queue.restorePausedTasks(
+        [userPaused, running, broken],
+        states: {userPaused: paused, broken: failed},
+      );
+      queue.resume(running);
+      queue.resume(userPaused);
+      expect(queue.tasks, [running, broken, userPaused]);
+      expect(states(), [normal, failed, normal]);
+      expect(userPaused.isPaused, isTrue);
+      expect(userPaused.failureRetries, 0);
+      queue.complete(running);
+      expect(userPaused.isPaused, isFalse);
+
+      await queue.pause(userPaused, byUser: true);
+      events.clear();
+      queue.resume(broken);
+      expect(queue.tasks, [userPaused, broken]);
+      expect(broken.failureRetries, 1);
+      expect(resumes(), ['resume:c']);
+      expect(events.indexOf('retry:c'), lessThan(events.indexOf('resume:c')));
     },
   );
+
+  test(
+    'manual resume while held starts only as the first normal task',
+    () async {
+      final userPaused = _Task('a', events);
+      final waiting = _Task('b', events);
+      queue.restorePausedTasks(
+        [userPaused, waiting],
+        states: {userPaused: paused},
+      );
+      final release = queue.holdAutomaticStarts();
+      queue.resume(userPaused);
+      expect(queue.tasks, [waiting, userPaused]);
+      expect(resumes(), isEmpty);
+      release();
+      expect(resumes(), ['resume:b']);
+
+      final only = _Task('c', events);
+      queue.remove(waiting);
+      queue.remove(userPaused);
+      queue.add(only);
+      await queue.pause(only, byUser: true);
+      final again = queue.holdAutomaticStarts();
+      queue.resume(only);
+      expect(only.isPaused, isFalse);
+      again();
+    },
+  );
+
+  test('move to first reorders a parked task without starting it', () async {
+    final running = _Task('a', events);
+    final userPaused = _Task('b', events);
+    final broken = _Task('c', events);
+    queue.restorePausedTasks(
+      [running, userPaused, broken],
+      states: {userPaused: paused, broken: failed},
+    );
+    queue.resume(running);
+    events.clear();
+    await queue.moveToFirst(userPaused);
+    await queue.moveToFirst(broken);
+    await pumpEventQueue();
+    expect(queue.tasks, [broken, userPaused, running]);
+    expect(states(), [failed, paused, normal]);
+    expect(events, ['notify', 'save', 'notify', 'save']);
+    expect(running.isPaused, isFalse);
+  });
+
+  test('pause all parks every normal task and stops the running one', () async {
+    final running = _Task('a', events);
+    final waiting = _Task('b', events);
+    final broken = _Task('c', events);
+    queue.restorePausedTasks(
+      [running, waiting, broken],
+      states: {broken: failed},
+    );
+    queue.resume(running);
+    events.clear();
+    await queue.pauseAll();
+    await pumpEventQueue();
+    expect(states(), [paused, paused, failed]);
+    expect(events, ['pause:a', 'notify', 'save']);
+    expect(queue.activeTask, isNull);
+  });
+
+  test('resume by intent starts the first normal task through holds', () {
+    final head = _Task('a', events);
+    queue.restorePausedTasks([head]);
+    final release = queue.holdAutomaticStarts();
+    queue.resumeByIntent();
+    expect(head.isPaused, isTrue);
+    release();
+    expect(head.isPaused, isFalse);
+  });
 }
 
 class _Task extends DownloadTask {
@@ -786,6 +879,14 @@ class _Task extends DownloadTask {
   bool _paused = true;
   void Function()? onPause;
   void Function()? onCancel;
+  void Function(DownloadTask)? onResumeFail;
+  int failureRetries = 0;
+  @override
+  void retryAfterFailure() {
+    failureRetries++;
+    events.add('retry:$id');
+  }
+
   @override
   bool get isPaused => _paused;
   @override
@@ -817,6 +918,11 @@ class _Task extends DownloadTask {
   void resume() {
     _paused = false;
     events.add('resume:$id');
+    final fail = onResumeFail;
+    if (fail != null) {
+      _paused = true;
+      fail(this);
+    }
   }
 
   @override

@@ -4,6 +4,11 @@ import 'package:venera_next/foundation/comic_type.dart';
 import 'download_task.dart';
 import 'local_comic_model.dart';
 
+/// Persisted queue state of a task. [paused] (by the user) and [error] tasks
+/// are parked: they keep their place in the list but nothing starts them
+/// until the user resumes them.
+enum DownloadTaskState { normal, paused, error }
+
 /// Ordered task coordination, independent of global managers and concrete
 /// download implementations. Storage/notification adapters are supplied by owner.
 class DownloadQueue {
@@ -27,11 +32,22 @@ class DownloadQueue {
 
   bool get isSuspended => _suspension != null;
 
-  /// Persisted user intent; system suspension and exit preparation never
-  /// change it. Snapshot decoding treats missing or invalid intent as paused.
-  final _pausedByUser = Set<DownloadTask>.identity();
+  /// Parked tasks only; every other task is normal. System suspension and
+  /// exit preparation never change a state.
+  final _parked = Map<DownloadTask, DownloadTaskState>.identity();
 
-  bool isPausedByUser(DownloadTask task) => _pausedByUser.contains(task);
+  DownloadTaskState stateOf(DownloadTask task) =>
+      _parked[task] ?? DownloadTaskState.normal;
+
+  /// The only task the queue may run: the first normal task.
+  DownloadTask? get activeTask {
+    for (final task in _tasks) {
+      if (!_parked.containsKey(task)) return task;
+    }
+    return null;
+  }
+
+  bool get _hasRunningTask => _tasks.any((task) => !task.isPaused);
 
   final List<DownloadTask> _tasks = [];
   late final List<DownloadTask> tasks = UnmodifiableListView(_tasks);
@@ -43,7 +59,7 @@ class DownloadQueue {
   /// starting tasks, notifying listeners or writing the snapshot back to disk.
   void restorePausedTasks(
     Iterable<DownloadTask> restored, {
-    Iterable<DownloadTask> pausedByUser = const [],
+    Map<DownloadTask, DownloadTaskState> states = const {},
   }) {
     if (_suspension != null) throw StateError('Download queue is suspended');
     final revision = _revision;
@@ -62,9 +78,12 @@ class DownloadQueue {
     _tasks
       ..clear()
       ..addAll(snapshot);
-    _pausedByUser
-      ..clear()
-      ..addAll(pausedByUser.where((task) => _indexOf(task) >= 0));
+    _parked.clear();
+    for (final MapEntry(key: task, value: state) in states.entries) {
+      if (state != DownloadTaskState.normal && _indexOf(task) >= 0) {
+        _parked[task] = state;
+      }
+    }
     _revision++;
   }
 
@@ -100,7 +119,7 @@ class DownloadQueue {
       final index = _indexOf(task);
       if (index < 0) return;
       _tasks.removeAt(index);
-      _pausedByUser.remove(task);
+      _parked.remove(task);
       final revision = ++_revision;
       _publish();
       _resumeIfUnchanged(revision, automatic: true);
@@ -121,11 +140,7 @@ class DownloadQueue {
     final stop = _pendingStop;
     if (stop == null) {
       _scheduledResumeRevision = null;
-      if (automatic) {
-        _startFirstNotPausedByUser();
-      } else {
-        tasks.firstOrNull?.resume();
-      }
+      activeTask?.resume();
     } else {
       _scheduledResumeRevision = revision;
       _scheduledResumeAutomatic = automatic;
@@ -140,65 +155,107 @@ class DownloadQueue {
     }
   }
 
-  /// Automatic starts never run a task the user paused. Only the head runs, so
-  /// the first task the user did not pause moves ahead of the skipped ones,
-  /// which keep their relative order. A running head stays the only task run.
-  void _startFirstNotPausedByUser() {
-    final head = tasks.firstOrNull;
-    if (head == null) return;
-    if (!head.isPaused || !_pausedByUser.contains(head)) {
-      head.resume();
-      return;
-    }
-    final index = _tasks.indexWhere((task) => !_pausedByUser.contains(task));
-    if (index < 0) return;
-    if (index > 0) {
-      _tasks.insert(0, _tasks.removeAt(index));
-      final revision = ++_revision;
-      _publish();
-      // A listener reentering the queue owns the final scheduling decision.
-      if (revision != _revision) return;
-    }
-    _tasks.first.resume();
-  }
-
   /// A queued start is still cancellable while an older task is stopping.
   bool get isResumePending =>
       _pendingStop != null && _scheduledResumeRevision == _revision;
 
-  /// A manual resume records user intent and is allowed while automatic
-  /// starts are held; an automatic resume does neither.
-  void resume(DownloadTask task, {bool automatic = false}) {
-    if (_suspension != null ||
-        !identical(tasks.firstOrNull, task) ||
-        !task.isPaused ||
-        isResumePending) {
+  /// A manual resume. A parked task becomes normal at the end of the list
+  /// and starts only when nothing runs; while automatic starts are held it
+  /// starts only as the first normal task. A normal task starts only as the
+  /// idle first normal task.
+  void resume(DownloadTask task) {
+    if (_suspension != null || _indexOf(task) < 0) return;
+    if (_parked.containsKey(task)) {
+      _resumeParked(task);
       return;
     }
-    if (!automatic && _pausedByUser.remove(task)) requestSave();
+    if (!identical(activeTask, task) || !task.isPaused || isResumePending) {
+      return;
+    }
     final revision = ++_revision;
     _scheduledResumeRevision = revision;
     notifyChanged();
-    _resumeIfUnchanged(revision, automatic: automatic);
+    _resumeIfUnchanged(revision);
   }
 
-  /// Start the restored head only when the user had not paused it. Tasks
-  /// behind a user-paused head keep waiting, as they did before the restart.
-  void resumeByIntent() {
-    final first = tasks.firstOrNull;
-    if (first != null && !isPausedByUser(first)) {
-      resume(first, automatic: true);
+  void _resumeParked(DownloadTask task) {
+    if (_parked.remove(task) == DownloadTaskState.error) {
+      task.retryAfterFailure();
     }
+    _tasks.removeAt(_indexOf(task));
+    _tasks.add(task);
+    final revision = ++_revision;
+    _publish();
+    // A listener reentering the queue owns the final scheduling decision.
+    if (revision != _revision || _hasRunningTask) return;
+    _resumeIfUnchanged(revision, automatic: !identical(activeTask, task));
   }
 
+  /// Start the restored first normal task. Parked tasks keep waiting, as they
+  /// did before the restart.
+  void resumeByIntent() {
+    final first = activeTask;
+    if (_suspension != null ||
+        first == null ||
+        !first.isPaused ||
+        isResumePending) {
+      return;
+    }
+    final revision = ++_revision;
+    _scheduledResumeRevision = revision;
+    notifyChanged();
+    _resumeIfUnchanged(revision, automatic: true);
+  }
+
+  /// A pause [byUser] parks any normal task; stopping the running task
+  /// advances the queue to the next normal task. A system pause only stops
+  /// the first normal task and keeps its state.
   Future<void> pause(DownloadTask task, {bool byUser = false}) {
     if (_suspension != null) return _suspension!.future;
-    if (!identical(tasks.firstOrNull, task)) return Future.value();
+    if (byUser) return _park(task, DownloadTaskState.paused);
+    if (!identical(activeTask, task)) return Future.value();
     _revision++;
     _scheduledResumeRevision = null;
-    if (byUser && _pausedByUser.add(task)) requestSave();
     final stopped = _stopBeforeScheduling(task, task.pause);
     notifyChanged();
+    return stopped;
+  }
+
+  /// Called by a task whose run failed; it is parked until a manual resume.
+  void fail(DownloadTask task) => _park(task, DownloadTaskState.error);
+
+  Future<void> _park(DownloadTask task, DownloadTaskState state) {
+    if (_indexOf(task) < 0 || _parked.containsKey(task)) return Future.value();
+    final active = identical(activeTask, task);
+    final startPending = isResumePending;
+    final advance =
+        startPending ||
+        (active && (state == DownloadTaskState.error || !task.isPaused));
+    final automatic = active || _scheduledResumeAutomatic;
+    _parked[task] = state;
+    _scheduledResumeRevision = null;
+    // A failed task has already stopped; only a user pause stops the task.
+    final stopped = active && state == DownloadTaskState.paused
+        ? _stopBeforeScheduling(task, task.pause)
+        : Future<void>.value();
+    final revision = ++_revision;
+    _publish();
+    if (advance) _resumeIfUnchanged(revision, automatic: automatic);
+    return stopped;
+  }
+
+  /// Park every normal task as paused by the user and stop the running one.
+  Future<void> pauseAll() {
+    if (_suspension != null) return _suspension!.future;
+    final active = activeTask;
+    if (active == null) return Future.value();
+    for (final task in _tasks) {
+      _parked.putIfAbsent(task, () => DownloadTaskState.paused);
+    }
+    _scheduledResumeRevision = null;
+    final stopped = _stopBeforeScheduling(active, active.pause);
+    _revision++;
+    _publish();
     return stopped;
   }
 
@@ -206,8 +263,7 @@ class DownloadQueue {
     if (_suspension != null) return _suspension!.future;
     if (_indexOf(task) < 0 || !_canceling.add(task)) return Future.value();
     final before = _revision;
-    final keepPendingStart =
-        isResumePending && !identical(tasks.firstOrNull, task);
+    final keepPendingStart = isResumePending && !identical(activeTask, task);
     final stopped = _stopBeforeScheduling(task, () {
       try {
         task.cancel();
@@ -229,20 +285,32 @@ class DownloadQueue {
     final index = _indexOf(task);
     if (index < 0) return;
     _tasks.removeAt(index);
-    _pausedByUser.remove(task);
+    _parked.remove(task);
     _revision++;
     _publish();
   }
 
+  /// A normal task becomes the running task if the first normal task was
+  /// running or about to start. Any other move only reorders the list.
   Future<void> moveToFirst(DownloadTask task) {
     if (_suspension != null) return _suspension!.future;
     if (_indexOf(task) <= 0) return Future.value();
-    final first = tasks.first;
+    final first = activeTask;
+    if (first == null || identical(first, task) || _parked.containsKey(task)) {
+      final startPending = isResumePending;
+      _tasks.insert(0, _tasks.removeAt(_indexOf(task)));
+      final revision = ++_revision;
+      _publish();
+      if (startPending) {
+        _resumeIfUnchanged(revision, automatic: _scheduledResumeAutomatic);
+      }
+      return Future.value();
+    }
     final shouldResume =
         !first.isPaused || _scheduledResumeRevision == _revision;
     final beforePause = _revision;
     final stopped = _stopBeforeScheduling(first, first.pause);
-    if (beforePause != _revision || !identical(tasks.firstOrNull, first)) {
+    if (beforePause != _revision || !identical(activeTask, first)) {
       return stopped;
     }
     final index = _indexOf(task);

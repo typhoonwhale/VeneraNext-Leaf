@@ -66,10 +66,10 @@ void main() {
     },
   );
 
-  testWidgets('page pause withdraws a start pending old cleanup', (
+  testWidgets('page pause all withdraws a start pending old cleanup', (
     tester,
   ) async {
-    // The page's pause is a user pause and saves the intent snapshot.
+    // The page's pause all is a user pause and saves the state snapshot.
     final root = Directory.systemTemp.createTempSync('downloading-page-');
     App.dataPath = root.path;
     final manager = LocalManager();
@@ -84,19 +84,78 @@ void main() {
     await tester.pump();
     expect(manager.isDownloadResumePending, isTrue);
     expect(task.resumes, 0);
-    await tester.tap(find.widgetWithIcon(OutlinedButton, Icons.pause));
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Pause all'));
     await tester.pump();
     expect(manager.isDownloadResumePending, isFalse);
+    expect(manager.downloadState(task), DownloadTaskState.paused);
     gate.complete();
     await tester.pump();
     await stopped;
     await tester.pump();
     expect(task.resumes, 0);
-    await tester.tap(find.widgetWithIcon(OutlinedButton, Icons.play_arrow));
+    expect(find.widgetWithIcon(OutlinedButton, Icons.play_arrow), findsNothing);
+    await tester.tap(find.widgetWithText(TextButton, 'Continue'));
     await tester.pump();
     expect(task.resumes, 1);
     await tester.pumpWidget(const SizedBox());
     expect(task.listenerCount, 0);
+  });
+
+  testWidgets('tasks are grouped and parked tasks can be continued', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(800, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final root = Directory.systemTemp.createTempSync('downloading-page-');
+    App.dataPath = root.path;
+    addTearDown(() => root.deleteSync(recursive: true));
+    final manager = LocalManager();
+    final running = _Task('a')..label = 'Running';
+    final waiting = _Task('b')..label = 'Waiting';
+    final userPaused = _Task('c')..label = 'User paused';
+    final failed = _Task('d')..label = 'Failed';
+    manager.restorePausedDownloads(
+      [running, waiting, userPaused, failed],
+      states: {
+        userPaused: DownloadTaskState.paused,
+        failed: DownloadTaskState.error,
+      },
+    );
+    manager.resumeDownload(running);
+    await tester.pumpWidget(page());
+    final continueButton = find.widgetWithText(TextButton, 'Continue');
+    double top(String text) => tester.getTopLeft(find.text(text)).dy;
+    expect(top('Downloading / Queued'), lessThan(top('Running')));
+    expect(top('Waiting'), lessThan(top('Paused / Failed')));
+    expect(top('Paused / Failed'), lessThan(top('User paused')));
+    expect(top('User paused'), lessThan(top('Failed')));
+    expect(continueButton, findsNWidgets(2));
+    expect(find.widgetWithText(OutlinedButton, 'Pause all'), findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, 'Start'), findsNothing);
+
+    await tester.tap(
+      find.descendant(
+        of: find
+            .ancestor(of: find.text('User paused'), matching: find.byType(Row))
+            .last,
+        matching: continueButton,
+      ),
+    );
+    await tester.pump();
+    // Queued behind the running task, not started.
+    expect(top('Waiting'), lessThan(top('User paused')));
+    expect(top('User paused'), lessThan(top('Paused / Failed')));
+    expect(userPaused.resumes, 0);
+    expect(continueButton, findsOneWidget);
+
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Pause all'));
+    await tester.pump();
+    expect(find.text('Downloading / Queued'), findsNothing);
+    expect(continueButton, findsNWidgets(4));
+    expect(running.paused, isTrue);
+    await tester.pumpWidget(const SizedBox());
   });
 
   for (final brightness in Brightness.values) {
@@ -116,7 +175,10 @@ void main() {
         final task = _Task('error')
           ..error = true
           ..status = text;
-        LocalManager().restorePausedDownloads([task]);
+        LocalManager().restorePausedDownloads(
+          [task],
+          states: {task: DownloadTaskState.error},
+        );
         String? copied;
         tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
           SystemChannels.platform,
@@ -135,11 +197,8 @@ void main() {
         );
         await tester.pumpWidget(page(brightness: brightness));
         expect(tester.takeException(), isNull, reason: 'download list layout');
-        expect(find.text('Error'), findsOneWidget);
-        expect(
-          find.widgetWithIcon(OutlinedButton, Icons.play_arrow),
-          findsOneWidget,
-        );
+        expect(find.text('Paused / Failed'), findsOneWidget);
+        expect(find.widgetWithText(TextButton, 'Continue'), findsOneWidget);
         await tester.tap(find.byIcon(Icons.more_horiz));
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull, reason: 'download menu layout');

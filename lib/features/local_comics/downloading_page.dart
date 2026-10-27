@@ -19,7 +19,7 @@ class DownloadingPage extends StatefulWidget {
 }
 
 class _DownloadingPageState extends State<DownloadingPage> {
-  DownloadTask? firstTask;
+  DownloadTask? activeTask;
 
   late final LocalManager manager = LocalManager();
 
@@ -27,27 +27,27 @@ class _DownloadingPageState extends State<DownloadingPage> {
   void initState() {
     super.initState();
     manager.addListener(update);
-    _syncFirstTask();
+    _syncActiveTask();
   }
 
   @override
   void dispose() {
     manager.removeListener(update);
-    firstTask?.removeListener(update);
+    activeTask?.removeListener(update);
     super.dispose();
   }
 
-  void _syncFirstTask() {
-    final currentFirstTask = manager.downloadingTasks.firstOrNull;
-    if (!identical(currentFirstTask, firstTask)) {
-      firstTask?.removeListener(update);
-      firstTask = currentFirstTask;
-      firstTask?.addListener(update);
+  void _syncActiveTask() {
+    final current = manager.activeDownloadTask;
+    if (!identical(current, activeTask)) {
+      activeTask?.removeListener(update);
+      activeTask = current;
+      activeTask?.addListener(update);
     }
   }
 
   void update() {
-    _syncFirstTask();
+    _syncActiveTask();
     if (mounted) {
       setState(() {});
     }
@@ -55,33 +55,47 @@ class _DownloadingPageState extends State<DownloadingPage> {
 
   @override
   Widget build(BuildContext context) {
+    final normal = <DownloadTask>[];
+    final parked = <DownloadTask>[];
+    for (final task in manager.downloadingTasks) {
+      (manager.downloadState(task) == DownloadTaskState.normal
+              ? normal
+              : parked)
+          .add(task);
+    }
+    final items = <Widget>[
+      buildTop(),
+      if (normal.isNotEmpty) _buildHeader("Downloading / Queued".tl),
+      for (final task in normal) _buildTile(task, DownloadTaskState.normal),
+      if (parked.isNotEmpty) _buildHeader("Paused / Failed".tl),
+      for (final task in parked) _buildTile(task, manager.downloadState(task)),
+    ];
     return PopUpWidgetScaffold(
       title: "",
       body: ListView.builder(
-        itemCount: manager.downloadingTasks.length + 1,
-        itemBuilder: (BuildContext context, int i) {
-          if (i == 0) {
-            return buildTop();
-          }
-          i--;
-
-          return _DownloadTaskTile(
-            key: ValueKey(manager.downloadingTasks[i]),
-            task: manager.downloadingTasks[i],
-            manager: manager,
-          );
-        },
+        itemCount: items.length,
+        itemBuilder: (BuildContext context, int i) => items[i],
       ),
     );
   }
 
+  Widget _buildHeader(String text) => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+    child: Text(text, style: ts.s14.bold),
+  );
+
+  Widget _buildTile(DownloadTask task, DownloadTaskState state) =>
+      _DownloadTaskTile(
+        key: ValueKey(task),
+        task: task,
+        state: state,
+        manager: manager,
+      );
+
   Widget buildTop() {
-    int speed = 0;
-    if (manager.downloadingTasks.isNotEmpty) {
-      speed = manager.downloadingTasks.first.speed;
-    }
-    var first = manager.downloadingTasks.firstOrNull;
+    final active = manager.activeDownloadTask;
     final resumePending = manager.isDownloadResumePending;
+    final idle = active == null || (active.isPaused && !resumePending);
     return Container(
       constraints: const BoxConstraints(minHeight: 48),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -99,40 +113,48 @@ class _DownloadingPageState extends State<DownloadingPage> {
         spacing: 12,
         runSpacing: 8,
         children: [
-          if (first?.isError == true)
-            Text("Error".tl, style: ts.s18.bold)
-          else if (first?.isPaused == true && !resumePending)
+          if (idle)
             Text("Paused".tl, style: ts.s18.bold)
           else
-            Text("${bytesToReadableString(speed)}/s", style: ts.s18.bold),
-          if (!resumePending &&
-              (first?.isPaused == true || first?.isError == true))
-            OutlinedButton(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.play_arrow, size: 18),
-                  const SizedBox(width: 4),
-                  Text("Start".tl),
-                ],
-              ),
-              onPressed: () {
-                manager.resumeDownload(first!);
-              },
-            )
-          else if (first != null)
-            OutlinedButton(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.pause, size: 18),
-                  const SizedBox(width: 4),
-                  Text("Pause".tl),
-                ],
-              ),
-              onPressed: () {
-                manager.pauseDownload(first, byUser: true);
-              },
+            Text(
+              "${bytesToReadableString(active.speed)}/s",
+              style: ts.s18.bold,
+            ),
+          if (active != null)
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                // Normal tasks can be idle after a system pause or a
+                // startup that did not resume them.
+                if (idle)
+                  OutlinedButton(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.play_arrow, size: 18),
+                        const SizedBox(width: 4),
+                        Text("Start".tl),
+                      ],
+                    ),
+                    onPressed: () {
+                      manager.resumeDownload(active);
+                    },
+                  ),
+                OutlinedButton(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.pause, size: 18),
+                      const SizedBox(width: 4),
+                      Text("Pause all".tl),
+                    ],
+                  ),
+                  onPressed: () {
+                    manager.pauseAllDownloads();
+                  },
+                ),
+              ],
             ),
         ],
       ),
@@ -143,11 +165,13 @@ class _DownloadingPageState extends State<DownloadingPage> {
 class _DownloadTaskTile extends StatefulWidget {
   const _DownloadTaskTile({
     required this.task,
+    required this.state,
     required this.manager,
     super.key,
   });
 
   final DownloadTask task;
+  final DownloadTaskState state;
   final LocalManager manager;
 
   @override
@@ -208,6 +232,20 @@ class _DownloadTaskTileState extends State<_DownloadTaskTile> {
 
   @override
   Widget build(BuildContext context) {
+    final state = widget.state;
+    final String? status;
+    if (widget.task.isError) {
+      status = widget.task.message;
+    } else if (state == DownloadTaskState.error) {
+      // Restored failures keep their state, not their message.
+      status = "Error".tl;
+    } else if (state == DownloadTaskState.paused) {
+      status = "Paused".tl;
+    } else if (!widget.task.isPaused) {
+      status = widget.task.message;
+    } else {
+      status = null;
+    }
     return Container(
       height:
           136 *
@@ -275,8 +313,23 @@ class _DownloadTaskTileState extends State<_DownloadTaskTile> {
                   ],
                 ),
                 const Spacer(),
-                if (!widget.task.isPaused || widget.task.isError)
-                  Text(widget.task.message, style: ts.s12, maxLines: 3),
+                Row(
+                  children: [
+                    Expanded(
+                      child: status == null
+                          ? const SizedBox()
+                          : Text(status, style: ts.s12, maxLines: 3),
+                    ),
+                    if (state != DownloadTaskState.normal)
+                      TextButton.icon(
+                        icon: const Icon(Icons.play_arrow, size: 18),
+                        label: Text("Continue".tl),
+                        onPressed: () {
+                          widget.manager.resumeDownload(widget.task);
+                        },
+                      ),
+                  ],
+                ),
                 const SizedBox(height: 4),
                 LinearProgressIndicator(value: widget.task.progress),
                 const SizedBox(height: 8),

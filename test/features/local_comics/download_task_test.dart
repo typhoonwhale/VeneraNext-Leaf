@@ -16,6 +16,7 @@ import 'package:venera_next/features/comic_source/comic_source.dart';
 import 'package:venera_next/features/local_comics/local_comics.dart';
 import 'package:venera_next/features/local_comics/download_directory_allocator.dart';
 import 'package:venera_next/features/local_comics/download_task_storage.dart';
+import 'package:venera_next/features/local_comics/local_chapter_storage.dart';
 import 'package:venera_next/network/images.dart';
 import 'package:venera_next/network/file_downloader.dart';
 
@@ -1202,6 +1203,161 @@ void main() {
     },
   );
 
+  group('resume after a failure refetches remaining image lists', () {
+    late Directory root;
+    late _TaskStorage storage;
+    late Map<String, Object> pages;
+    late List<String?> listRequests;
+    late List<String> imageRequests;
+    late File downloaded;
+    final bytes = base64Decode(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6uwAAAABJRU5ErkJggg==',
+    );
+    const oldImages = {
+      'c1': ['old-1a', 'old-1b'],
+      'c2': ['old-2a', 'old-2b'],
+      'c3': ['old-3a'],
+    };
+
+    /// Chapter c1 is complete and the first image of c2 is saved.
+    ImagesDownloadTask failedTask() {
+      ComicSourceManager().remove(sourceKey);
+      ComicSourceManager().add(
+        _testSource(
+          sourceKey,
+          loadComicPages: (id, ep) async {
+            listRequests.add(ep);
+            final result = pages[ep]!;
+            if (result is Error) throw result;
+            return Res(result as List<String>);
+          },
+        ),
+      );
+      final task = ImagesDownloadTask.fromJson(
+        storage,
+        {
+          'type': 'ImagesDownloadTask',
+          'source': sourceKey,
+          'comicId': 'one',
+          'comic': {
+            'title': 'One',
+            'subtitle': '',
+            'cover': 'cover.jpg',
+            'description': '',
+            'tags': <String, List<String>>{},
+            'chapters': {'c1': 'C1', 'c2': 'C2', 'c3': 'C3'},
+            'sourceKey': sourceKey,
+            'comicId': 'one',
+          },
+          'chapters': null,
+          'path': root.path,
+          'cover': 'file://${root.path}/cover.png',
+          'images': oldImages,
+          'downloadedCount': 3,
+          'totalCount': 5,
+          'index': 1,
+          'chapter': 1,
+        },
+        loadImage: (key, _, _, _) async* {
+          imageRequests.add(key);
+          yield ImageDownloadProgress(
+            currentBytes: bytes.length,
+            totalBytes: bytes.length,
+            imageBytes: bytes,
+          );
+        },
+      )!;
+      addTearDown(() async {
+        task.pause();
+        await task.pendingCleanup;
+        await task.debugResumeFuture;
+      });
+      return task;
+    }
+
+    Future<void> resumeAfterFailure(ImagesDownloadTask task) async {
+      task.retryAfterFailure();
+      task.resume();
+      await task.debugResumeFuture;
+    }
+
+    setUp(() {
+      root = Directory.systemTemp.createTempSync('download-refresh-');
+      storage = _TaskStorage(root.path);
+      listRequests = [];
+      imageRequests = [];
+      final chapter = Directory(
+        '${root.path}/${localChapterDirectoryName('c2')}',
+      )..createSync();
+      downloaded = File('${chapter.path}/0.png')..writeAsStringSync('kept');
+      addTearDown(() => root.deleteSync(recursive: true));
+    });
+
+    test('same image count continues with the new addresses', () async {
+      pages = {
+        'c1': ['unused'],
+        'c2': ['new-2a', 'new-2b'],
+        'c3': ['new-3a', 'new-3b'],
+      };
+      final task = failedTask();
+      await resumeAfterFailure(task);
+      // Completed chapters are not fetched again.
+      expect(listRequests, ['c2', 'c3']);
+      expect(imageRequests, ['new-2b', 'new-3a', 'new-3b']);
+      expect(storage.completed, [same(task)]);
+      expect(task.toJson()['totalCount'], 6);
+      expect(task.toJson()['downloadedCount'], 6);
+      expect(downloaded.readAsStringSync(), 'kept');
+    });
+
+    test('a changed image count fails without touching files', () async {
+      pages = {
+        'c2': ['new-2a', 'new-2b', 'new-2c'],
+        'c3': ['new-3a'],
+      };
+      final task = failedTask();
+      await resumeAfterFailure(task);
+      expect(task.isError, isTrue);
+      expect(
+        task.message,
+        'Chapter content has changed. Cancel and download again.',
+      );
+      expect(storage.failed, [same(task)]);
+      expect(imageRequests, isEmpty);
+      expect(task.toJson()['images'], oldImages);
+      expect(task.toJson()['totalCount'], 5);
+      expect(downloaded.readAsStringSync(), 'kept');
+    });
+
+    test('a failed refetch keeps the failure and its reason', () async {
+      pages = {
+        'c2': StateError('list unavailable'),
+        'c3': ['new-3a'],
+      };
+      final task = failedTask();
+      await resumeAfterFailure(task);
+      expect(task.isError, isTrue);
+      expect(task.message, contains('list unavailable'));
+      expect(storage.failed, [same(task)]);
+      expect(listRequests, ['c2']);
+      expect(imageRequests, isEmpty);
+      expect(task.toJson()['images'], oldImages);
+    });
+
+    test('an ordinary resume does not refetch', () async {
+      pages = {
+        'c2': ['new-2a', 'new-2b'],
+        'c3': ['new-3a'],
+      };
+      final task = failedTask();
+      task.resume();
+      await task.debugResumeFuture;
+      expect(listRequests, isEmpty);
+      expect(imageRequests, ['old-2b', 'old-3a']);
+      expect(storage.completed, [same(task)]);
+    });
+  });
+
   test(
     'paused chapter-list fetch cannot publish a partial list to a newer run',
     () async {
@@ -2026,6 +2182,7 @@ class _TaskStorage implements DownloadTaskStorage {
   Future<void> Function()? afterAllocate;
   final completed = <DownloadTask>[];
   final removed = <DownloadTask>[];
+  final failed = <DownloadTask>[];
   int saves = 0;
   LocalComic? comic;
 
@@ -2051,6 +2208,9 @@ class _TaskStorage implements DownloadTaskStorage {
     completed.add(task);
     comic = task.toLocalComic();
   }
+
+  @override
+  void failTask(DownloadTask task) => failed.add(task);
 
   @override
   void removeTask(DownloadTask task) => removed.add(task);

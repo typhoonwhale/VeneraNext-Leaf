@@ -14,6 +14,7 @@ import 'download_directory_allocator.dart';
 import 'local_sort_type.dart';
 export 'local_sort_type.dart';
 export 'local_comic_model.dart';
+export 'download_queue.dart' show DownloadTaskState;
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -420,8 +421,8 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
     _checkNotDisposed();
     if (restoreDownloadingTasks()) {
       // Before any task can start and create a new workspace. Workspaces of
-      // an unreadable snapshot, or of entries that could not be decoded now
-      // (e.g. their comic source is unavailable), are never orphans.
+      // an unreadable snapshot are never treated as orphans; entries that
+      // cannot be decoded are dropped with their workspaces.
       try {
         ArchiveDownloadTask.removeOrphanWorkspaces(
           App.cachePath,
@@ -678,6 +679,12 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
 
   List<DownloadTask> get downloadingTasks => _downloadQueue.tasks;
 
+  /// The first normal task: the only one the queue runs.
+  DownloadTask? get activeDownloadTask => _downloadQueue.activeTask;
+
+  DownloadTaskState downloadState(DownloadTask task) =>
+      _downloadQueue.stateOf(task);
+
   bool isDownloading(String id, ComicType type) =>
       _downloadQueue.contains(id, type);
 
@@ -709,6 +716,12 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
     _downloadQueue.complete(task);
   }
 
+  /// A task may still fail after its library was disposed.
+  @override
+  void failTask(DownloadTask task) {
+    if (!_disposed) _downloadQueue.fail(task);
+  }
+
   @override
   void removeTask(DownloadTask task) => _downloadQueue.remove(task);
 
@@ -721,9 +734,11 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
     _downloadQueue.resume(task);
   }
 
-  /// Only the download page passes [byUser]; system pauses keep the intent.
+  /// Only the download page passes [byUser]; system pauses keep the state.
   Future<void> pauseDownload(DownloadTask task, {bool byUser = false}) =>
       _downloadQueue.pause(task, byUser: byUser);
+
+  Future<void> pauseAllDownloads() => _downloadQueue.pauseAll();
 
   Future<void> moveToFirst(DownloadTask task) {
     _storageAccess.check();
@@ -783,45 +798,57 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
     downloadingTasks.map(
       (task) => {
         ...task.toJson(),
-        _userPausedKey: _downloadQueue.isPausedByUser(task),
+        _stateKey: _downloadQueue.stateOf(task).name,
       },
     ),
   );
 
-  /// Shared by every task kind, so task codecs do not carry queue intent.
-  static const _userPausedKey = 'userPaused';
+  /// Shared by every task kind, so task codecs do not carry queue state.
+  static const _stateKey = 'state';
+
+  /// Written by earlier versions instead of [_stateKey].
+  static const _legacyUserPausedKey = 'userPaused';
+
+  /// Older snapshots and damaged values never resume a task by themselves.
+  static DownloadTaskState _decodeState(Map<String, dynamic> json) {
+    if (!json.containsKey(_stateKey)) {
+      return json[_legacyUserPausedKey] == false
+          ? DownloadTaskState.normal
+          : DownloadTaskState.paused;
+    }
+    final name = json[_stateKey];
+    for (final state in DownloadTaskState.values) {
+      if (state.name == name) return state;
+    }
+    return DownloadTaskState.paused;
+  }
 
   /// Install a fully decoded paused snapshot during initialization/recovery.
   void restorePausedDownloads(
     Iterable<DownloadTask> tasks, {
-    Iterable<DownloadTask> pausedByUser = const [],
+    Map<DownloadTask, DownloadTaskState> states = const {},
   }) {
     _storageAccess.check();
-    _downloadQueue.restorePausedTasks(tasks, pausedByUser: pausedByUser);
+    _downloadQueue.restorePausedTasks(tasks, states: states);
   }
 
-  /// Returns false when the snapshot could not be restored completely,
-  /// including when any entry could not be decoded.
+  /// Returns false when the snapshot could not be restored. Entries that
+  /// cannot be decoded are dropped.
   bool restoreDownloadingTasks() {
     _storageAccess.check();
     try {
-      var complete = true;
       final entries = _downloadTaskStore.restore(_taskSnapshotPath, (json) {
         final task = _decodeDownloadTask(json, this);
-        if (task == null) complete = false;
-        // Older snapshots and damaged values never resume a task by themselves.
-        return task == null ? null : (task, json[_userPausedKey] != false);
+        return task == null ? null : (task, _decodeState(json));
       });
       if (entries != null) {
         restorePausedDownloads(
           entries.map((entry) => entry.$1),
-          pausedByUser: [
-            for (final (task, paused) in entries)
-              if (paused) task,
-          ],
+          states: Map.identity()
+            ..addEntries(entries.map((entry) => MapEntry(entry.$1, entry.$2))),
         );
       }
-      return complete;
+      return true;
     } catch (error, stack) {
       Log.error('LocalManager', error, stack);
       return false;
@@ -856,8 +883,8 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
         await marker.delete();
         return;
       }
-      final first = downloadingTasks.firstOrNull;
-      if (first == null || _downloadQueue.isPausedByUser(first)) return;
+      final first = _downloadQueue.activeTask;
+      if (first == null) return;
       await marker.writeAsString('', flush: true);
       if (!_disposed && !requiresStorageRecovery) {
         _downloadQueue.resumeByIntent();

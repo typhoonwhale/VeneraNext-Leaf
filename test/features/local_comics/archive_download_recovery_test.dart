@@ -268,7 +268,7 @@ void main() {
       expect(entry(saved)['outputOwned'], isTrue);
       // Leave the half output and pretend the user paused before the crash.
       writeSnapshot([
-        {...entry(saved), 'userPaused': true},
+        {...entry(saved), 'state': 'paused'},
       ]);
 
       manager = await start();
@@ -346,7 +346,7 @@ void main() {
     final output = manager.downloadingTasks.single.path!;
     await crash(manager);
     writeSnapshot([
-      {...entry(readSnapshot()), 'userPaused': true},
+      {...entry(readSnapshot()), 'state': 'paused'},
     ]);
 
     manager = await start();
@@ -452,7 +452,7 @@ void main() {
     final live = File(transfers.single).parent;
     final saved = await crash(manager);
     writeSnapshot([
-      {...entry(saved), 'userPaused': true},
+      {...entry(saved), 'state': 'paused'},
     ]);
     final orphan = Directory('${cache.path}/archive-download-orphan')
       ..createSync();
@@ -484,7 +484,7 @@ void main() {
   });
 
   test(
-    'an entry whose source is unavailable keeps every workspace once',
+    'an entry that cannot be decoded is dropped with its workspace',
     () async {
       var manager = await start();
       transfer = hangingTransfer;
@@ -497,23 +497,12 @@ void main() {
       // The comic source failed to load in this process.
       ComicSourceManager().remove(_sourceKey);
       writeSnapshot([
-        {...saved, 'userPaused': true},
+        {...saved, 'state': 'paused'},
       ]);
 
       manager = await start();
       expect(manager.downloadingTasks, isEmpty);
-      expect(live.existsSync(), isTrue);
-      expect(orphan.existsSync(), isTrue);
-      await crash(manager);
-
-      // Fully decodable again: only the unreferenced workspace is removed.
-      ComicSourceManager().add(_testSource(_sourceKey));
-      writeSnapshot([
-        {...saved, 'userPaused': true},
-      ]);
-      manager = await start();
-      expect(restored(manager).isPaused, isTrue);
-      expect(live.existsSync(), isTrue);
+      expect(live.existsSync(), isFalse);
       expect(orphan.existsSync(), isFalse);
     },
   );

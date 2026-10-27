@@ -15,6 +15,10 @@ abstract class DownloadTask with ChangeNotifier {
   /// A network/foreground hint may wake an existing wait, never resume a task.
   void retryNow() {}
 
+  /// The user resumes this task after a failure parked it; called before the
+  /// queue starts it again.
+  void retryAfterFailure() {}
+
   /// bytes per second
   int get speed;
 

@@ -160,6 +160,7 @@ class ArchiveDownloadTask extends DownloadTask {
     _message = message;
     notifyListeners();
     Log.error("Download", message);
+    _storage.failTask(this);
   }
 
   @override
