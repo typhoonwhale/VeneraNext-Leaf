@@ -1,3 +1,4 @@
+import 'package:venera_next/foundation/eink_theme.dart';
 import 'package:venera_next/foundation/navigation_admission.dart';
 import 'dart:async';
 import 'dart:math' as math;
@@ -88,7 +89,7 @@ class _ToastOverlay extends StatelessWidget {
     return Material(
       color: Theme.of(context).colorScheme.inverseSurface,
       borderRadius: BorderRadius.circular(8),
-      elevation: 2,
+      elevation: context.isEInk ? 0 : 2,
       textStyle: ts.withColor(Theme.of(context).colorScheme.onInverseSurface),
       child: IconTheme(
         data: IconThemeData(
@@ -525,14 +526,16 @@ class ContentDialog extends StatelessWidget {
     return Dialog(
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
-        side: context.brightness == Brightness.dark
+        side: context.isEInk
+            ? const BorderSide(color: Colors.black, width: 2)
+            : context.brightness == Brightness.dark
             ? BorderSide(color: context.colorScheme.outlineVariant)
             : BorderSide.none,
       ),
       insetPadding: context.width < 400
           ? const EdgeInsets.symmetric(horizontal: 4)
           : const EdgeInsets.symmetric(horizontal: 16),
-      elevation: 2,
+      elevation: context.isEInk ? 0 : 2,
       shadowColor: context.colorScheme.shadow,
       backgroundColor: context.colorScheme.surface,
       child: AnimatedSize(

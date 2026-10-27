@@ -1,3 +1,4 @@
+import 'package:venera_next/foundation/eink_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:venera_next/components/gesture.dart';
 import 'package:venera_next/components/summary_header.dart';
@@ -75,6 +76,7 @@ class ComicSourceSummary extends StatelessWidget {
                           color: Theme.of(
                             context,
                           ).colorScheme.secondaryContainer,
+                          border: context.einkBorder(),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(e),

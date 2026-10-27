@@ -1,3 +1,4 @@
+import 'package:venera_next/foundation/eink_theme.dart';
 import 'package:venera_next/features/history/history_scope.dart';
 import 'package:venera_next/features/favorites/favorites_scope.dart';
 import 'package:venera_next/components/file_save_task.dart';
@@ -358,13 +359,16 @@ class _ComicPageState extends LoadingState<ComicPage, ComicDetails>
                 decoration: BoxDecoration(
                   color: context.colorScheme.primaryContainer,
                   borderRadius: BorderRadius.circular(8),
-                  boxShadow: [
-                    BoxShadow(
-                      color: context.colorScheme.outlineVariant,
-                      blurRadius: 1,
-                      offset: const Offset(0, 1),
-                    ),
-                  ],
+                  border: context.einkBorder(),
+                  boxShadow: context.isEInk
+                      ? null
+                      : [
+                          BoxShadow(
+                            color: context.colorScheme.outlineVariant,
+                            blurRadius: 1,
+                            offset: const Offset(0, 1),
+                          ),
+                        ],
                 ),
                 height: 144,
                 width: 144 * 0.72,
@@ -1016,13 +1020,16 @@ class _ComicPageLoadingPlaceHolder extends StatelessWidget {
         decoration: BoxDecoration(
           color: context.colorScheme.primaryContainer,
           borderRadius: BorderRadius.circular(8),
-          boxShadow: [
-            BoxShadow(
-              color: context.colorScheme.outlineVariant,
-              blurRadius: 1,
-              offset: const Offset(0, 1),
-            ),
-          ],
+          border: context.einkBorder(),
+          boxShadow: context.isEInk
+              ? null
+              : [
+                  BoxShadow(
+                    color: context.colorScheme.outlineVariant,
+                    blurRadius: 1,
+                    offset: const Offset(0, 1),
+                  ),
+                ],
         ),
         height: 144,
         width: 144 * 0.72,

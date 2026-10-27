@@ -1,3 +1,4 @@
+import 'package:venera_next/foundation/eink_theme.dart';
 import 'package:venera_next/features/favorites/favorites_scope.dart';
 import 'dart:math';
 import 'dart:async';
@@ -117,7 +118,9 @@ class _FavoritesPageState extends SettingsSaveState<FavoritesPage> {
       barrierDismissible: true,
       fullscreenDialog: true,
       opaque: false,
-      barrierColor: Colors.black.toOpacity(0.36),
+      barrierColor: EInkPreferences.einkTheme
+          ? Colors.transparent
+          : Colors.black.toOpacity(0.36),
       pageBuilder: (context, animation, secondary) {
         return Align(
           alignment: Alignment.centerLeft,

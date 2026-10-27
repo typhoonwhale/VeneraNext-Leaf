@@ -45,6 +45,14 @@ class EInkStyle extends ThemeExtension<EInkStyle> {
 extension EInkContext on BuildContext {
   bool get isEInk => Theme.of(this).extension<EInkStyle>()?.enabled ?? false;
 
+  /// Solid badge fill: black on E-Ink, [color] otherwise.
+  Color einkBadgeColor(Color color) => isEInk ? Colors.black : color;
+
+  /// Outline used by E-Ink in place of fills that become indistinguishable
+  /// on a white surface; null for the regular theme.
+  Border? einkBorder({double width = 1}) =>
+      isEInk ? Border.all(color: Colors.black, width: width) : null;
+
   /// Selected-state colors for E-Ink; only meaningful when [isEInk] is true.
   EInkStyle get einkStyle =>
       Theme.of(this).extension<EInkStyle>() ?? const EInkStyle();

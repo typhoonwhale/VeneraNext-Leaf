@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:venera_next/components/gesture.dart';
 import 'package:venera_next/foundation/context.dart';
+import 'package:venera_next/foundation/eink_theme.dart';
 import 'package:venera_next/foundation/translations.dart';
 import 'package:venera_next/foundation/widget_utils.dart';
 import 'package:venera_next/features/history/history.dart';
@@ -160,7 +161,11 @@ class _SettingsPageState extends State<SettingsPage> {
         height: 46,
         padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
         decoration: BoxDecoration(
-          color: selected ? colors.primaryContainer.toOpacity(0.36) : null,
+          color: selected
+              ? context.isEInk
+                    ? context.einkStyle.selectedBackground
+                    : colors.primaryContainer.toOpacity(0.36)
+              : null,
           border: Border(
             left: BorderSide(
               color: selected ? colors.primary : Colors.transparent,
@@ -178,6 +183,15 @@ class _SettingsPageState extends State<SettingsPage> {
           ],
         ),
       );
+      if (selected && context.isEInk) {
+        content = IconTheme.merge(
+          data: IconThemeData(color: context.einkStyle.selectedForeground),
+          child: DefaultTextStyle.merge(
+            style: TextStyle(color: context.einkStyle.selectedForeground),
+            child: content,
+          ),
+        );
+      }
 
       return Padding(
         padding: enableTwoViews

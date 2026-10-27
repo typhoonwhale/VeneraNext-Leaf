@@ -1,3 +1,4 @@
+import 'package:venera_next/foundation/eink_theme.dart';
 import 'package:venera_next/foundation/log.dart';
 import 'package:flutter/material.dart';
 import 'package:venera_next/components/appbar.dart';
@@ -385,6 +386,7 @@ class _CommentTileState extends State<_CommentTile> {
               clipBehavior: Clip.antiAlias,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(18),
+                border: context.einkBorder(),
                 color: Theme.of(context).colorScheme.secondaryContainer,
               ),
               child: widget.comment.avatar == null

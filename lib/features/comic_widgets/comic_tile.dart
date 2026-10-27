@@ -1,3 +1,4 @@
+import 'package:venera_next/foundation/eink_theme.dart';
 import 'dart:math' as math;
 import 'package:venera_next/foundation/application_preferences.dart';
 import 'package:venera_next/foundation/global_preference_store.dart';
@@ -171,7 +172,7 @@ Widget _buildUpdateBadge(BuildContext context, {double size = 24}) {
   return Container(
     height: size,
     width: size,
-    color: Colors.deepOrange.shade700,
+    color: context.einkBadgeColor(Colors.deepOrange.shade700),
     child: Icon(Icons.update, size: size * 2 / 3, color: Colors.white),
   );
 }
@@ -369,7 +370,7 @@ class ComicTile extends StatelessWidget {
                             Container(
                               height: badgeSize,
                               width: badgeSize,
-                              color: Colors.green,
+                              color: context.einkBadgeColor(Colors.green),
                               child: Icon(
                                 Icons.bookmark_rounded,
                                 size: badgeSize * 2 / 3,
@@ -386,7 +387,9 @@ class ComicTile extends StatelessWidget {
                           if (historyPage != null && historyDescription == null)
                             Container(
                               height: badgeSize,
-                              color: Colors.blue.toOpacity(0.9),
+                              color: context.einkBadgeColor(
+                                Colors.blue.toOpacity(0.9),
+                              ),
                               constraints: BoxConstraints(minWidth: badgeSize),
                               padding: EdgeInsets.symmetric(
                                 horizontal: compact ? 2 : 4,
@@ -442,13 +445,16 @@ class ComicTile extends StatelessWidget {
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.secondaryContainer,
             borderRadius: BorderRadius.circular(8),
-            boxShadow: [
-              BoxShadow(
-                color: context.colorScheme.outlineVariant,
-                blurRadius: 1,
-                offset: const Offset(0, 1),
-              ),
-            ],
+            border: context.einkBorder(),
+            boxShadow: context.isEInk
+                ? null
+                : [
+                    BoxShadow(
+                      color: context.colorScheme.outlineVariant,
+                      blurRadius: 1,
+                      offset: const Offset(0, 1),
+                    ),
+                  ],
           ),
           clipBehavior: Clip.antiAlias,
           child: buildImage(context),
@@ -505,13 +511,16 @@ class ComicTile extends StatelessWidget {
           decoration: BoxDecoration(
             color: context.colorScheme.secondaryContainer,
             borderRadius: BorderRadius.circular(8),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.toOpacity(0.2),
-                blurRadius: 2,
-                offset: const Offset(0, 2),
-              ),
-            ],
+            border: context.einkBorder(),
+            boxShadow: context.isEInk
+                ? null
+                : [
+                    BoxShadow(
+                      color: Colors.black.toOpacity(0.2),
+                      blurRadius: 2,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
           ),
           clipBehavior: Clip.antiAlias,
           child: buildImage(context),
@@ -572,7 +581,9 @@ class ComicTile extends StatelessWidget {
                                   : const EdgeInsets.fromLTRB(5, 2, 5, 2),
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(8),
-                                color: Colors.black.toOpacity(0.5),
+                                color: context.isEInk
+                                    ? Colors.black
+                                    : Colors.black.toOpacity(0.5),
                               ),
                               constraints: BoxConstraints(
                                 maxWidth: constraints.maxWidth,
@@ -637,13 +648,16 @@ class ComicTile extends StatelessWidget {
           decoration: BoxDecoration(
             color: context.colorScheme.secondaryContainer,
             borderRadius: BorderRadius.circular(8),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.toOpacity(0.16),
-                blurRadius: 2,
-                offset: const Offset(0, 1),
-              ),
-            ],
+            border: context.einkBorder(),
+            boxShadow: context.isEInk
+                ? null
+                : [
+                    BoxShadow(
+                      color: Colors.black.toOpacity(0.16),
+                      blurRadius: 2,
+                      offset: const Offset(0, 1),
+                    ),
+                  ],
           ),
           clipBehavior: Clip.antiAlias,
           child: buildImage(context),

@@ -1,3 +1,4 @@
+import 'package:venera_next/foundation/eink_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:venera_next/components/effects.dart';
@@ -120,13 +121,17 @@ class ReaderBottomBar extends StatelessWidget {
     return BlurEffect(
       child: Container(
         decoration: BoxDecoration(
-          color: context.colorScheme.surface.toOpacity(0.92),
+          color: context.isEInk
+              ? context.colorScheme.surface
+              : context.colorScheme.surface.toOpacity(0.92),
           border: isOpen
               ? Border(
-                  top: BorderSide(
-                    color: Colors.grey.toOpacity(0.5),
-                    width: 0.5,
-                  ),
+                  top: context.isEInk
+                      ? const BorderSide(color: Colors.black)
+                      : BorderSide(
+                          color: Colors.grey.toOpacity(0.5),
+                          width: 0.5,
+                        ),
                 )
               : null,
         ),

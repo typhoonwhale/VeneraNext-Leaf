@@ -1,3 +1,4 @@
+import 'package:venera_next/foundation/eink_theme.dart';
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
@@ -51,7 +52,9 @@ class SideBarRoute<T> extends PopupRoute<T> {
       (isOwnerActive?.call() ?? true);
 
   @override
-  Color? get barrierColor => showBarrier ? Colors.black54 : Colors.transparent;
+  Color? get barrierColor => showBarrier && !EInkPreferences.einkTheme
+      ? Colors.black54
+      : Colors.transparent;
 
   @override
   bool get barrierDismissible => dismissible;
@@ -132,6 +135,13 @@ class SideBarRoute<T> extends PopupRoute<T> {
             ? const BorderRadius.horizontal(left: Radius.circular(16))
             : null,
         color: Theme.of(context).colorScheme.surfaceTint,
+        border: context.isEInk
+            ? Border(
+                left: showSideBar
+                    ? const BorderSide(color: Colors.black, width: 2)
+                    : BorderSide.none,
+              )
+            : null,
         boxShadow: context.brightness == ui.Brightness.dark
             ? [
                 BoxShadow(

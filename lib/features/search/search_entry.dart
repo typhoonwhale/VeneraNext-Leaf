@@ -1,3 +1,4 @@
+import 'package:venera_next/foundation/eink_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:venera_next/components/gesture.dart';
 import 'package:venera_next/foundation/app.dart';
@@ -19,7 +20,12 @@ class SearchEntry extends StatelessWidget {
         margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
         child: Material(
           color: context.colorScheme.surfaceContainerHigh,
-          borderRadius: BorderRadius.circular(32),
+          borderRadius: context.isEInk ? null : BorderRadius.circular(32),
+          shape: context.isEInk
+              ? const StadiumBorder(
+                  side: BorderSide(color: Colors.black, width: 1.5),
+                )
+              : null,
           child: ClickInkWell(
             borderRadius: BorderRadius.circular(32),
             onTap: () {

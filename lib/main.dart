@@ -363,6 +363,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             Brightness.dark,
             eink: eink,
           ),
+          themeAnimationDuration: eink
+              ? Duration.zero
+              : kThemeAnimationDuration,
           themeMode: eink
               ? ThemeMode.light
               : switch (appearance.themeMode) {

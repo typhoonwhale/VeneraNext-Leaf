@@ -1,3 +1,4 @@
+import 'package:venera_next/foundation/eink_theme.dart';
 import 'package:venera_next/foundation/operation_failure.dart';
 import 'dart:ui' as ui;
 
@@ -157,7 +158,9 @@ class FlyoutState extends State<Flyout> {
                     animation: animation,
                     builder: (context, builder) {
                       return ColoredBox(
-                        color: Colors.black.toOpacity(0.3 * animation.value),
+                        color: context.isEInk
+                            ? Colors.transparent
+                            : Colors.black.toOpacity(0.3 * animation.value),
                       );
                     },
                   ),
@@ -208,13 +211,17 @@ class FlyoutContent extends StatelessWidget {
         child: Material(
           borderRadius: BorderRadius.circular(8),
           type: MaterialType.card,
-          color: context.colorScheme.surface.toOpacity(0.82),
+          color: context.isEInk
+              ? context.colorScheme.surface
+              : context.colorScheme.surface.toOpacity(0.82),
           child: Container(
             constraints: const BoxConstraints(minWidth: minFlyoutWidth),
             padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(8),
-              border: context.brightness == ui.Brightness.dark
+              border: context.isEInk
+                  ? Border.all(color: Colors.black, width: 2)
+                  : context.brightness == ui.Brightness.dark
                   ? Border.all(color: context.colorScheme.outlineVariant)
                   : null,
             ),

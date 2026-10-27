@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:venera_next/foundation/app.dart';
 import 'package:venera_next/foundation/context.dart';
+import 'package:venera_next/foundation/eink_theme.dart';
 import 'package:venera_next/foundation/widget_utils.dart';
 
 import 'consts.dart';
@@ -38,11 +39,20 @@ class Select extends StatelessWidget {
           var renderBox = context.findRenderObject() as RenderBox;
           var offset = renderBox.localToGlobal(Offset.zero);
           var size = renderBox.size;
+          final eink = context.isEInk;
           showMenu(
-            elevation: 3,
-            color: context.brightness == Brightness.light
+            elevation: eink ? 0 : 3,
+            color: eink
+                ? context.colorScheme.surface
+                : context.brightness == Brightness.light
                 ? const Color(0xFFF6F6F6)
                 : const Color(0xFF1E1E1E),
+            shape: eink
+                ? RoundedRectangleBorder(
+                    side: const BorderSide(color: Colors.black),
+                    borderRadius: BorderRadius.circular(4),
+                  )
+                : null,
             context: context,
             useRootNavigator: true,
             constraints: BoxConstraints(
@@ -131,17 +141,27 @@ class _FilterChipFixedWidthState extends State<FilterChipFixedWidth> {
 
   @override
   Widget build(BuildContext context) {
+    final eink = context.isEInk;
+    final style = context.einkStyle;
+    final filled = eink && selected;
     return Material(
-      textStyle: Theme.of(context).textTheme.labelLarge,
+      textStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
+        color: filled ? style.selectedForeground : null,
+      ),
       child: ClickInkWell(
         onTap: () => widget.onSelected(true),
         borderRadius: const BorderRadius.all(Radius.circular(8)),
         child: AnimatedContainer(
           duration: fastAnimationDuration,
           decoration: BoxDecoration(
-            border: Border.all(color: Theme.of(context).colorScheme.outline),
+            border: Border.all(
+              color: Theme.of(context).colorScheme.outline,
+              width: eink ? 1.5 : 1.0,
+            ),
             borderRadius: const BorderRadius.all(Radius.circular(8)),
-            color: selected
+            color: filled
+                ? style.selectedBackground
+                : selected
                 ? Theme.of(context).colorScheme.primaryContainer
                 : null,
           ),
@@ -209,7 +229,9 @@ class AnimatedCheckWidget extends AnimatedWidget {
             child: Icon(
               Icons.check,
               size: iconSize,
-              color: Theme.of(context).colorScheme.primary,
+              color: context.isEInk
+                  ? context.einkStyle.selectedForeground
+                  : Theme.of(context).colorScheme.primary,
             ),
           ),
         ),
@@ -274,13 +296,19 @@ class OptionChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final eink = context.isEInk;
+    final style = context.einkStyle;
     return AnimatedContainer(
       duration: fastAnimationDuration,
       decoration: BoxDecoration(
-        color: isSelected
+        color: eink && isSelected
+            ? style.selectedBackground
+            : isSelected
             ? context.colorScheme.secondaryContainer
             : context.colorScheme.surface,
-        border: isSelected
+        border: eink
+            ? Border.all(color: context.colorScheme.outline, width: 1.5)
+            : isSelected
             ? Border.all(color: context.colorScheme.secondaryContainer)
             : Border.all(color: context.colorScheme.outline),
         borderRadius: BorderRadius.circular(8),
@@ -292,7 +320,12 @@ class OptionChip extends StatelessWidget {
           onTap: onTap,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            child: Text(text),
+            child: Text(
+              text,
+              style: eink && isSelected
+                  ? TextStyle(color: style.selectedForeground)
+                  : null,
+            ),
           ),
         ),
       ),

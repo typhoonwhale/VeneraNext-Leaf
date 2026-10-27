@@ -1,3 +1,4 @@
+import 'package:venera_next/foundation/eink_theme.dart';
 import 'package:venera_next/features/favorites/favorites_scope.dart';
 import 'package:venera_next/features/local_comics/import_export/comic_import_service.dart';
 import 'package:flutter/material.dart';
@@ -91,6 +92,7 @@ class _LocalComicsSummaryState extends State<LocalComicsSummary> {
                       ),
                       decoration: BoxDecoration(
                         color: Theme.of(context).colorScheme.secondaryContainer,
+                        border: context.einkBorder(),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(count.toString(), style: ts.s12),
