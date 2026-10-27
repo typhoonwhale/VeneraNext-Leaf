@@ -7,6 +7,7 @@ import 'package:venera_next/features/comic_source/comic_source.dart';
 import 'package:venera_next/features/local_comics/download_task_codec.dart';
 import 'package:venera_next/features/local_comics/local_comics.dart';
 import 'package:venera_next/foundation/app.dart';
+import 'package:venera_next/foundation/appdata.dart';
 import 'package:venera_next/foundation/comic_type.dart';
 import 'package:venera_next/network/file_downloader.dart';
 
@@ -227,6 +228,81 @@ void main() {
           isFalse,
         );
       }
+    },
+  );
+
+  test(
+    'pausing all during in-flight range writes resumes in the same process',
+    () async {
+      appdata.settings['proxy'] = 'direct';
+      addTearDown(() => appdata.settings['proxy'] = 'system');
+      const blockSize = 64 * 1024;
+      final bytes = List<int>.generate(4 * blockSize, (index) => index % 251);
+      final server = await _StallingRangeServer.start(bytes);
+      addTearDown(server.close);
+      final manager = await start();
+      final errors = <Object>[];
+      final finished = Completer<void>();
+      runZonedGuarded(() async {
+        try {
+          final task = ArchiveDownloadTask(
+            'http://127.0.0.1:${server.port}/a.zip',
+            _comic('a'),
+            storage: manager,
+            createDownloader: (url, path) =>
+                FileDownloader(url, path, chunkSize: blockSize),
+            extractArchive: (archive, output) async {
+              expect(File(archive).readAsBytesSync(), bytes);
+              File('$output/1.jpg').writeAsBytesSync([1]);
+              File('$output/2.jpg').writeAsBytesSync([2]);
+            },
+          );
+          manager.addTask(task);
+          // Pause all twice while every range connection is mid-transfer.
+          for (var round = 0; round < 2; round++) {
+            await waitFor(() => server.held == 4 * (round + 1));
+            final status = File(
+              '${cache.path}/${workspaces().single}/download.zip.download',
+            );
+            // Each connection's first burst is written and recorded.
+            await waitFor(() {
+              try {
+                final written = status.readAsLinesSync().map(
+                  (line) => int.parse(line.split('-')[2]),
+                );
+                return written.length == 4 &&
+                    written.every(
+                      (b) => b >= (round + 1) * _StallingRangeServer.burst,
+                    );
+              } on Object {
+                return false;
+              }
+            });
+            await manager.pauseAllDownloads().timeout(
+              const Duration(seconds: 5),
+            );
+            expect(task.isPaused, isTrue);
+            if (round == 1) server.stall = false;
+            server.requested.clear();
+            manager.resumeDownload(task);
+            // The same process continues each range after its written bytes.
+            await waitFor(() => server.requested.length == 4);
+            expect(
+              server.requested.map((range) => range.split(RegExp('[=-]'))[1]),
+              everyElement(
+                predicate<String>((start) => int.parse(start) % blockSize > 0),
+              ),
+            );
+          }
+          await finish(task);
+          expect(task.isError, isFalse);
+          expectCompletedOnce(manager, 'a', task.path!);
+        } finally {
+          finished.complete();
+        }
+      }, (error, stack) => errors.add(error));
+      await finished.future;
+      expect(errors, isEmpty);
     },
   );
 
@@ -682,4 +758,71 @@ ComicSource _testSource(String key) {
     null,
     null,
   );
+}
+
+/// Serves ranges concurrently. While [stall] is set, each range sends
+/// [burst] bytes and then holds its connection open until the client aborts.
+class _StallingRangeServer {
+  _StallingRangeServer._(this._server, this._data);
+
+  static const burst = 20 * 1024;
+
+  final HttpServer _server;
+  final List<int> _data;
+  final requested = <String>[];
+  final _held = <Completer<void>>[];
+  bool stall = true;
+
+  int get port => _server.port;
+
+  /// Number of connections that were held after their burst.
+  int get held => _held.length;
+
+  static Future<_StallingRangeServer> start(List<int> data) async {
+    final server = _StallingRangeServer._(
+      await HttpServer.bind(InternetAddress.loopbackIPv4, 0),
+      data,
+    );
+    server._server.listen(server._handle);
+    return server;
+  }
+
+  Future<void> _handle(HttpRequest request) async {
+    final response = request.response;
+    try {
+      if (request.method == 'HEAD') {
+        response.headers.contentLength = _data.length;
+        await response.close();
+        return;
+      }
+      final range = request.headers.value(HttpHeaders.rangeHeader)!;
+      requested.add(range);
+      final match = RegExp(r'bytes=(\d+)-(\d+)').firstMatch(range)!;
+      final start = int.parse(match.group(1)!);
+      final end = int.parse(match.group(2)!);
+      response.statusCode = HttpStatus.partialContent;
+      response.headers.contentLength = end - start + 1;
+      if (!stall) {
+        response.add(_data.sublist(start, end + 1));
+        await response.close();
+        return;
+      }
+      var burstEnd = start + burst;
+      if (burstEnd > end + 1) burstEnd = end + 1;
+      response.add(_data.sublist(start, burstEnd));
+      await response.flush();
+      final held = Completer<void>();
+      _held.add(held);
+      await held.future;
+    } catch (_) {
+      // The client aborted the connection.
+    }
+  }
+
+  Future<void> close() async {
+    for (final held in _held) {
+      if (!held.isCompleted) held.complete();
+    }
+    await _server.close(force: true);
+  }
 }
