@@ -43,6 +43,47 @@ class LeafWorkflowTests(unittest.TestCase):
                 if success:
                     self.assertIn(arm64, (output / 'SHA256SUMS.txt').read_text())
 
+    def test_signature_gate_accepts_only_fixed_certificate(self):
+        script = step_script('build.yml', '校验 APK 签名证书')
+        expected = 'ddf1ca6f03578cd9b41470670cd3a21637772ea9e3ceab4f6d9ea9c0e8d5e909'
+        fake = (
+            '#!/bin/bash\n'
+            'if [[ "${FAKE_VERIFY_FAIL:-}" == 1 ]]; then echo "DOES NOT VERIFY" >&2; exit 1; fi\n'
+            'echo "Verifies"\n'
+            'echo "Signer #1 certificate DN: CN=Leaf"\n'
+            'echo "Signer #1 certificate SHA-256 digest: $FAKE_DIGEST_1"\n'
+            '[[ -n "${FAKE_DIGEST_2:-}" ]] && '
+            'echo "Signer #2 certificate SHA-256 digest: $FAKE_DIGEST_2"\n'
+            'exit 0\n'
+        )
+        cases = [
+            ('match', {}, True), ('uppercase', {'FAKE_DIGEST_1': expected.upper()}, True),
+            ('mismatch', {'FAKE_DIGEST_1': '0' * 64}, False),
+            ('two signers', {'FAKE_DIGEST_2': expected}, False),
+            ('verify fails', {'FAKE_VERIFY_FAIL': '1'}, False),
+            ('no apksigner', {'NO_APKSIGNER': '1'}, False),
+        ]
+        for label, extra, success in cases:
+            with self.subTest(label), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                if 'NO_APKSIGNER' not in extra:
+                    tool = root / 'sdk/build-tools/34.0.0/apksigner'
+                    tool.parent.mkdir(parents=True)
+                    tool.write_text(fake)
+                    tool.chmod(0o755)
+                else:
+                    (root / 'sdk/build-tools').mkdir(parents=True)
+                output = root / 'build/app/outputs/apk/release'
+                output.mkdir(parents=True)
+                (output / 'VeneraNext-Leaf-1.18.2-android-arm64-v8a.apk').write_bytes(b'fixture')
+                env = {**os.environ, 'ANDROID_HOME': str(root / 'sdk'),
+                       'EXPECTED_CERT_SHA256': expected, 'FAKE_DIGEST_1': expected, **extra}
+                result = subprocess.run(['bash', '-e', '-c', script], cwd=directory,
+                                        capture_output=True, text=True, env=env)
+                self.assertEqual(result.returncode == 0, success, result.stdout + result.stderr)
+                if not success:
+                    self.assertIn('::error::', result.stdout + result.stderr)
+
     def test_pr_gate_allows_skips_but_rejects_build_failures(self):
         script = step_script('pr_build.yml', '汇总平台构建结果')
         for changes, android, success in [
