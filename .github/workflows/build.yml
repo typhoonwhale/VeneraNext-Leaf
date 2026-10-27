@@ -1,8 +1,9 @@
 name: Leaf ARM64 Release 构建
 run-name: Leaf ARM64 Release 构建 ${{ github.ref_name }}
 
-# Optional cloud build. Official releases currently use the local fixed Leaf key.
+# v* 标签发版时由 main.yml 调用，也可手动运行，只产出 artifact。
 on:
+  workflow_call:
   workflow_dispatch:
 
 concurrency:
@@ -26,7 +27,7 @@ jobs:
         run: python3 .github/scripts/validate_release.py --build-only
       - name: 释放 Android 构建所需磁盘空间
         run: rm -rf /opt/hostedtoolcache
-      - uses: subosito/flutter-action@v2
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
           channel: "stable"
           flutter-version-file: pubspec.yaml
@@ -91,6 +92,39 @@ jobs:
             exit 1
           fi
           sha256sum "${apks[0]}" > SHA256SUMS.txt
+      - name: 校验 APK 签名证书
+        env:
+          EXPECTED_CERT_SHA256: ddf1ca6f03578cd9b41470670cd3a21637772ea9e3ceab4f6d9ea9c0e8d5e909
+        run: |
+          set -euo pipefail
+          apksigner=$(ls -d "${ANDROID_HOME:-}"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -n 1 || true)
+          if [[ -z "$apksigner" ]]; then
+            echo "::error::apksigner not found under \$ANDROID_HOME/build-tools."
+            exit 1
+          fi
+          shopt -s nullglob
+          apks=(build/app/outputs/apk/release/*-arm64-v8a.apk)
+          if (( ${#apks[@]} != 1 )); then
+            echo "::error::Expected exactly one ARM64 APK to verify."
+            exit 1
+          fi
+          if ! output=$("$apksigner" verify --print-certs "${apks[0]}"); then
+            echo "::error::apksigner verify failed for ${apks[0]}."
+            exit 1
+          fi
+          printf '%s\n' "$output"
+          signers=$(printf '%s\n' "$output" | grep -c '^Signer #[0-9]* certificate SHA-256 digest:' || true)
+          if [[ "$signers" != "1" ]]; then
+            echo "::error::Expected exactly one signer, found $signers."
+            exit 1
+          fi
+          actual=$(printf '%s\n' "$output" | sed -n 's/^Signer #1 certificate SHA-256 digest: *//p' | tr -d '[:space:]')
+          actual_lc=$(printf '%s' "$actual" | tr '[:upper:]' '[:lower:]')
+          expected_lc=$(printf '%s' "$EXPECTED_CERT_SHA256" | tr '[:upper:]' '[:lower:]')
+          if [[ "$actual_lc" != "$expected_lc" ]]; then
+            echo "::error::APK signing certificate mismatch: expected $EXPECTED_CERT_SHA256, got ${actual:-none}."
+            exit 1
+          fi
       - name: 上传 Leaf ARM64 APK
         uses: actions/upload-artifact@v7
         with:

@@ -159,9 +159,9 @@ class ValidateReleaseTests(unittest.TestCase):
             r"if: github\.ref_type != 'tag'\n"
             r"\s+run: python3 \.github/scripts/validate_release\.py --build-only\n",
         )
-        # Tag pushes validate metadata and quality; local signing publishes Leaf.
-        self.assertNotIn("gh release create", workflow)
-        self.assertNotIn("./.github/workflows/build.yml", workflow)
+        # Tag pushes build through build.yml and publish from the Release job.
+        self.assertIn("./.github/workflows/build.yml", workflow)
+        self.assertIn("gh release create", workflow)
 
 
 if __name__ == "__main__":

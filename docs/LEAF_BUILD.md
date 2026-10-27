@@ -1,6 +1,6 @@
 # VeneraNext Leaf Android 构建
 
-本文记录 Leaf Android 包的身份、更新和签名边界，以及可复现的本地构建入口。Leaf 基于 VeneraNext v1.18.1 源码；已生成并静态验证 ARM64 Debug APK。用户已授权生成首个固定签名 ARM64 Release 测试包，本机签名已建立；构建与验包结果以本机任务的 docs/release-test.md 为准，尚无新版实机验收，也没有设置 GitHub 签名 secrets。
+本文记录 Leaf Android 包的身份、更新和签名边界，以及可复现的本地构建入口。Leaf 基于 VeneraNext v1.18.1 源码。1.18.2 / 2402 由本机固定签名构建后手动上传 GitHub Release；配置签名 secrets 后，推送 `v*` 标签由 CI 构建并发布。
 
 ## Android 身份与隔离
 
@@ -31,7 +31,7 @@ keyAlias=<key alias>
 keyPassword=<key password>
 ```
 
-若配置 GitHub Actions，仓库维护者需要自行准备 `ANDROID_KEYSTORE`（固定 keystore 文件的 Base64 内容）与 `ANDROID_KEY_PROPERTIES`（上述属性文本）两个 secrets。本次经用户授权已在本机创建固定 Leaf Release 签名，alias 为 leaf-release；主文件保存在上述 Git 忽略路径，并在本机工具目录保留权限受限的同内容副本，尚待用户离线备份。证书 SHA-256 为 ddf1ca6f03578cd9b41470670cd3a21637772ea9e3ceab4f6d9ea9c0e8d5e909。没有上传签名材料、配置 GitHub Secrets 或触发云端构建；Debug 仍使用 Android 自动生成的测试签名。
+若配置 GitHub Actions，仓库维护者需要自行准备 `ANDROID_KEYSTORE`（固定 keystore 文件的 Base64 内容）与 `ANDROID_KEY_PROPERTIES`（上述属性文本）两个 secrets。本次经用户授权已在本机创建固定 Leaf Release 签名，alias 为 leaf-release；主文件保存在上述 Git 忽略路径，并在本机工具目录保留权限受限的同内容副本，尚待用户离线备份。证书 SHA-256 为 ddf1ca6f03578cd9b41470670cd3a21637772ea9e3ceab4f6d9ea9c0e8d5e909。CI 发布需把这两个值配置为仓库 secrets（见“Leaf 正式发布”）；Debug 仍使用 Android 自动生成的测试签名。
 
 ## 构建环境
 
@@ -111,7 +111,21 @@ AGP 增量更新 APK 时可能保留旧 ZIP 条目占用的空闲区域。若文
 
 首次公开发布为1.18.2（build240，ARM64 versionCode2402），发布到本仓库的GitHub Releases。Android检查更新比较Release标签和应用内版本号，忽略build后缀；因此每次正式发布都须递增 `release.json.version` 并同步 `pubspec.yaml`，仅增加build不会产生更新提示。发布标签使用 `v<version>`，更新说明来自CHANGELOG对应节。
 
-Leaf仅维护Android ARM64产物；工作流职责见下表。当前发布方式是本机使用固定签名构建ARM64包，核对版本、内置pubspec、证书、ABI和SHA-256后，上传GitHub Release草稿，再正式发布为Latest。不要上传keystore或key.properties；不要在没有同一签名的情况下改用临时签名。
+Leaf仅维护Android ARM64产物；工作流职责见下表。正式发布流程：
+
+1. 修改 `CHANGELOG.md`（新增 `## v<version>` 一节）、`pubspec.yaml` 和 `release.json`，保持版本一致。
+2. 提交到 main。
+3. 推送 `v*` 标签，格式为 `v1.2.3` 或 `v1.2.3-rc.1`。
+4. CI 自动校验标签与元数据、质量检查、固定签名构建，用 `apksigner` 核对证书 SHA-256 为 `ddf1ca6f03578cd9b41470670cd3a21637772ea9e3ceab4f6d9ea9c0e8d5e909`，核对 `SHA256SUMS.txt` 后创建 Release 并上传 APK 与摘要；`-rc` 等含 `-` 的标签发布为预发布。
+
+首次使用前，在仓库 Settings → Secrets and variables → Actions 中配置：
+
+- `ANDROID_KEYSTORE`：固定 keystore 文件的 Base64 内容。
+- `ANDROID_KEY_PROPERTIES`：`android/key.properties` 的原文。
+
+缺少任一值或证书指纹不符时，工作流失败，不会创建 Release。不要上传keystore或key.properties到仓库；不要在没有同一签名的情况下改用临时签名。
+
+本机构建为备用方式：使用固定签名构建ARM64包，核对版本、内置pubspec、证书、ABI和SHA-256后，上传GitHub Release草稿，再正式发布为Latest。
 
 使用发布API回读 `releases/latest` 确认新版本与APK资产，再通过实际版本比较函数检查旧版本会提示更新、新版本不会自我提示。设备仍须能访问GitHub API和下载域名；更新按钮打开发布页，由用户下载并确认覆盖安装。
 
@@ -119,14 +133,14 @@ Leaf仅维护Android ARM64产物；工作流职责见下表。当前发布方式
 
 | 入口 | 行为 |
 |---|---|
-| `main.yml`：v* 标签／手动运行 | 仅发布元数据校验和质量检查，不构建、不创建Release |
+| `main.yml`：v* 标签／手动运行 | 元数据校验、质量检查、调用 `build.yml` 构建；v* 标签推送时核对产物后创建 Release（rc 标签为预发布），手动运行不创建Release |
 | `analyze.yml`：main推送／PR／发布校验调用 | Dart分析、格式与架构检查、脚本测试、Linux宿主的Rust和Flutter测试及覆盖率 |
 | `pr_build.yml`：PR | 相关路径变化时构建Android ARM64 Debug作冒烟检查，不上传或发布Debug包，不使用Release密钥 |
-| `build.yml`：手动运行 | 使用固定签名构建一个Android ARM64 Release APK及SHA-256摘要，上传Actions artifact，不自动发布 |
+| `build.yml`：`main.yml` 调用／手动运行 | 使用固定签名构建一个Android ARM64 Release APK，核对签名证书指纹，生成SHA-256摘要并上传Actions artifact；手动运行不发布 |
 | `dependency_review.yml` | 保留依赖漏洞检查，覆盖Android使用的Rust依赖 |
 
 Linux在这里是测试宿主，不生成Linux客户端。已移除Apple/iOS原生检查、Windows PR构建及Windows/macOS/iOS/Linux正式构建入口，以及AltStore、Winget、Fastlane和上游赞助同步工作流。上游平台源码和通用脚本仍保留，便于后续同步；它们不是Leaf的交付目标。Issue检查和手动清理运行记录不涉及应用产物，继续保留。
 
 Android Gradle仅启用`arm64-v8a`，不生成ARM32、x86_64或通用APK；保留ARM64的版本码规则`build × 10 + 2`和原固定包名、证书。构建命令使用`flutter build apk --release --target-platform android-arm64 --split-per-abi`。
 
-云端手动构建必须配置与现有Leaf安装一致的`ANDROID_KEYSTORE`和`ANDROID_KEY_PROPERTIES`，缺失时直接失败，不能生成临时签名替代。当前尚未配置这些Secrets，正式交付继续使用本机固定签名；本轮不上传私钥、不改变既有Release或触发新版本发布。将来启用云端构建时，上传产物应验签并核对证书后再发布。
+云端构建必须配置与现有Leaf安装一致的`ANDROID_KEYSTORE`和`ANDROID_KEY_PROPERTIES`，缺失时直接失败，不能生成临时签名替代。`build.yml` 在上传产物前用 `apksigner` 验签并核对证书指纹，指纹不符、多个签名者或验签失败都会终止发布。
