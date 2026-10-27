@@ -465,6 +465,8 @@ void main() {
       ),
       isEmpty,
     );
+    // Removal queues the snapshot write; cancellation does not wait for it.
+    await manager.pendingDownloadTaskWrites;
     expect(readSnapshot(), isEmpty);
   });
 

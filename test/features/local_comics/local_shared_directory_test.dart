@@ -238,6 +238,9 @@ void main() {
         File('${original.path}/old').writeAsStringSync('original');
         final item = comic('interrupted', 'interrupted');
         await manager.add(item);
+        // Only the restarted manager may see the row: a pass of this one
+        // that is still deleting the quarantine makes the next one skip it.
+        await manager.pendingDeletionCleanup;
         final quarantine = '${manager.path}/.venera-delete-restart';
         final db = sqlite3.open('${root.path}/local.db');
         try {
