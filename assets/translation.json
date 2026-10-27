@@ -953,7 +953,11 @@
     "Failed to load source": "无法加载来源",
     "@c selected": "已选 @c 本",
     "Selected": "已选中",
-    "Deleting...": "正在删除…"
+    "Deleting...": "正在删除…",
+    "Downloading. Pause or cancel it first.": "正在下载，请先暂停或取消",
+    "Extracting. Try again later.": "正在解压，请稍后",
+    "Pause all downloads before changing the local library.": "请先全部暂停下载，再更改本地漫画库",
+    "The download folder was kept: @path": "已保留下载文件夹：@path"
   },
   "zh_TW": {
     "Update cache cannot be cleaned": "更新快取無法清理",
@@ -1908,6 +1912,10 @@
     "Failed to load source": "無法載入來源",
     "@c selected": "已選 @c 本",
     "Selected": "已選中",
-    "Deleting...": "正在刪除…"
+    "Deleting...": "正在刪除…",
+    "Downloading. Pause or cancel it first.": "正在下載，請先暫停或取消",
+    "Extracting. Try again later.": "正在解壓，請稍後",
+    "Pause all downloads before changing the local library.": "請先全部暫停下載，再變更本機漫畫庫",
+    "The download folder was kept: @path": "已保留下載資料夾：@path"
   }
 }

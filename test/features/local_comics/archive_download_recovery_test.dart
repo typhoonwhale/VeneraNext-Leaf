@@ -358,6 +358,60 @@ void main() {
     expect(manager.downloadingTasks, isEmpty);
   });
 
+  test('cancel removes a partially extracted output it marked', () async {
+    final manager = await start();
+    extractGate = Completer<void>();
+    extracting = Completer<void>();
+    final task = newTask(manager, 'a');
+    manager.addTask(task);
+    await extracting!.future;
+    expect(task.isExtracting, isTrue);
+    final output = task.path!;
+    final workspace = File(transfers.single).parent;
+    // Native extraction keeps writing after a pause.
+    final pausing = manager.pauseDownload(task, byUser: true);
+    expect(task.isPaused, isTrue);
+    expect(task.isExtracting, isTrue);
+    extractGate!.complete();
+    await pausing;
+    await task.pendingRun;
+    expect(task.isExtracting, isFalse);
+    expect(File('$output/1.jpg').existsSync(), isTrue);
+
+    expect(await manager.cancelDownload(task), isNull);
+    expect(Directory(output).existsSync(), isFalse);
+    expect(workspace.existsSync(), isFalse);
+    expect(manager.downloadingTasks, isEmpty);
+    await manager.pendingDeletionCleanup;
+    expect(
+      Directory(manager.path).listSync().where(
+        (entry) => entry.path.split('/').last.startsWith('.venera-delete-'),
+      ),
+      isEmpty,
+    );
+    expect(readSnapshot(), isEmpty);
+  });
+
+  test('cancel keeps a workspace whose marker changed', () async {
+    var manager = await start();
+    transfer = hangingTransfer;
+    manager.addTask(newTask(manager, 'a'));
+    await waitFor(() => transfers.isNotEmpty);
+    final workspace = File(transfers.single).parent;
+    await crash(manager);
+    writeSnapshot([
+      {...entry(readSnapshot()), 'state': 'paused'},
+    ]);
+
+    manager = await start();
+    final task = restored(manager);
+    File('${workspace.path}/.owner').writeAsStringSync('0' * 32);
+    await manager.cancelDownload(task);
+    await task.pendingCleanup;
+    expect(workspace.existsSync(), isTrue);
+    expect(manager.downloadingTasks, isEmpty);
+  });
+
   group('untrusted workspace is replaced by a fresh download', () {
     final cases = <String, String Function(String workspace)>{
       'removed by the system': (workspace) {
@@ -534,10 +588,12 @@ void main() {
     final task = restored(manager);
     expect(task.isPaused, isTrue);
     expect(transfers, isEmpty);
-    // Without ownership evidence a canceled legacy task keeps the folder.
-    await manager.cancelDownload(task);
+    // Without ownership evidence a canceled legacy task keeps the folder
+    // and reports it.
+    expect(await manager.cancelDownload(task), partial.path);
     await task.pendingCleanup;
     expect(kept.readAsBytesSync(), [7]);
+    expect(manager.downloadingTasks.map((task) => task.id), ['c']);
 
     final next = restored(manager, 'c');
     manager.resumeDownload(next);

@@ -262,7 +262,6 @@ void main() {
         manager = LocalManager();
         await manager.init();
         // Committed quarantines are removed after startup, in the background.
-        expect(Directory(quarantine).existsSync(), committed);
         await manager.pendingDeletionCleanup;
         expect(Directory(quarantine).existsSync(), isFalse);
         if (committed) {

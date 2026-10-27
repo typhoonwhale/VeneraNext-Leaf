@@ -2055,11 +2055,12 @@ void main() {
       return jsonDecode(jsonEncode(task.toJson())) as Map<String, dynamic>;
     }
 
-    Future<void> cancelRestored(Map<String, dynamic> json) async {
+    Future<String?> cancelRestored(Map<String, dynamic> json) async {
       final restored = ImagesDownloadTask.fromJson(storage, json)!;
       restored.cancel();
       await restored.pendingCleanup;
       expect(storage.removed, [same(restored)]);
+      return restored.retainedOutputPath;
     }
 
     test('cancel after restart deletes the output the task created', () async {
@@ -2070,16 +2071,19 @@ void main() {
         File('${output.path}/$marker').readAsStringSync(),
         json['ownerToken'],
       );
-      await cancelRestored(json);
+      expect(await cancelRestored(json), isNull);
       expect(output.existsSync(), isFalse);
+      // Large folders go through the library's background removal.
+      expect(storage.discarded, [output.path]);
     });
 
     test('snapshots without ownership keep the output', () async {
       final json = await stoppedSnapshot()
         ..remove('ownerToken')
         ..remove('outputOwned');
-      await cancelRestored(json);
+      expect(await cancelRestored(json), json['path']);
       expect(File('${json['path']}/0.png').existsSync(), isTrue);
+      expect(storage.discarded, isEmpty);
     });
 
     test('a marker held by another token keeps the output', () async {
@@ -2363,4 +2367,12 @@ class _TaskStorage implements DownloadTaskStorage {
 
   @override
   void removeTask(DownloadTask task) => removed.add(task);
+
+  final discarded = <String>[];
+
+  @override
+  Future<void> discardDownloadOutput(Directory directory) {
+    discarded.add(directory.path);
+    return directory.delete(recursive: true);
+  }
 }

@@ -12,6 +12,7 @@ import 'package:venera_next/features/local_comics/local.dart';
 import 'package:venera_next/foundation/file_system.dart';
 import 'package:venera_next/foundation/translations.dart';
 import 'package:venera_next/foundation/widget_utils.dart';
+import 'package:venera_next/routing/app_navigation.dart';
 
 class DownloadingPage extends StatefulWidget {
   const DownloadingPage({super.key});
@@ -434,8 +435,22 @@ class _DownloadTaskTileState extends State<_DownloadTaskTile> {
                         MenuEntry(
                           icon: Icons.close,
                           text: "Cancel".tl,
-                          onClick: () {
-                            widget.manager.cancelDownload(widget.task);
+                          onClick: () async {
+                            // This tile leaves with its task; report on the
+                            // page that stays.
+                            final messages =
+                                appNavigation.rootNavigatorKey.currentContext;
+                            final kept = await widget.manager.cancelDownload(
+                              widget.task,
+                            );
+                            if (kept != null &&
+                                messages != null &&
+                                messages.mounted) {
+                              messages.showMessage(
+                                message: 'The download folder was kept: @path'
+                                    .tlParams({'path': kept}),
+                              );
+                            }
                           },
                         ),
                         MenuEntry(

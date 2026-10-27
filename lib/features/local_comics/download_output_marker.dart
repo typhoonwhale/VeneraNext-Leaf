@@ -10,6 +10,58 @@ import 'package:venera_next/foundation/log.dart';
 abstract final class DownloadOwnerToken {
   static final pattern = RegExp(r'^[0-9a-f]{32}$');
 
+  /// Marker names of image and archive downloads. Dot files are ignored by
+  /// comic storage.
+  static const imagesMarker = '.venera-images-download';
+  static const archiveMarker = '.venera-archive-download';
+  static const _markers = [imagesMarker, archiveMarker];
+
+  /// Whether [directory] carries a well-formed marker of either task kind.
+  static bool hasOutputMarker(String directory) {
+    for (final marker in _markers) {
+      final path = FilePath.join(directory, marker);
+      try {
+        if (FileSystemEntity.typeSync(path, followLinks: false) ==
+                FileSystemEntityType.file &&
+            pattern.hasMatch(File(path).readAsStringSync())) {
+          return true;
+        }
+      } catch (error, stack) {
+        Log.error('Download', error, stack);
+      }
+    }
+    return false;
+  }
+
+  /// Real directories directly under [root] that carry a download marker but
+  /// belong to no restored task and no registered comic: outputs left by a
+  /// task that no longer exists. Links are never followed.
+  static List<Directory> orphanOutputs({
+    required String root,
+    required Iterable<String> referenced,
+  }) {
+    String normalize(String path) => p.normalize(p.absolute(path));
+    final kept = referenced.map(normalize).toList();
+    final orphans = <Directory>[];
+    for (final entry in Directory(root).listSync(followLinks: false)) {
+      if (entry is! Directory) continue;
+      final path = normalize(entry.path);
+      if (!p.equals(p.dirname(path), normalize(root)) ||
+          p.basename(path).startsWith('.venera-delete-') ||
+          kept.any(
+            (other) =>
+                p.equals(other, path) ||
+                p.isWithin(other, path) ||
+                p.isWithin(path, other),
+          ) ||
+          !hasOutputMarker(entry.path)) {
+        continue;
+      }
+      orphans.add(entry);
+    }
+    return orphans;
+  }
+
   static String create() {
     final random = Random.secure();
     return List.generate(

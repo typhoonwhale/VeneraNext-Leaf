@@ -1,4 +1,6 @@
 import 'package:flutter/foundation.dart' show ChangeNotifier;
+import 'package:path/path.dart' as p;
+import 'package:venera_next/foundation/file_system.dart';
 import 'package:venera_next/foundation/comic_type.dart';
 import 'local_comic_model.dart';
 
@@ -11,6 +13,22 @@ abstract class DownloadTask with ChangeNotifier {
   bool get isPaused;
 
   bool get isWaitingToRetry => false;
+
+  /// Native extraction is writing the output and cannot be interrupted, even
+  /// after a pause.
+  bool get isExtracting => false;
+
+  /// After a cancellation: an output folder kept because nothing proves this
+  /// task created it, for example one restored from an older snapshot.
+  String? get retainedOutputPath => null;
+
+  /// The paused task's library moved from [from] to [to] with its folders.
+  void relocateOutput(String from, String to) {
+    final output = path;
+    if (output != null && p.equals(p.dirname(output), from)) {
+      path = FilePath.join(to, p.basename(output));
+    }
+  }
 
   /// A network/foreground hint may wake an existing wait, never resume a task.
   void retryNow() {}

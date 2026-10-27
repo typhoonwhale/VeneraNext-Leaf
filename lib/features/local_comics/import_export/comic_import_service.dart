@@ -15,6 +15,7 @@ import 'package:venera_next/foundation/log.dart';
 import 'package:venera_next/foundation/persistence_failure.dart';
 import 'package:venera_next/foundation/sqlite_transaction.dart';
 
+import '../download_output_marker.dart';
 import '../local.dart';
 import '../local_storage_guard.dart';
 import 'comic_directory_copy.dart';
@@ -336,6 +337,11 @@ class ComicImportOperation {
                 );
               }
             }
+            continue;
+          }
+          // An unregistered download output is neither a copy nor a comic.
+          if (_manager.overlapsDownloadOutput(entry.path) ||
+              DownloadOwnerToken.hasOutputMarker(entry.path)) {
             continue;
           }
           if (ComicCopyRecord.exists(entry)) {
@@ -705,6 +711,28 @@ class ComicImportOperation {
   }) async {
     var count = 0;
     final ownedRecords = records ?? <LocalComic, ComicCopyRecord>{};
+    // Never register a folder a queued download may still write. Copies get
+    // a new folder, but their source must not be such a folder either.
+    final allowed = <String?, List<LocalComic>>{};
+    for (final MapEntry(key: folder, value: entries) in comics.entries) {
+      final kept = allowed[folder] = [];
+      for (final comic in entries) {
+        if (_manager.overlapsDownloadOutput(comic.directory)) {
+          issues.add(
+            ComicImportIssue(
+              ComicImportIssueKind.scanFailed,
+              LocalComicTaskBusy(
+                comic.title,
+                'Downloading. Pause or cancel it first.',
+              ),
+            ),
+          );
+        } else {
+          kept.add(comic);
+        }
+      }
+    }
+    comics = allowed;
     try {
       if (copy) {
         comics = await _copyComicsToLocalDir(comics, issues, ownedRecords);

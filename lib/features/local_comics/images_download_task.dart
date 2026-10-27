@@ -27,7 +27,7 @@ import 'download_retry.dart';
 class ImagesDownloadTask extends DownloadTask with _TransferSpeedMixin {
   /// Holds [_ownerToken] inside an output directory this task created, until
   /// the comic is registered. Dot files are ignored by comic storage.
-  static const _outputMarker = '.venera-images-download';
+  static const _outputMarker = DownloadOwnerToken.imagesMarker;
 
   final ComicSource source;
 
@@ -123,11 +123,17 @@ class ImagesDownloadTask extends DownloadTask with _TransferSpeedMixin {
           final local = manager.find(id, comicType);
           if (local == null) {
             if (_ownedOutputPath != cleanupPath || !_ownsOutput(cleanupPath)) {
+              // No ownership evidence, e.g. an older snapshot: keep the files
+              // and report the folder.
+              if (FileSystemEntity.typeSync(cleanupPath, followLinks: false) !=
+                  FileSystemEntityType.notFound) {
+                _retainedOutputPath = cleanupPath;
+              }
               return;
             }
             final directory = Directory(cleanupPath);
             if (await directory.exists()) {
-              await directory.delete(recursive: true);
+              await manager.discardDownloadOutput(directory);
             }
           } else if (p.equals(
             p.absolute(FilePath.join(manager.path, local.directory)),
@@ -151,6 +157,20 @@ class ImagesDownloadTask extends DownloadTask with _TransferSpeedMixin {
   }
 
   Future<void>? _pendingStops;
+
+  String? _retainedOutputPath;
+
+  @override
+  String? get retainedOutputPath => _retainedOutputPath;
+
+  @override
+  void relocateOutput(String from, String to) {
+    final previous = path;
+    super.relocateOutput(from, to);
+    if (previous != null && _ownedOutputPath == previous) {
+      _ownedOutputPath = path;
+    }
+  }
 
   /// Drain image transfer cancellation and any directory cleanup already queued.
   @override

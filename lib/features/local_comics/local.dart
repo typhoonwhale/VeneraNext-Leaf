@@ -11,6 +11,7 @@ import 'package:venera_next/features/favorites/favorites_api.dart';
 import 'package:venera_next/foundation/persistence_failure.dart';
 import 'package:venera_next/foundation/sqlite_transaction.dart';
 import 'download_task_store.dart';
+import 'download_output_marker.dart';
 import 'download_directory_allocator.dart';
 import 'local_sort_type.dart';
 export 'local_sort_type.dart';
@@ -228,22 +229,49 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
       _runWithExclusiveStorage(action);
 
   /// Deleting registered comics or chapters, without reading the whole
-  /// library directory.
+  /// library directory. Downloads of other comics keep running.
   Future<T> _runWithComicStorage<T>(Future<T> Function() action) =>
       _runWithExclusiveStorage(action, wholeLibrary: false);
 
-  /// A [wholeLibrary] operation reads every directory of the library, so it
-  /// also waits for removed quarantines to disappear.
+  /// A [wholeLibrary] operation reads or moves every directory of the
+  /// library: no download may run, and the queue stays suspended until it
+  /// ends. It also waits for removed quarantines to disappear. Paused tasks
+  /// follow a moved library.
+  ///
+  /// Any other operation only holds the queue's automatic starts, so no
+  /// queued task begins writing while it decides about directories; running
+  /// tasks continue and their new folders wait for the storage guard.
   Future<T> _runWithExclusiveStorage<T>(
     Future<T> Function() action, {
     bool recoverAuthority = false,
     bool wholeLibrary = true,
   }) => LocalComicStorageGuard.instance.runExclusive(() async {
     if (!recoverAuthority) _storageAccess.check();
-    if (downloadingTasks.isNotEmpty || _downloadQueue.isSuspended) {
+    if (_downloadQueue.isSuspended) {
       throw const LocalComicStorageBusy(
-        'Wait for downloads to finish or cancel them before changing the local library.',
+        'Local comic storage is busy. Try again later.',
       );
+    }
+    if (!wholeLibrary) {
+      final release = _downloadQueue.holdAutomaticStarts();
+      try {
+        _storageAccess.check();
+        await _withDeletionJournal(() => _deletionJournal.recoverUncommitted());
+        return await action();
+      } finally {
+        release();
+      }
+    }
+    if (downloadingTasks.any(_isDownloadRunning)) {
+      throw const LocalComicStorageBusy(
+        'Pause all downloads before changing the local library.',
+      );
+    }
+    String? library;
+    try {
+      library = _path;
+    } on Error {
+      // Not yet bound to a library.
     }
     final stopped = _downloadQueue.suspend(notify: false);
     try {
@@ -256,12 +284,29 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
       }
       _storageAccess.check();
       await _withDeletionJournal(() => _deletionJournal.recoverUncommitted());
-      if (wholeLibrary) await _deletionCleaner.idle;
+      await _deletionCleaner.idle;
       return await action();
     } finally {
+      if (library != null) _relocateDownloadOutputs(library);
       _downloadQueue.releaseSuspension(stopped, notify: false);
     }
   });
+
+  /// Writing now or about to start: the task's folder may change at any time.
+  bool _isDownloadRunning(DownloadTask task) =>
+      !task.isPaused ||
+      task.isExtracting ||
+      (identical(task, _downloadQueue.activeTask) &&
+          _downloadQueue.isResumePending);
+
+  /// Paused task folders were moved with the library.
+  void _relocateDownloadOutputs(String from) {
+    if (_storageAccess.pending != null || p.equals(from, _path)) return;
+    for (final task in downloadingTasks) {
+      task.relocateOutput(from, _path);
+    }
+    saveCurrentDownloadingTasks();
+  }
 
   Future<String?> _setNewPath(String newPath) async {
     try {
@@ -314,7 +359,10 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
         ? Future.value(value)
         : resolveLocalNativePath(value),
     clearContents: (source) async {
-      final allowed = await _resolveDeletionDirectories([source]);
+      // Paused task folders move with the library.
+      final allowed = await _resolveDeletionDirectories([
+        source,
+      ], protectDownloads: false);
       if (allowed.isEmpty) {
         throw StateError(
           'Old library is still referenced; its files were kept',
@@ -442,10 +490,33 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
       } catch (error, stack) {
         Log.error('LocalManager', error, stack);
       }
+      // Likewise for output folders left by tasks that no longer exist.
+      await _removeOrphanDownloadOutputs();
     }
     // Initialization and UI do not wait for downloads to start.
     _downloadAutoResume = _resumeDownloadsByIntent();
     _deletionCleaner.schedule();
+  }
+
+  Future<void> _removeOrphanDownloadOutputs() async {
+    try {
+      // SAF documents have no native link or marker checks.
+      if (directory is AndroidDirectory) return;
+      final orphans = DownloadOwnerToken.orphanOutputs(
+        root: path,
+        referenced: [
+          for (final task in downloadingTasks) ?task.path,
+          ...registeredComicDirectories,
+        ],
+      );
+      if (orphans.isEmpty) return;
+      await _runDeletionJournal(
+        orphans,
+        (markCommitted) async => runSqliteTransaction(_db, markCommitted),
+      );
+    } catch (error, stack) {
+      Log.error('LocalManager', error, stack);
+    }
   }
 
   String findValidId(ComicType type) => _repository.findValidId(type);
@@ -743,9 +814,39 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
   @override
   void removeTask(DownloadTask task) => _downloadQueue.remove(task);
 
+  /// Moved aside at once and removed in the background, like a deletion.
+  @override
+  Future<void> discardDownloadOutput(Directory directory) =>
+      AppDataOperations.instance.access(
+        () => _runDeletionJournal([
+          directory,
+        ], (markCommitted) async => runSqliteTransaction(_db, markCommitted)),
+      );
+
+  /// Whether [directory] (a stored comic directory) overlaps the output of a
+  /// queued download, which may still write there.
+  bool overlapsDownloadOutput(String directory) {
+    final target = p.normalize(
+      p.absolute(_resolveComicDirectory(directory, path)),
+    );
+    return downloadingTasks.any((task) {
+      final output = task.path;
+      if (output == null) return false;
+      final normalized = p.normalize(p.absolute(output));
+      return p.equals(normalized, target) ||
+          p.isWithin(normalized, target) ||
+          p.isWithin(target, normalized);
+    });
+  }
+
   bool get isDownloadResumePending => _downloadQueue.isResumePending;
 
-  Future<void> cancelDownload(DownloadTask task) => _downloadQueue.cancel(task);
+  /// Returns an output folder that was kept because nothing proves the task
+  /// created it.
+  Future<String?> cancelDownload(DownloadTask task) async {
+    await _downloadQueue.cancel(task);
+    return task.retainedOutputPath;
+  }
 
   void resumeDownload(DownloadTask task) {
     _storageAccess.check();
@@ -982,6 +1083,7 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
     final current = find(c.id, c.comicType);
     if (current == null) return;
     c = current;
+    await _cancelDownloadsOf([c]);
     final snapshot = _repository.deletionSnapshot();
     final directories = removeFileOnDisk
         ? await _resolveDeletionDirectories(
@@ -1011,6 +1113,8 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
     if (chapters.isEmpty) {
       return;
     }
+    // A paused download keeps its own chapters; only a writing one conflicts.
+    _checkDownloadsIdle([c]);
     final snapshot = _repository.deletionSnapshot();
     final remainingChapters = c.downloadedChapters
         .where((chapter) => !chapters.contains(chapter))
@@ -1059,6 +1163,7 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
     if (comics.isEmpty) {
       return;
     }
+    await _cancelDownloadsOf(comics);
 
     final snapshot = _repository.deletionSnapshot();
     var shouldRemovedDirs = <Directory>[];
@@ -1092,6 +1197,46 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
     }
 
     notifyListeners();
+  }
+
+  List<DownloadTask> _downloadsOf(List<LocalComic> comics) => [
+    for (final task in downloadingTasks)
+      if (comics.any(
+        (comic) => comic.id == task.id && comic.comicType == task.comicType,
+      ))
+        task,
+  ];
+
+  /// Only the comic whose download writes now is refused.
+  void _checkDownloadsIdle(List<LocalComic> comics) {
+    for (final task in _downloadsOf(comics)) {
+      if (task.isExtracting) {
+        throw LocalComicTaskBusy(task.title, 'Extracting. Try again later.');
+      }
+      if (_isDownloadRunning(task)) {
+        throw LocalComicTaskBusy(
+          task.title,
+          'Downloading. Pause or cancel it first.',
+        );
+      }
+    }
+  }
+
+  /// Queued, paused and failed downloads of deleted comics are canceled with
+  /// their workspaces and the folders they created.
+  Future<void> _cancelDownloadsOf(List<LocalComic> comics) async {
+    _checkDownloadsIdle(comics);
+    for (final task in _downloadsOf(comics)) {
+      try {
+        final kept = await cancelDownload(task);
+        if (kept != null) {
+          Log.warning('LocalManager', 'Kept download folder: $kept');
+        }
+      } catch (error, stack) {
+        // The task already left the queue; its files are not the comic's.
+        Log.error('LocalManager', error, stack);
+      }
+    }
   }
 
   Future<void> _deleteRecords(
@@ -1202,6 +1347,7 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
     List<LocalComic> excluding = const [],
     LocalComic? chapterOwner,
     List<String>? retainedChapters,
+    bool protectDownloads = true,
   }) async {
     if (directories.isEmpty) return const [];
     final retained = _repository.directoryReferences(
@@ -1223,6 +1369,13 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
       candidates: directories.map((directory) => directory.path),
       retained: [
         ...retained.map((directory) => _resolveComicDirectory(directory, path)),
+        // Folders still used by other queued downloads.
+        if (protectDownloads)
+          for (final task in downloadingTasks)
+            if (chapterOwner == null ||
+                task.id != chapterOwner.id ||
+                task.comicType != chapterOwner.comicType)
+              ?task.path,
         for (final chapter in remainingChapters)
           FilePath.join(
             chapterOwner!.baseDir,

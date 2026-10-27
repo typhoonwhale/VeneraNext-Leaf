@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:venera_next/foundation/app_data_operations.dart';
+import 'package:venera_next/foundation/translations.dart';
 
 class LocalComicStorageBusy implements Exception {
   const LocalComicStorageBusy(this.message);
@@ -8,6 +9,16 @@ class LocalComicStorageBusy implements Exception {
 
   @override
   String toString() => message;
+}
+
+/// One comic is refused because its download is writing.
+class LocalComicTaskBusy extends LocalComicStorageBusy {
+  const LocalComicTaskBusy(this.title, super.message);
+
+  final String title;
+
+  @override
+  String toString() => '$title: ${message.tl}';
 }
 
 /// Keeps imports and directory allocation out of migration and recovery.

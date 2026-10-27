@@ -33,7 +33,7 @@ class ArchiveDownloadTask extends DownloadTask {
 
   /// Holds [_ownerToken] inside an output directory this task created, until
   /// the comic is registered. Dot files are ignored by comic storage.
-  static const _outputMarker = '.venera-archive-download';
+  static const _outputMarker = DownloadOwnerToken.archiveMarker;
 
   final String archiveUrl;
 
@@ -86,25 +86,55 @@ class ArchiveDownloadTask extends DownloadTask {
     if (_isRunning) _retry?.wake();
   }
 
-  Future<void> _clearOwnedOutput() async {
-    final outputPath = _ownedOutputPath;
-    if (outputPath == null) return;
+  /// [outputPath] is the task's output when it was canceled.
+  Future<void> _clearOwnedOutput(String? outputPath) async {
+    final owned = _ownedOutputPath;
     // A successfully registered comic owns its files, even if cancellation
     // arrived while a prior run was finishing. Use the original manager.
     if (_storage.find(id, comicType) != null) {
       _ownedOutputPath = null;
       return;
     }
-    final directory = Directory(outputPath);
-    if (await directory.exists()) await directory.delete(recursive: true);
+    if (owned != null && _ownsOutput(owned)) {
+      // Includes pages of an interrupted extraction.
+      await _storage.discardDownloadOutput(Directory(owned));
+    } else if (outputPath != null &&
+        FileSystemEntity.typeSync(outputPath, followLinks: false) !=
+            FileSystemEntityType.notFound) {
+      // No ownership evidence, e.g. an older snapshot: keep the files and
+      // report the folder.
+      _retainedOutputPath = outputPath;
+    }
     _ownedOutputPath = null;
+  }
+
+  String? _retainedOutputPath;
+
+  @override
+  String? get retainedOutputPath => _retainedOutputPath;
+
+  bool _extracting = false;
+
+  @override
+  bool get isExtracting => _extracting;
+
+  @override
+  void relocateOutput(String from, String to) {
+    final previous = path;
+    super.relocateOutput(from, to);
+    if (previous != null && _ownedOutputPath == previous) {
+      _ownedOutputPath = path;
+    }
   }
 
   Future<void> _clearWorkspace() async {
     final workspace = _workspace;
     if (workspace == null) return;
     try {
-      if (await workspace.exists()) await workspace.delete(recursive: true);
+      // Never remove a workspace whose marker no longer holds this token.
+      if (_ownsWorkspace(workspace.path)) {
+        await workspace.delete(recursive: true);
+      }
       if (identical(_workspace, workspace)) _workspace = null;
     } catch (error, stack) {
       // A completed database commit remains successful if temporary cleanup
@@ -155,6 +185,7 @@ class ArchiveDownloadTask extends DownloadTask {
 
   @override
   void cancel() {
+    final outputPath = path;
     _stop();
     path = null;
     _storage.removeTask(this);
@@ -162,8 +193,9 @@ class ArchiveDownloadTask extends DownloadTask {
     _cleanup =
         () async {
           await stopped;
+          // SAF staging lives inside the workspace.
           await _clearWorkspace();
-          await _clearOwnedOutput();
+          await _clearOwnedOutput(outputPath);
         }().catchError((Object error, StackTrace stack) {
           Log.error('Download', error, stack);
         });
@@ -322,6 +354,7 @@ class ArchiveDownloadTask extends DownloadTask {
       await _clearOutputContents(outputPath);
       if (!_isCurrent(generation)) return;
     }
+    _extracting = true;
     try {
       await _extract(archiveFile.path, outputPath);
     } catch (error) {
@@ -333,6 +366,8 @@ class ArchiveDownloadTask extends DownloadTask {
         unawaited(_storage.saveCurrentDownloadingTasks());
       }
       return;
+    } finally {
+      _extracting = false;
     }
     if (!_isCurrent(generation)) return;
     _storage.completeTask(this);
