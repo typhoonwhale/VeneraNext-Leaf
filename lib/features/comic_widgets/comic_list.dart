@@ -33,12 +33,17 @@ class SliverGridComics extends StatefulWidget {
     this.onTap,
     this.onLongPressed,
     this.selections,
+    this.selectionIndicator = false,
     this.useFavoriteDisplaySettings = false,
   });
 
   final List<Comic> comics;
 
   final Map<Comic, bool>? selections;
+
+  /// Mark the selection state with a checkbox and an outline instead of a
+  /// background color alone, for monochrome screens.
+  final bool selectionIndicator;
 
   final void Function()? onLastItemBuild;
 
@@ -144,6 +149,7 @@ class _SliverGridComicsState extends State<SliverGridComics> {
       comics: comics,
       heroIDs: heroIDs,
       selection: widget.selections,
+      selectionIndicator: widget.selectionIndicator,
       onLastItemBuild: widget.onLastItemBuild,
       badgeBuilder: widget.badgeBuilder,
       menuBuilder: widget.menuBuilder,
@@ -169,6 +175,7 @@ class _SliverGridComics extends StatelessWidget {
     this.onLongPressed,
     this.onBlocked,
     this.selection,
+    this.selectionIndicator = false,
     this.favoriteDisplayMode,
     this.galleryColumns,
   });
@@ -178,6 +185,8 @@ class _SliverGridComics extends StatelessWidget {
   final List<int> heroIDs;
 
   final Map<Comic, bool>? selection;
+
+  final bool selectionIndicator;
 
   final void Function()? onLastItemBuild;
 
@@ -223,19 +232,55 @@ class _SliverGridComics extends StatelessWidget {
         if (selection == null) {
           return comic;
         }
+        final theme = Theme.of(context);
+        final outline = theme.brightness == Brightness.light
+            ? Colors.black
+            : theme.colorScheme.onSurface;
         return AnimatedContainer(
           key: ValueKey(comics[index].id),
           duration: const Duration(milliseconds: 150),
           decoration: BoxDecoration(
             color: isSelected
-                ? Theme.of(
-                    context,
-                  ).colorScheme.secondaryContainer.toOpacity(0.72)
+                ? theme.colorScheme.secondaryContainer.toOpacity(0.72)
                 : null,
             borderRadius: BorderRadius.circular(12),
+            // A constant width keeps the tile size stable while selecting.
+            border: selectionIndicator
+                ? Border.all(
+                    color: isSelected ? outline : Colors.transparent,
+                    width: 3,
+                  )
+                : null,
           ),
           margin: const EdgeInsets.all(4),
-          child: comic,
+          child: selectionIndicator
+              ? Stack(
+                  children: [
+                    comic,
+                    Positioned(
+                      top: 4,
+                      left: 4,
+                      child: IgnorePointer(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.surface,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Icon(
+                            isSelected
+                                ? Icons.check_box
+                                : Icons.check_box_outline_blank,
+                            color: outline,
+                            semanticLabel: isSelected
+                                ? 'Selected'.tl
+                                : 'Unselected'.tl,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                )
+              : comic,
         );
       }, childCount: comics.length),
       gridDelegate: SliverGridDelegateWithComics(

@@ -134,20 +134,6 @@ class _LocalComicsPageState extends State<LocalComicsPage> {
     return MenuButton(
       entries: [
         MenuEntry(
-          icon: Icons.delete_outline,
-          text: "Delete".tl,
-          onClick: () {
-            deleteComics(selectedComics.keys.toList()).then((value) {
-              if (value) {
-                setState(() {
-                  multiSelectMode = false;
-                  selectedComics.clear();
-                });
-              }
-            });
-          },
-        ),
-        MenuEntry(
           icon: Icons.favorite_border,
           text: "Add to favorites".tl,
           onClick: () {
@@ -210,34 +196,41 @@ class _LocalComicsPageState extends State<LocalComicsPage> {
     });
   }
 
-  void invertSelection() {
-    setState(() {
-      comics.asMap().forEach((k, v) {
-        selectedComics[v] = !selectedComics.putIfAbsent(v, () => false);
-      });
-      selectedComics.removeWhere((k, v) => !v);
+  void deleteSelected() {
+    if (selectedComics.isEmpty) return;
+    deleteComics(selectedComics.keys.toList()).then((value) {
+      if (value && mounted) {
+        setState(() {
+          multiSelectMode = false;
+          selectedComics.clear();
+        });
+      }
     });
   }
 
   @override
   Widget build(BuildContext context) {
     List<Widget> selectActions = [
-      IconButton(
-        icon: const Icon(Icons.select_all),
-        tooltip: "Select All".tl,
+      _LabeledActionButton(
+        icon: Icons.select_all,
+        label: "Select all".tl,
         onPressed: selectAll,
       ),
-      IconButton(
-        icon: const Icon(Icons.deselect),
-        tooltip: "Deselect".tl,
+      _LabeledActionButton(
+        icon: Icons.deselect,
+        label: "Deselect all".tl,
         onPressed: deSelect,
       ),
       IconButton(
-        icon: const Icon(Icons.flip),
-        tooltip: "Invert Selection".tl,
-        onPressed: invertSelection,
+        icon: const Icon(Icons.delete_outline),
+        tooltip: "Delete".tl,
+        constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+        onPressed: selectedComics.isEmpty ? null : deleteSelected,
       ),
-      buildMultiSelectMenu(),
+      ConstrainedBox(
+        constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+        child: buildMultiSelectMenu(),
+      ),
     ];
 
     List<Widget> normalActions = [
@@ -291,9 +284,7 @@ class _LocalComicsPageState extends State<LocalComicsPage> {
                       : const Icon(Icons.arrow_back),
                 ),
               ),
-              title: multiSelectMode
-                  ? Text(selectedComics.length.toString())
-                  : Text("Local".tl),
+              title: multiSelectMode ? Text(_selectedTitle) : Text("Local".tl),
               actions: multiSelectMode ? selectActions : normalActions,
             )
           else if (searchMode)
@@ -321,7 +312,7 @@ class _LocalComicsPageState extends State<LocalComicsPage> {
                 ),
               ),
               title: multiSelectMode
-                  ? Text(selectedComics.length.toString())
+                  ? Text(_selectedTitle)
                   : TextField(
                       autofocus: true,
                       decoration: InputDecoration(
@@ -338,6 +329,7 @@ class _LocalComicsPageState extends State<LocalComicsPage> {
           SliverGridComics(
             comics: comics,
             selections: selectedComics,
+            selectionIndicator: multiSelectMode,
             onLongPressed: (c, heroID) {
               setState(() {
                 multiSelectMode = true;
@@ -462,6 +454,9 @@ class _LocalComicsPageState extends State<LocalComicsPage> {
       child: body,
     );
   }
+
+  String get _selectedTitle =>
+      "@c selected".tlParams({'c': selectedComics.length});
 
   Future<bool> deleteComics(List<LocalComic> comics) async {
     bool isDeleted = false;
@@ -665,6 +660,55 @@ class _LocalComicsPageState extends State<LocalComicsPage> {
         context.showMessage(message: error.toString());
       }
     }
+  }
+}
+
+/// An app bar action whose short label stays visible below the icon.
+class _LabeledActionButton extends StatelessWidget {
+  const _LabeledActionButton({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: label,
+      excludeFromSemantics: true,
+      child: Semantics(
+        button: true,
+        label: label,
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(8),
+          child: ExcludeSemantics(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minWidth: 56, minHeight: 48),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(icon, size: 22),
+                    Text(
+                      label,
+                      maxLines: 1,
+                      style: const TextStyle(fontSize: 11, height: 1.2),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

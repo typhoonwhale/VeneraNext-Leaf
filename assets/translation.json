@@ -950,7 +950,9 @@
     "Automatic reading is paused": "自动阅读已暂停",
     "Deselect all": "取消全选",
     "Select all": "全选",
-    "Failed to load source": "无法加载来源"
+    "Failed to load source": "无法加载来源",
+    "@c selected": "已选 @c 本",
+    "Selected": "已选中"
   },
   "zh_TW": {
     "Update cache cannot be cleaned": "更新快取無法清理",
@@ -1902,6 +1904,8 @@
     "Automatic reading is paused": "自動閱讀已暫停",
     "Deselect all": "取消全選",
     "Select all": "全選",
-    "Failed to load source": "無法載入來源"
+    "Failed to load source": "無法載入來源",
+    "@c selected": "已選 @c 本",
+    "Selected": "已選中"
   }
 }
