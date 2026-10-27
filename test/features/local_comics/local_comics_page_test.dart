@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -5,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:venera_next/features/local_comics/local.dart';
 import 'package:venera_next/features/local_comics/local_comics_page.dart';
 import 'package:venera_next/foundation/app.dart';
+import 'package:venera_next/foundation/app_data_operations.dart';
 import 'package:venera_next/foundation/comic_type.dart';
 import 'package:venera_next/routing/app_navigation.dart';
 
@@ -141,5 +143,94 @@ void main() {
     expect(find.text('Archive to WebDAV'), findsOneWidget);
     expect(find.text('Export as cbz'), findsOneWidget);
     expect(find.text('Delete'), findsNothing);
+  });
+
+  testWidgets('the delete dialog shows progress and cannot be resubmitted', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        navigatorKey: appNavigation.rootNavigatorKey,
+        home: const LocalComicsPage(),
+      ),
+    );
+    await tester.pump();
+    await tester.longPress(find.text('first').first);
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.byTooltip('Delete'));
+    await tester.pumpAndSettle();
+    expect(find.text('Deleting...'), findsNothing);
+
+    // Keep the deletion waiting for data access while the dialog is open.
+    final gate = Completer<void>();
+    unawaited(AppDataOperations.instance.run(() => gate.future));
+    addTearDown(() {
+      if (!gate.isCompleted) gate.complete();
+    });
+    await tester.tap(find.text('Confirm'));
+    await tester.pump();
+    expect(find.text('Deleting...'), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Confirm'))
+          .onPressed,
+      isNull,
+    );
+    // Neither back navigation nor the barrier closes the running dialog.
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+    expect(find.text('Deleting...'), findsOneWidget);
+
+    gate.complete();
+    // The deletion started in the widget zone; alternate real I/O and frames.
+    Future<void> settle() async {
+      for (
+        var i = 0;
+        i < 200 && find.text('Deleting...').evaluate().isNotEmpty;
+        i++
+      ) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 10)),
+        );
+        await tester.pump();
+      }
+      await tester.pumpAndSettle();
+    }
+
+    // This fixture has no favorites store: the failure stays in the dialog
+    // and the action becomes available again.
+    await settle();
+    expect(find.text('Deleting...'), findsNothing);
+    expect(find.textContaining('Favorites database is closed'), findsOneWidget);
+    expect(manager.find('first', ComicType.local), isNotNull);
+    expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Confirm'))
+          .onPressed,
+      isNotNull,
+    );
+
+    await tester.tap(find.text('Remove local favorite and history'));
+    await tester.pump();
+    await tester.tap(find.text('Confirm'));
+    await tester.pump();
+    expect(find.text('Deleting...'), findsOneWidget);
+    await settle();
+    expect(find.text('Confirm'), findsNothing);
+    expect(manager.find('first', ComicType.local), isNull);
+    expect(find.text('first'), findsNothing);
+    // The background removal was also scheduled from the widget zone.
+    var removed = false;
+    manager.pendingDeletionCleanup.then((_) => removed = true);
+    for (var i = 0; i < 200 && !removed; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
+      await tester.pump(const Duration(milliseconds: 1));
+    }
+    expect(removed, isTrue);
+    expect(Directory(manager.path).listSync().map((entry) => entry.path), [
+      endsWith('second'),
+    ]);
   });
 }

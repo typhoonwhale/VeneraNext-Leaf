@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
@@ -6,11 +7,29 @@ import 'package:venera_next/foundation/sqlite_transaction.dart';
 
 /// Durable ownership of directories moved out of the live library before a
 /// database deletion. Only committed quarantine paths may be removed on retry.
+///
+/// [run] returns once the directories are moved and the deletion committed;
+/// [purgeCommitted] removes committed quarantines later, outside storage
+/// ownership. Callers serialize [run] and [recoverUncommitted].
 class LocalDeletionJournal {
-  LocalDeletionJournal(this.db, {required this.exists});
+  LocalDeletionJournal(
+    this.db, {
+    required this.exists,
+    Future<void> Function(String path)? deleteDirectory,
+  }) : deleteDirectory = deleteDirectory ?? _deleteDirectory;
 
   final Database db;
   final Future<bool> Function(String path) exists;
+
+  /// Removes a committed quarantine directory recursively.
+  final Future<void> Function(String path) deleteDirectory;
+
+  static Future<void> _deleteDirectory(String path) =>
+      Directory(path).delete(recursive: true);
+
+  /// Quarantines being removed by any journal of this isolate. A second purge
+  /// skips them instead of deleting the same directory concurrently.
+  static final _purging = <String>{};
 
   void initialize() =>
       db.execute('''CREATE TABLE IF NOT EXISTS local_deletion_journal (
@@ -20,11 +39,74 @@ class LocalDeletionJournal {
     committed INTEGER NOT NULL DEFAULT 0
   );''');
 
+  /// Restore uncommitted movements, then remove committed quarantines.
   Future<void> recover() async {
+    await recoverUncommitted();
+    await purgeCommitted();
+  }
+
+  /// Restore directories whose deletion never committed. This must finish
+  /// before the library is read, so it runs synchronously at startup.
+  Future<void> recoverUncommitted() async {
     for (final row in db.select(
-      'SELECT * FROM local_deletion_journal ORDER BY id DESC',
+      'SELECT * FROM local_deletion_journal WHERE committed = 0 ORDER BY id DESC',
     )) {
       await _recoverRow(row);
+    }
+  }
+
+  /// Remove committed quarantines and their journal rows. Rows that fail stay
+  /// for a later attempt; the first failure is rethrown after the others ran.
+  /// [isStopped] ends the pass between directories, before any database
+  /// write. [write] performs each row removal, for an owner's access rules.
+  Future<void> purgeCommitted({
+    bool Function()? isStopped,
+    FutureOr<void> Function(void Function() remove)? write,
+  }) async {
+    bool stopped() => isStopped?.call() ?? false;
+    (Object, StackTrace)? failure;
+    for (final row in db.select(
+      'SELECT * FROM local_deletion_journal WHERE committed = 1 ORDER BY id',
+    )) {
+      if (stopped()) return;
+      final id = row['id'] as int;
+      final original = row['original_path'] as String;
+      final quarantine = row['quarantine_path'] as String;
+      try {
+        _checkPaths(original, quarantine);
+        final key = p.normalize(p.absolute(quarantine));
+        if (!_purging.add(key)) continue;
+        try {
+          if (await exists(quarantine)) await deleteDirectory(quarantine);
+        } finally {
+          _purging.remove(key);
+        }
+        if (stopped()) return;
+        void remove() => db.execute(
+          'DELETE FROM local_deletion_journal WHERE id = ? AND committed = 1',
+          [id],
+        );
+        if (write == null) {
+          remove();
+        } else {
+          await write(remove);
+        }
+      } catch (error, stack) {
+        failure ??= (error, stack);
+      }
+    }
+    if (failure case (final error, final stack)) {
+      Error.throwWithStackTrace(error, stack);
+    }
+  }
+
+  /// A journal is local state, but never allow malformed entries to designate
+  /// a parent, the original path or a different directory for recursive I/O.
+  static void _checkPaths(String original, String quarantine) {
+    if (!p.equals(p.dirname(original), p.dirname(quarantine)) ||
+        p.equals(original, quarantine) ||
+        !p.basename(quarantine).startsWith('.venera-delete-')) {
+      throw StateError('Invalid local deletion journal path');
     }
   }
 
@@ -32,17 +114,9 @@ class LocalDeletionJournal {
     final id = row['id'] as int;
     final original = row['original_path'] as String;
     final quarantine = row['quarantine_path'] as String;
-    // A journal is local state, but never allow malformed entries to designate
-    // a parent, the original path or a different directory for recursive I/O.
-    if (!p.equals(p.dirname(original), p.dirname(quarantine)) ||
-        p.equals(original, quarantine) ||
-        !p.basename(quarantine).startsWith('.venera-delete-')) {
-      throw StateError('Invalid local deletion journal path');
-    }
+    _checkPaths(original, quarantine);
     final staged = await exists(quarantine);
-    if (row['committed'] == 1) {
-      if (staged) await Directory(quarantine).delete(recursive: true);
-    } else if (staged) {
+    if (staged) {
       if (await exists(original)) {
         throw FileSystemException(
           'Cannot restore deletion: original path is occupied',
@@ -61,11 +135,12 @@ class LocalDeletionJournal {
 
   /// The callback must mark this journal in the same SQLite transaction that
   /// removes records. Publication errors after commit must not restore files.
+  /// Returns without removing the committed quarantines; see [purgeCommitted].
   Future<void> run(
     List<Directory> directories,
     Future<void> Function(void Function() markCommitted) commit,
   ) async {
-    await recover();
+    await recoverUncommitted();
     final ids = <int>[];
     try {
       final roots = <String>[];
@@ -127,7 +202,8 @@ class LocalDeletionJournal {
       });
     } catch (error, stack) {
       try {
-        await recover();
+        // Committed quarantines stay for the purge after a publication error.
+        await recoverUncommitted();
       } catch (recoveryError, recoveryStack) {
         throw LocalDeletionRecoveryFailure(
           error,
@@ -138,7 +214,54 @@ class LocalDeletionJournal {
       }
       Error.throwWithStackTrace(error, stack);
     }
-    await recover();
+  }
+}
+
+/// Runs [LocalDeletionJournal.purgeCommitted] passes one at a time in the
+/// background. A request during a pass runs one more pass afterwards. Errors
+/// are reported; their rows stay for the next request or startup.
+class LocalDeletionCleaner {
+  LocalDeletionCleaner(this._purge, {required this.onError});
+
+  final Future<void> Function(bool Function() isStopped) _purge;
+  final void Function(Object error, StackTrace stack) onError;
+  Future<void>? _pass;
+  bool _requested = false;
+  bool _stopped = false;
+
+  /// Completes when no pass is running or requested.
+  Future<void> get idle async {
+    for (var pass = _pass; pass != null; pass = _pass) {
+      await pass;
+    }
+  }
+
+  void schedule() {
+    if (_stopped) return;
+    _requested = true;
+    _pass ??= _run();
+  }
+
+  /// Ends after the directory being removed; an interrupted removal resumes
+  /// from its committed row on the next start.
+  void stop() => _stopped = true;
+
+  Future<void> _run() async {
+    try {
+      while (_requested && !_stopped) {
+        _requested = false;
+        // Never run within the caller's turn or storage reservation.
+        await Future<void>.delayed(Duration.zero);
+        if (_stopped) break;
+        try {
+          await _purge(() => _stopped);
+        } catch (error, stack) {
+          onError(error, stack);
+        }
+      }
+    } finally {
+      _pass = null;
+    }
   }
 }
 

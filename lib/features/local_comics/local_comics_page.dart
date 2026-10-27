@@ -465,60 +465,101 @@ class _LocalComicsPageState extends State<LocalComicsPage> {
       builder: (context) {
         bool removeComicFile = true;
         bool removeFavoriteAndHistory = true;
+        // Only moving the folders aside and committing the records is
+        // awaited; their files are removed in the background afterwards.
+        bool deleting = false;
+        String? failure;
         return StatefulBuilder(
           builder: (context, state) {
-            return ContentDialog(
-              title: "Delete".tl,
-              content: Column(
-                children: [
-                  CheckboxListTile(
-                    title: Text("Remove local favorite and history".tl),
-                    value: removeFavoriteAndHistory,
-                    onChanged: (v) {
-                      state(() {
-                        removeFavoriteAndHistory = !removeFavoriteAndHistory;
-                      });
-                    },
-                  ),
-                  CheckboxListTile(
-                    title: Text("Also remove files on disk".tl),
-                    value: removeComicFile,
-                    onChanged: (v) {
-                      state(() {
-                        removeComicFile = !removeComicFile;
-                      });
-                    },
+            Future<void> confirm() async {
+              state(() {
+                deleting = true;
+                failure = null;
+              });
+              try {
+                await LocalManager().batchDeleteComics(
+                  comics,
+                  removeComicFile,
+                  removeFavoriteAndHistory,
+                );
+                isDeleted = true;
+                if (context.mounted) context.pop();
+              } catch (error) {
+                if (context.mounted) {
+                  state(() {
+                    deleting = false;
+                    failure = error.toString().tl;
+                  });
+                  context.showMessage(message: failure!);
+                }
+              }
+            }
+
+            return PopScope(
+              canPop: !deleting,
+              child: ContentDialog(
+                title: "Delete".tl,
+                dismissible: !deleting,
+                content: Column(
+                  children: [
+                    CheckboxListTile(
+                      title: Text("Remove local favorite and history".tl),
+                      value: removeFavoriteAndHistory,
+                      onChanged: deleting
+                          ? null
+                          : (v) {
+                              state(() {
+                                removeFavoriteAndHistory =
+                                    !removeFavoriteAndHistory;
+                              });
+                            },
+                    ),
+                    CheckboxListTile(
+                      title: Text("Also remove files on disk".tl),
+                      value: removeComicFile,
+                      onChanged: deleting
+                          ? null
+                          : (v) {
+                              state(() {
+                                removeComicFile = !removeComicFile;
+                              });
+                            },
+                    ),
+                    if (deleting)
+                      ListTile(
+                        leading: const SizedBox.square(
+                          dimension: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                        title: Text("Deleting...".tl),
+                      )
+                    else if (failure != null)
+                      ListTile(
+                        leading: const Icon(Icons.error_outline),
+                        title: Text(failure!),
+                      ),
+                  ],
+                ),
+                actions: [
+                  if (comics.length == 1 && comics.first.hasChapters)
+                    TextButton(
+                      onPressed: deleting
+                          ? null
+                          : () {
+                              context.pop();
+                              showDeleteChaptersPopWindow(
+                                context,
+                                comics.first,
+                              );
+                            },
+                      child: Text("Delete Chapters".tl),
+                    ),
+                  FilledButton(
+                    onPressed: deleting ? null : confirm,
+                    child: Text("Confirm".tl),
                   ),
                 ],
               ),
-              actions: [
-                if (comics.length == 1 && comics.first.hasChapters)
-                  TextButton(
-                    child: Text("Delete Chapters".tl),
-                    onPressed: () {
-                      context.pop();
-                      showDeleteChaptersPopWindow(context, comics.first);
-                    },
-                  ),
-                FilledButton(
-                  onPressed: () async {
-                    try {
-                      await LocalManager().batchDeleteComics(
-                        comics,
-                        removeComicFile,
-                        removeFavoriteAndHistory,
-                      );
-                      isDeleted = true;
-                      if (context.mounted) context.pop();
-                    } catch (error) {
-                      if (context.mounted) {
-                        context.showMessage(message: error.toString().tl);
-                      }
-                    }
-                  },
-                  child: Text("Confirm".tl),
-                ),
-              ],
             );
           },
         );

@@ -1,3 +1,4 @@
+import 'package:venera_next/foundation/app_data_operations.dart';
 import 'package:venera_next/foundation/operation_failure.dart';
 import 'local_comic_model.dart';
 import 'local_repository.dart';
@@ -226,9 +227,17 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
   Future<T> runWithExclusiveStorage<T>(Future<T> Function() action) =>
       _runWithExclusiveStorage(action);
 
+  /// Deleting registered comics or chapters, without reading the whole
+  /// library directory.
+  Future<T> _runWithComicStorage<T>(Future<T> Function() action) =>
+      _runWithExclusiveStorage(action, wholeLibrary: false);
+
+  /// A [wholeLibrary] operation reads every directory of the library, so it
+  /// also waits for removed quarantines to disappear.
   Future<T> _runWithExclusiveStorage<T>(
     Future<T> Function() action, {
     bool recoverAuthority = false,
+    bool wholeLibrary = true,
   }) => LocalComicStorageGuard.instance.runExclusive(() async {
     if (!recoverAuthority) _storageAccess.check();
     if (downloadingTasks.isNotEmpty || _downloadQueue.isSuspended) {
@@ -246,7 +255,8 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
         );
       }
       _storageAccess.check();
-      await _deletionJournal.recover();
+      await _withDeletionJournal(() => _deletionJournal.recoverUncommitted());
+      if (wholeLibrary) await _deletionCleaner.idle;
       return await action();
     } finally {
       _downloadQueue.releaseSuspension(stopped, notify: false);
@@ -390,7 +400,8 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
     LocalStorageRelocation(_rawDatabase).initialize();
     final relocatedPath = await _storageMigration.recover(_libraryPathFile);
     _deletionJournal.initialize();
-    await _deletionJournal.recover();
+    // Committed quarantines are removed in the background after startup.
+    await _deletionJournal.recoverUncommitted();
     if (relocatedPath != null) {
       path = relocatedPath;
     } else if (_libraryPathFile.existsSync()) {
@@ -434,6 +445,7 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
     }
     // Initialization and UI do not wait for downloads to start.
     _downloadAutoResume = _resumeDownloadsByIntent();
+    _deletionCleaner.schedule();
   }
 
   String findValidId(ComicType type) => _repository.findValidId(type);
@@ -570,6 +582,8 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
     _disposed = true;
     // Disposal is not a normal exit: an unsettled auto-resume keeps its marker.
     _stopWatchingAutoResume?.call();
+    // A removal in progress finishes on its own; its row is retried later.
+    _deletionCleaner.stop();
     // Do not discard a handle or publish a replacement owner if close fails.
     _database?.dispose();
     _database = null;
@@ -962,7 +976,7 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
   }
 
   Future<void> deleteComic(LocalComic c, [bool removeFileOnDisk = true]) =>
-      runWithExclusiveStorage(() => _deleteComic(c, removeFileOnDisk));
+      _runWithComicStorage(() => _deleteComic(c, removeFileOnDisk));
 
   Future<void> _deleteComic(LocalComic c, bool removeFileOnDisk) async {
     final current = find(c.id, c.comicType);
@@ -975,7 +989,7 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
             excluding: [c],
           )
         : const <Directory>[];
-    await _deletionJournal.run(
+    await _runDeletionJournal(
       directories,
       (markCommitted) => _deleteRecords(
         [c],
@@ -988,7 +1002,7 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
   }
 
   Future<void> deleteComicChapters(LocalComic c, List<String> chapters) =>
-      runWithExclusiveStorage(() => _deleteComicChapters(c, chapters));
+      _runWithComicStorage(() => _deleteComicChapters(c, chapters));
 
   Future<void> _deleteComicChapters(LocalComic c, List<String> chapters) async {
     final current = find(c.id, c.comicType);
@@ -1017,7 +1031,7 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
       chapterOwner: c,
       retainedChapters: remainingChapters,
     );
-    await _deletionJournal.run(shouldRemovedDirs, (markCommitted) async {
+    await _runDeletionJournal(shouldRemovedDirs, (markCommitted) async {
       runSqliteTransaction(_db, () {
         _validateDeletionSnapshot(snapshot);
         _repository.removeChapters(c.id, c.comicType, chapters);
@@ -1031,7 +1045,7 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
     List<LocalComic> comics, [
     bool removeFileOnDisk = true,
     bool removeFavoriteAndHistory = true,
-  ]) => runWithExclusiveStorage(
+  ]) => _runWithComicStorage(
     () =>
         _batchDeleteComics(comics, removeFileOnDisk, removeFavoriteAndHistory),
   );
@@ -1063,7 +1077,7 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
           excluding: comics,
         );
       }
-      await _deletionJournal.run(
+      await _runDeletionJournal(
         shouldRemovedDirs,
         (markCommitted) => _deleteRecords(
           comics,
@@ -1125,7 +1139,62 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
         ? Directory(value).exists()
         : await FileSystemEntity.type(value, followLinks: false) !=
               FileSystemEntityType.notFound,
+    deleteDirectory: debugDeleteQuarantine,
   );
+
+  /// Replaces the recursive removal of committed quarantines in tests.
+  @visibleForTesting
+  Future<void> Function(String path)? debugDeleteQuarantine;
+
+  /// Movements and their recovery change the same journal rows; never let a
+  /// recovery restore a directory another run is about to commit.
+  Future<void>? _deletionJournalBusy;
+
+  Future<T> _withDeletionJournal<T>(Future<T> Function() action) async {
+    for (var busy = _deletionJournalBusy; busy != null;) {
+      await busy;
+      busy = _deletionJournalBusy;
+    }
+    // Waiters resume synchronously, in their own zones, when this completes.
+    final done = Completer<void>.sync();
+    _deletionJournalBusy = done.future;
+    try {
+      return await action();
+    } finally {
+      _deletionJournalBusy = null;
+      done.complete();
+    }
+  }
+
+  /// Returns once the directories are moved aside and the records committed.
+  /// Their removal runs in the background without storage ownership.
+  Future<void> _runDeletionJournal(
+    List<Directory> directories,
+    Future<void> Function(void Function() markCommitted) commit,
+  ) async {
+    try {
+      await _withDeletionJournal(
+        () => _deletionJournal.run(directories, commit),
+      );
+    } finally {
+      _deletionCleaner.schedule();
+    }
+  }
+
+  late final _deletionCleaner = LocalDeletionCleaner((isStopped) {
+    bool stopped() =>
+        isStopped() || _disposed || AppDataOperations.instance.isClosing;
+    return _deletionJournal.purgeCommitted(
+      isStopped: stopped,
+      // The database may be replaced or closed while bytes are removed.
+      write: (remove) => AppDataOperations.instance.access(() {
+        if (!stopped()) remove();
+      }),
+    );
+  }, onError: (error, stack) => Log.error('LocalManager', error, stack));
+
+  /// Completes when the background removal of deleted directories is idle.
+  Future<void> get pendingDeletionCleanup => _deletionCleaner.idle;
 
   /// Resolve the proposed retained records before staging any directories.
   Future<List<Directory>> _resolveDeletionDirectories(

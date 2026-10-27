@@ -952,7 +952,8 @@
     "Select all": "全选",
     "Failed to load source": "无法加载来源",
     "@c selected": "已选 @c 本",
-    "Selected": "已选中"
+    "Selected": "已选中",
+    "Deleting...": "正在删除…"
   },
   "zh_TW": {
     "Update cache cannot be cleaned": "更新快取無法清理",
@@ -1906,6 +1907,7 @@
     "Select all": "全選",
     "Failed to load source": "無法載入來源",
     "@c selected": "已選 @c 本",
-    "Selected": "已選中"
+    "Selected": "已選中",
+    "Deleting...": "正在刪除…"
   }
 }
