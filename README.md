@@ -11,9 +11,9 @@
 
 后续开发请先读 [Leaf 开发方案](docs/LEAF_DEVELOPMENT_PLAN.md) 与 [调研记录及 agent 接手入口](docs/research/README.md)，再核对当前分支、源码和设备状态。新调查统一追加到 `docs/research/`，记录日期、来源、结论和未验证项，避免反复推测或覆盖历史依据。
 
-截至 2026-10-25：独立底栏、标题和固定签名 Release 已实现；使用者确认上一版 Release 功能正常。2026-10-26进一步明确底栏结构：**横线1 + 固定间隔2 + 自然文字高度 + 底部留白0–15（默认4）**，字号 **9–13（默认11）**。底部留白独立于字号，另保留真实系统安全区；已通过相关自动验证，仍待新版实机反馈。设计与渲染见[底栏分段布局](docs/research/2026-10-26-footer-spacing.md)。数值是应用设计参数，单位为 Flutter 逻辑像素，不是设备硬件参数。
+当前状态：独立底栏、标题和固定签名 Release 已实现并发布（1.18.2），使用者实机确认竖屏日常阅读、覆盖升级和数据导入正常。底栏结构：**横线1 + 固定间隔2 + 自然文字高度 + 底部留白0–15（默认4）**，字号 **9–13（默认11）**。底部留白独立于字号，另保留真实系统安全区；已通过相关自动验证。目前只验收竖屏使用。设计与渲染见[底栏分段布局](docs/research/2026-10-26-footer-spacing.md)。数值单位为 Flutter 逻辑像素。
 
-> 下方保留的 VeneraNext 介绍、徽章、截图和各平台下载链接属于上游项目，不代表 Leaf 定制版的发布或验收状态。Leaf 的构建、包身份和升级规则见 [Leaf Android 构建说明](docs/LEAF_BUILD.md)；已交付本地测试包不等于已发布 GitHub Release。
+> 下方的 VeneraNext 介绍、徽章、截图和各平台下载链接属于上游项目。Leaf 的构建、包身份和升级规则见 [Leaf Android 构建说明](docs/LEAF_BUILD.md)。
 
 **Leaf 正式版下载：[1.18.2 / Android ARM64](https://github.com/typhoonwhale/VeneraNext-Leaf/releases/tag/v1.18.2)**。已有固定签名Leaf Release可覆盖安装；应用内检查更新会引导到本仓库发布页。
 

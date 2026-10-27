@@ -1,6 +1,6 @@
 # VeneraNext Leaf Android 构建
 
-本文记录 Leaf Android 包的身份、更新和签名边界，以及可复现的本地构建入口。Leaf 基于 VeneraNext v1.18.1 源码；已生成并静态验证 ARM64 Debug APK。用户已授权生成首个固定签名 ARM64 Release 测试包，本机签名已建立；构建与验包结果以本机任务的 docs/release-test.md 为准，尚无新版实机验收，也没有设置 GitHub 签名 secrets。
+本文记录 Leaf Android 包的身份、更新和签名边界，以及可复现的本地构建入口。Leaf 基于 VeneraNext v1.18.1 源码。固定签名 ARM64 Release 已发布到 1.18.2 / 2402，由本机签名构建后上传 GitHub Release；仓库未设置签名 secrets，CI 无法产出 Release 包。
 
 ## Android 身份与隔离
 
