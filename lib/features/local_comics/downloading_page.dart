@@ -292,6 +292,9 @@ class _DownloadTaskTileState extends State<_DownloadTaskTile> {
                       ),
                     ),
                     MenuButton(
+                      // Entries are rebuilt with every progress update; the
+                      // open menu belongs to the task in its current state.
+                      identity: (widget.task, state),
                       entries: [
                         if (errorMessage != null)
                           MenuEntry(

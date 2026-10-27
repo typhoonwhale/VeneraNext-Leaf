@@ -360,9 +360,13 @@ class _IconButtonState extends State<_IconButton> {
 }
 
 class MenuButton extends StatefulWidget {
-  const MenuButton({super.key, required this.entries});
+  const MenuButton({super.key, required this.entries, this.identity});
 
   final List<MenuEntry> entries;
+
+  /// What an open menu belongs to. Without it the menu closes whenever new
+  /// [entries] arrive; pass a stable value to keep it open across rebuilds.
+  final Object? identity;
 
   @override
   State<MenuButton> createState() => _MenuButtonState();
@@ -370,7 +374,7 @@ class MenuButton extends StatefulWidget {
 
 class _MenuButtonState extends State<MenuButton> with ContextMenuOwner {
   @override
-  Object get contextMenuIdentity => widget.entries;
+  Object get contextMenuIdentity => widget.identity ?? widget.entries;
   @override
   Widget build(BuildContext context) {
     return Tooltip(

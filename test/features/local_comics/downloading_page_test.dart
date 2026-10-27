@@ -66,6 +66,34 @@ void main() {
     },
   );
 
+  testWidgets('task menu stays open while a running task keeps notifying', (
+    tester,
+  ) async {
+    final root = Directory.systemTemp.createTempSync('downloading-page-');
+    App.dataPath = root.path;
+    addTearDown(() => root.deleteSync(recursive: true));
+    final manager = LocalManager();
+    final task = _Task('a')..label = 'Running';
+    manager.restorePausedDownloads([task]);
+    manager.resumeDownload(task);
+    await tester.pumpWidget(page());
+    await tester.tap(find.byIcon(Icons.more_horiz));
+    await tester.pumpAndSettle();
+    expect(find.text('Move To First'), findsOneWidget);
+    for (var i = 1; i <= 7; i++) {
+      task
+        ..status = '$i/10'
+        ..emit();
+      await tester.pump(const Duration(seconds: 1));
+    }
+    await tester.pumpAndSettle();
+    expect(find.text('Move To First'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(manager.downloadingTasks, isEmpty);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('page pause all withdraws a start pending old cleanup', (
     tester,
   ) async {
