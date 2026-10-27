@@ -21,9 +21,14 @@ import 'package:venera_next/foundation/file_interaction.dart';
 
 import 'download_task.dart';
 import 'download_directory_allocator.dart';
+import 'download_output_marker.dart';
 import 'download_retry.dart';
 
 class ImagesDownloadTask extends DownloadTask with _TransferSpeedMixin {
+  /// Holds [_ownerToken] inside an output directory this task created, until
+  /// the comic is registered. Dot files are ignored by comic storage.
+  static const _outputMarker = '.venera-images-download';
+
   final ComicSource source;
 
   final String comicId;
@@ -65,6 +70,11 @@ class ImagesDownloadTask extends DownloadTask with _TransferSpeedMixin {
   _allocateDirectory;
   Future<void>? _allocationFuture;
   String? _ownedOutputPath;
+  String _ownerToken = DownloadOwnerToken.create();
+
+  /// Whether this task created [path]; persisted so a restored task can
+  /// verify the claim with [_outputMarker] before deleting anything there.
+  bool _outputOwned = false;
   final DownloadTaskStorage _storage;
 
   Future<void> _allocateOutput() async {
@@ -76,8 +86,15 @@ class ImagesDownloadTask extends DownloadTask with _TransferSpeedMixin {
           comic!.title,
         );
     final directory = allocation.directory;
+    _outputOwned = allocation.isNew;
     if (allocation.isNew) _ownedOutputPath = directory.path;
     if (!await directory.exists()) await directory.create();
+    if (allocation.isNew) {
+      await DownloadOwnerToken.write(
+        FilePath.join(directory.path, _outputMarker),
+        _ownerToken,
+      );
+    }
     // Pause/resume and cancellation drain this operation before reusing or
     // cleaning its result, including a result returned after pause/cancel.
     path = directory.path;
@@ -105,7 +122,9 @@ class ImagesDownloadTask extends DownloadTask with _TransferSpeedMixin {
           if (cleanupPath == null) return;
           final local = manager.find(id, comicType);
           if (local == null) {
-            if (_ownedOutputPath != cleanupPath) return;
+            if (_ownedOutputPath != cleanupPath || !_ownsOutput(cleanupPath)) {
+              return;
+            }
             final directory = Directory(cleanupPath);
             if (await directory.exists()) {
               await directory.delete(recursive: true);
@@ -518,10 +537,23 @@ class ImagesDownloadTask extends DownloadTask with _TransferSpeedMixin {
     }
 
     _storage.completeTask(this);
-    _ownedOutputPath = null;
     _isRunning = false;
     stopRecorder();
+    // Keep ownership evidence until the comic is registered; a suspended
+    // queue does not register it.
+    if (_storage.find(id, comicType) == null) return;
+    _ownedOutputPath = null;
+    await File(FilePath.join(path!, _outputMarker)).deleteIgnoreError();
   }
+
+  /// An output is this task's only if it is a real directory directly under
+  /// the library root that still carries this task's marker.
+  bool _ownsOutput(String outputPath) => DownloadOwnerToken.ownsOutput(
+    root: _storage.path,
+    outputPath: outputPath,
+    marker: _outputMarker,
+    token: _ownerToken,
+  );
 
   /// Whether this task saved any page of [chapter], including prefetched
   /// pages after the current index.
@@ -626,6 +658,8 @@ class ImagesDownloadTask extends DownloadTask with _TransferSpeedMixin {
       "totalCount": _totalCount,
       "index": _index,
       "chapter": _chapter,
+      "ownerToken": _ownerToken,
+      "outputOwned": _outputOwned,
     };
   }
 
@@ -646,23 +680,47 @@ class ImagesDownloadTask extends DownloadTask with _TransferSpeedMixin {
       }
     }
 
-    return ImagesDownloadTask(
-        storage: storage,
-        loadImage: loadImage,
-        source: ComicSource.find(json["source"])!,
-        comicId: json["comicId"],
-        comic: json["comic"] == null
-            ? null
-            : ComicDetails.fromJson(json["comic"]),
-        chapters: ListOrNull.from(json["chapters"]),
-      )
-      ..path = json["path"]
-      .._cover = json["cover"]
-      .._images = images
-      .._downloadedCount = json["downloadedCount"]
-      .._totalCount = json["totalCount"]
-      .._index = json["index"]
-      .._chapter = json["chapter"];
+    final task =
+        ImagesDownloadTask(
+            storage: storage,
+            loadImage: loadImage,
+            source: ComicSource.find(json["source"])!,
+            comicId: json["comicId"],
+            comic: json["comic"] == null
+                ? null
+                : ComicDetails.fromJson(json["comic"]),
+            chapters: ListOrNull.from(json["chapters"]),
+          )
+          ..path = json["path"]
+          .._cover = json["cover"]
+          .._images = images
+          .._downloadedCount = json["downloadedCount"]
+          .._totalCount = json["totalCount"]
+          .._index = json["index"]
+          .._chapter = json["chapter"];
+    // Snapshots without an owner token restore without any ownership claims.
+    final token = json["ownerToken"];
+    final path = task.path;
+    if (token is! String || !DownloadOwnerToken.pattern.hasMatch(token)) {
+      return task;
+    }
+    task._ownerToken = token;
+    if (path != null && json["outputOwned"] == true) {
+      task._outputOwned = true;
+      final registered = storage.find(task.id, task.comicType);
+      if (registered != null && registered.directory == p.basename(path)) {
+        // Registered in the folder this task created: the marker is stale.
+        try {
+          final marker = File(FilePath.join(path, _outputMarker));
+          if (marker.existsSync()) marker.deleteSync();
+        } catch (error, stack) {
+          Log.error('Download', error, stack);
+        }
+      } else if (task._ownsOutput(path)) {
+        task._ownedOutputPath = path;
+      }
+    }
+    return task;
   }
 
   @override

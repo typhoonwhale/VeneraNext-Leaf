@@ -164,6 +164,141 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets(
+    'menus offer pause only for normal tasks and queued tasks say so',
+    (tester) async {
+      tester.view.physicalSize = const Size(800, 1600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final manager = LocalManager();
+      final running = _Task('a')..label = 'Running';
+      final waiting = _Task('b')
+        ..label = 'Waiting'
+        ..fraction = 0.5;
+      final userPaused = _Task('c')..label = 'User paused';
+      final failed = _Task('d')..label = 'Failed';
+      manager.restorePausedDownloads(
+        [running, waiting, userPaused, failed],
+        states: {
+          userPaused: DownloadTaskState.paused,
+          failed: DownloadTaskState.error,
+        },
+        errorMessages: {failed: 'Error: offline'},
+      );
+      manager.resumeDownload(running);
+      await tester.pumpWidget(page());
+      Finder tile(String title) =>
+          find.ancestor(of: find.text(title), matching: find.byType(Row)).last;
+      // The waiting task shows its state and the progress it already has.
+      expect(
+        find.descendant(of: tile('Waiting'), matching: find.text('Queued')),
+        findsOneWidget,
+      );
+      expect(find.text('Queued'), findsOneWidget);
+      expect(
+        tester
+            .widgetList<LinearProgressIndicator>(
+              find.byType(LinearProgressIndicator),
+            )
+            .map((indicator) => indicator.value),
+        [0, 0.5, 0, 0],
+      );
+
+      Future<List<String>> menu(String title) async {
+        await tester.tap(
+          find.descendant(
+            of: tile(title),
+            matching: find.byIcon(Icons.more_horiz),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final texts = [
+          for (final text in [
+            'Error details',
+            'Pause',
+            'Cancel',
+            'Move To First',
+          ])
+            if (find.text(text).evaluate().isNotEmpty) text,
+        ];
+        await tester.tapAt(Offset.zero);
+        await tester.pumpAndSettle();
+        return texts;
+      }
+
+      expect(await menu('Running'), ['Pause', 'Cancel', 'Move To First']);
+      expect(await menu('Waiting'), ['Pause', 'Cancel', 'Move To First']);
+      expect(await menu('User paused'), ['Cancel', 'Move To First']);
+      expect(await menu('Failed'), [
+        'Error details',
+        'Cancel',
+        'Move To First',
+      ]);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets('pausing one task parks it and keeps the queue moving', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(800, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final root = Directory.systemTemp.createTempSync('downloading-page-');
+    App.dataPath = root.path;
+    addTearDown(() => root.deleteSync(recursive: true));
+    final manager = LocalManager();
+    final first = _Task('a')..label = 'First';
+    final second = _Task('b')..label = 'Second';
+    final third = _Task('c')..label = 'Third';
+    manager.restorePausedDownloads([first, second, third]);
+    manager.resumeDownload(first);
+    await tester.pumpWidget(page());
+    double top(String text) => tester.getTopLeft(find.text(text)).dy;
+    Future<void> pause(String title) async {
+      await tester.tap(
+        find.descendant(
+          of: find
+              .ancestor(of: find.text(title), matching: find.byType(Row))
+              .last,
+          matching: find.byIcon(Icons.more_horiz),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Pause'));
+      await tester.pumpAndSettle();
+    }
+
+    // A queued task is parked without touching the running one.
+    await pause('Third');
+    expect(manager.downloadState(third), DownloadTaskState.paused);
+    expect(third.resumes, 0);
+    expect(first.paused, isFalse);
+    expect(first.resumes, 1);
+    expect(top('Paused / Failed'), lessThan(top('Third')));
+    expect(top('Second'), lessThan(top('Paused / Failed')));
+    expect(find.text('Queued'), findsOneWidget);
+
+    // Pausing the running task starts the next normal task.
+    await pause('First');
+    expect(manager.downloadState(first), DownloadTaskState.paused);
+    expect(first.paused, isTrue);
+    expect(second.resumes, 1);
+    expect(second.paused, isFalse);
+    expect(identical(manager.activeDownloadTask, second), isTrue);
+    expect(find.text('Queued'), findsNothing);
+    expect(top('Second'), lessThan(top('Paused / Failed')));
+    expect(top('Paused / Failed'), lessThan(top('First')));
+    expect(find.widgetWithText(TextButton, 'Continue'), findsNWidgets(2));
+
+    // The snapshot keeps these states; restart behavior is covered by
+    // download_resume_intent_test.
+    expect(manager.downloadState(second), DownloadTaskState.normal);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('page pause all withdraws a start pending old cleanup', (
     tester,
   ) async {

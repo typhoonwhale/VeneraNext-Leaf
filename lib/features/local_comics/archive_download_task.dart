@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:isolate';
-import 'dart:math';
 
 import 'package:path/path.dart' as p;
 
@@ -17,6 +16,7 @@ import 'package:venera_next/network/file_downloader.dart';
 import 'package:venera_next/foundation/file_interaction.dart';
 import 'package:zip_flutter/zip_flutter.dart';
 
+import 'download_output_marker.dart';
 import 'download_task.dart';
 import 'download_retry.dart';
 
@@ -34,16 +34,6 @@ class ArchiveDownloadTask extends DownloadTask {
   /// Holds [_ownerToken] inside an output directory this task created, until
   /// the comic is registered. Dot files are ignored by comic storage.
   static const _outputMarker = '.venera-archive-download';
-
-  static final _tokenPattern = RegExp(r'^[0-9a-f]{32}$');
-
-  static String _newToken() {
-    final random = Random.secure();
-    return List.generate(
-      16,
-      (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0'),
-    ).join();
-  }
 
   final String archiveUrl;
 
@@ -76,7 +66,7 @@ class ArchiveDownloadTask extends DownloadTask {
   Future<void>? _cleanup;
   Directory? _workspace;
   String? _ownedOutputPath;
-  String _ownerToken = _newToken();
+  String _ownerToken = DownloadOwnerToken.create();
 
   /// Whether this task created [path]; persisted so a restored task can
   /// verify the claim with [_outputMarker] before deleting anything there.
@@ -283,9 +273,10 @@ class ArchiveDownloadTask extends DownloadTask {
       if (!_isCurrent(generation)) return;
       if (!(await dir.exists())) await dir.create();
       if (allocation.isNew) {
-        await File(
+        await DownloadOwnerToken.write(
           FilePath.join(dir.path, _outputMarker),
-        ).writeAsString(_ownerToken, flush: true);
+          _ownerToken,
+        );
       }
       if (!_isCurrent(generation)) return;
       path = dir.path;
@@ -304,9 +295,10 @@ class ArchiveDownloadTask extends DownloadTask {
       workspace = _workspace = await Directory(
         App.cachePath,
       ).createTemp(workspacePrefix);
-      await File(
+      await DownloadOwnerToken.write(
         FilePath.join(workspace.path, _workspaceMarker),
-      ).writeAsString(_ownerToken, flush: true);
+        _ownerToken,
+      );
     }
     if (!_isCurrent(generation)) return;
     await _storage.saveCurrentDownloadingTasks();
@@ -414,11 +406,6 @@ class ArchiveDownloadTask extends DownloadTask {
     }
   }
 
-  static bool _hasToken(String path, String token) =>
-      FileSystemEntity.typeSync(path, followLinks: false) ==
-          FileSystemEntityType.file &&
-      File(path).readAsStringSync() == token;
-
   /// A workspace is this task's only if it is a real directory directly under
   /// the cache root, named with [workspacePrefix] and marked with its token.
   bool _ownsWorkspace(String workspacePath) {
@@ -428,7 +415,7 @@ class ArchiveDownloadTask extends DownloadTask {
           p.equals(p.dirname(workspacePath), App.cachePath) &&
           FileSystemEntity.typeSync(workspacePath, followLinks: false) ==
               FileSystemEntityType.directory &&
-          _hasToken(
+          DownloadOwnerToken.isHeldBy(
             FilePath.join(workspacePath, _workspaceMarker),
             _ownerToken,
           );
@@ -440,20 +427,12 @@ class ArchiveDownloadTask extends DownloadTask {
 
   /// An output is this task's only if it is a real directory directly under
   /// the library root that still carries this task's marker.
-  bool _ownsOutput(String outputPath) {
-    try {
-      final name = p.basename(outputPath);
-      return name != '.' &&
-          name != '..' &&
-          p.equals(p.dirname(outputPath), _storage.path) &&
-          FileSystemEntity.typeSync(outputPath, followLinks: false) ==
-              FileSystemEntityType.directory &&
-          _hasToken(FilePath.join(outputPath, _outputMarker), _ownerToken);
-    } catch (error, stack) {
-      Log.error('Download', error, stack);
-      return false;
-    }
-  }
+  bool _ownsOutput(String outputPath) => DownloadOwnerToken.ownsOutput(
+    root: _storage.path,
+    outputPath: outputPath,
+    marker: _outputMarker,
+    token: _ownerToken,
+  );
 
   /// Delete workspaces under [cachePath] that no task in [tasks] references.
   /// Only real directories named with [workspacePrefix] are considered.
@@ -555,7 +534,9 @@ class ArchiveDownloadTask extends DownloadTask {
         extractArchive: extractArchive,
       )..path = path as String?;
       final token = json["ownerToken"];
-      if (token is! String || !_tokenPattern.hasMatch(token)) return task;
+      if (token is! String || !DownloadOwnerToken.pattern.hasMatch(token)) {
+        return task;
+      }
       task._ownerToken = token;
       final workspace = json["workspace"];
       if (workspace is String && task._ownsWorkspace(workspace)) {

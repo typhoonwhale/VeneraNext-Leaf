@@ -632,6 +632,12 @@ void main() {
         task.resume();
         await started.future.timeout(const Duration(seconds: 2));
         final output = Directory(task.path!);
+        // The ownership marker is the only file before the thumbnail.
+        List<String> pages() => [
+          for (final entry in output.listSync())
+            if (!entry.uri.pathSegments.last.startsWith('.')) entry.path,
+        ];
+        expect(output.listSync(), hasLength(1));
         first.add(
           ImageDownloadProgress(
             currentBytes: 4,
@@ -653,7 +659,7 @@ void main() {
         await pumpEventQueue();
         expect(cleaned, isFalse);
         expect(output.existsSync(), isTrue);
-        expect(output.listSync(), isEmpty);
+        expect(pages(), isEmpty);
         expect(loads, 1);
         release.complete();
         await cleanup;
@@ -661,7 +667,7 @@ void main() {
         if (resumeAfterPause) {
           await restarted.future.timeout(const Duration(seconds: 2));
           expect(loads, 2);
-          expect(output.listSync(), isEmpty);
+          expect(pages(), isEmpty);
           task.cancel();
           await task.pendingCleanup;
         }
@@ -2014,6 +2020,115 @@ void main() {
       expect(manager.find(task.id, task.comicType), isNotNull);
     },
   );
+
+  group('restored image task output ownership', () {
+    const marker = '.venera-images-download';
+    late Directory root;
+    late _TaskStorage storage;
+
+    setUp(() {
+      root = Directory.systemTemp.createTempSync('image-output-owner-');
+      storage = _TaskStorage(root.path);
+    });
+    tearDown(() => root.deleteSync(recursive: true));
+
+    /// A task that created its output, saved one page and was stopped,
+    /// then restored from its JSON snapshot as after a restart.
+    Future<Map<String, dynamic>> stoppedSnapshot() async {
+      final thumbnail = StreamController<ImageDownloadProgress>();
+      final task = ImagesDownloadTask(
+        storage: storage,
+        source: ComicSource.find(sourceKey)!,
+        comicId: 'owned',
+        comic: _archiveComic(sourceKey, id: 'owned'),
+        loadThumbnail: (_, _) => thumbnail.stream,
+      );
+      task.resume();
+      await _waitFor(() => thumbnail.hasListener);
+      expect(task.path, '${root.path}/output');
+      File('${task.path}/0.png').writeAsBytesSync([1]);
+      task.pause();
+      await task.pendingCleanup;
+      await task.debugResumeFuture;
+      task.dispose();
+      await thumbnail.close();
+      return jsonDecode(jsonEncode(task.toJson())) as Map<String, dynamic>;
+    }
+
+    Future<void> cancelRestored(Map<String, dynamic> json) async {
+      final restored = ImagesDownloadTask.fromJson(storage, json)!;
+      restored.cancel();
+      await restored.pendingCleanup;
+      expect(storage.removed, [same(restored)]);
+    }
+
+    test('cancel after restart deletes the output the task created', () async {
+      final json = await stoppedSnapshot();
+      expect(json['outputOwned'], isTrue);
+      final output = Directory(json['path'] as String);
+      expect(
+        File('${output.path}/$marker').readAsStringSync(),
+        json['ownerToken'],
+      );
+      await cancelRestored(json);
+      expect(output.existsSync(), isFalse);
+    });
+
+    test('snapshots without ownership keep the output', () async {
+      final json = await stoppedSnapshot()
+        ..remove('ownerToken')
+        ..remove('outputOwned');
+      await cancelRestored(json);
+      expect(File('${json['path']}/0.png').existsSync(), isTrue);
+    });
+
+    test('a marker held by another token keeps the output', () async {
+      final json = await stoppedSnapshot();
+      File('${json['path']}/$marker').writeAsStringSync('0' * 32);
+      await cancelRestored(json);
+      expect(File('${json['path']}/0.png').existsSync(), isTrue);
+    });
+
+    test('a claimed folder without the marker is never deleted', () async {
+      final json = await stoppedSnapshot();
+      final other = Directory('${root.path}/other')..createSync();
+      final sentinel = File('${other.path}/sentinel')..writeAsStringSync('x');
+      json['path'] = other.path;
+      await cancelRestored(json);
+      expect(sentinel.readAsStringSync(), 'x');
+      expect(File('${root.path}/output/0.png').existsSync(), isTrue);
+    });
+
+    test('completion removes the marker', () async {
+      final bytes = base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6uwAAAABJRU5ErkJggg==',
+      );
+      Stream<ImageDownloadProgress> image() => Stream.value(
+        ImageDownloadProgress(
+          currentBytes: bytes.length,
+          totalBytes: bytes.length,
+          imageBytes: bytes,
+        ),
+      );
+      final task = ImagesDownloadTask(
+        storage: storage,
+        source: _testSource(
+          sourceKey,
+          loadComicPages: (_, _) async => Res(['page.png']),
+        ),
+        comicId: 'complete',
+        comic: _archiveComic(sourceKey, id: 'complete'),
+        loadThumbnail: (_, _) => image(),
+        loadImage: (_, _, _, _) => image(),
+      );
+      task.resume();
+      await _waitFor(() => storage.completed.isNotEmpty);
+      await task.debugResumeFuture;
+      expect(File('${task.path}/0.png').existsSync(), isTrue);
+      expect(File('${task.path}/$marker').existsSync(), isFalse);
+      task.dispose();
+    });
+  });
 
   test('ImagesDownloadTask cancel before path stops speed recorder', () async {
     final dataDir = Directory.systemTemp.createTempSync(

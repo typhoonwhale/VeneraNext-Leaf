@@ -115,6 +115,9 @@ class _DownloadingPageState extends State<DownloadingPage> {
         key: ValueKey(task),
         task: task,
         state: state,
+        queued:
+            state == DownloadTaskState.normal &&
+            !identical(task, manager.activeDownloadTask),
         manager: manager,
       );
 }
@@ -256,12 +259,16 @@ class _DownloadTaskTile extends StatefulWidget {
   const _DownloadTaskTile({
     required this.task,
     required this.state,
+    required this.queued,
     required this.manager,
     super.key,
   });
 
   final DownloadTask task;
   final DownloadTaskState state;
+
+  /// A normal task waiting behind the first normal task.
+  final bool queued;
   final LocalManager manager;
 
   @override
@@ -357,6 +364,8 @@ class _DownloadTaskTileState extends State<_DownloadTaskTile> {
       status = "Paused".tl;
     } else if (!widget.task.isPaused) {
       status = widget.task.message;
+    } else if (widget.queued) {
+      status = "Queued".tl;
     } else {
       status = null;
     }
@@ -410,6 +419,17 @@ class _DownloadTaskTileState extends State<_DownloadTaskTile> {
                             icon: Icons.error_outline,
                             text: 'Error details'.tl,
                             onClick: () => _showErrorDetails(errorMessage),
+                          ),
+                        if (state == DownloadTaskState.normal)
+                          MenuEntry(
+                            icon: Icons.pause,
+                            text: "Pause".tl,
+                            onClick: () {
+                              widget.manager.pauseDownload(
+                                widget.task,
+                                byUser: true,
+                              );
+                            },
                           ),
                         MenuEntry(
                           icon: Icons.close,
