@@ -59,9 +59,12 @@ class LocalDeletionJournal {
   /// for a later attempt; the first failure is rethrown after the others ran.
   /// [isStopped] ends the pass between directories, before any database
   /// write. [write] performs each row removal, for an owner's access rules.
+  /// While [deferWrites] holds, directories are still removed but their rows
+  /// are kept; a later pass removes a row whose quarantine is gone.
   Future<void> purgeCommitted({
     bool Function()? isStopped,
     FutureOr<void> Function(void Function() remove)? write,
+    bool Function()? deferWrites,
   }) async {
     bool stopped() => isStopped?.call() ?? false;
     (Object, StackTrace)? failure;
@@ -82,6 +85,7 @@ class LocalDeletionJournal {
           _purging.remove(key);
         }
         if (stopped()) return;
+        if (deferWrites?.call() ?? false) continue;
         void remove() => db.execute(
           'DELETE FROM local_deletion_journal WHERE id = ? AND committed = 1',
           [id],

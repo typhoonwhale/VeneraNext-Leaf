@@ -941,7 +941,7 @@ void main() {
   );
 
   test(
-    'restoration publishes only complete snapshots and does not duplicate tasks',
+    'restoration drops undecodable entries and does not duplicate tasks',
     () async {
       final root = Directory.systemTemp.createTempSync('download-restore-');
       App.dataPath = root.path;
@@ -968,8 +968,10 @@ void main() {
         {'type': 'ImagesDownloadTask', 'source': 'missing'},
       ]);
       file.writeAsStringSync(invalid);
-      manager.restoreDownloadingTasks();
-      expect(manager.downloadingTasks, [existing]);
+      // An entry that cannot be decoded is dropped like an unknown kind;
+      // the snapshot itself is left as it was.
+      expect(manager.restoreDownloadingTasks(), isTrue);
+      expect(manager.downloadingTasks.map((task) => task.id), ['restored']);
       expect(file.readAsStringSync(), invalid);
       file.writeAsStringSync(
         jsonEncode([

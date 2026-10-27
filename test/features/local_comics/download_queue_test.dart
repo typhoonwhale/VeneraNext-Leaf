@@ -650,6 +650,38 @@ void main() {
     expect(second.isPaused, isTrue);
   });
 
+  test('a removal during the hold does not drop the held start', () {
+    final first = _Task('a', events);
+    final second = _Task('b', events);
+    final third = _Task('c', events);
+    queue.add(first);
+    final release = queue.holdAutomaticStarts();
+    queue.add(second);
+    queue.add(third);
+    queue.complete(first);
+    // A deletion discards another comic's task before releasing its hold.
+    queue.discard(third);
+    expect(third.isPaused, isTrue);
+    release();
+    expect(second.isPaused, isFalse);
+  });
+
+  test('a system pause during the hold drops the held start', () async {
+    final first = _Task('a', events);
+    final second = _Task('b', events);
+    final third = _Task('c', events);
+    queue.add(first);
+    queue.add(second);
+    final release = queue.holdAutomaticStarts();
+    queue.add(third);
+    queue.complete(first);
+    queue.resume(second);
+    await queue.pause(second);
+    release();
+    expect(second.isPaused, isTrue);
+    expect(third.isPaused, isTrue);
+  });
+
   test('holders release independently and stale releases are no-ops', () {
     final first = _Task('a', events);
     final second = _Task('b', events);

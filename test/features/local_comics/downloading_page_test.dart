@@ -9,6 +9,8 @@ import 'package:venera_next/features/local_comics/downloading_page.dart';
 import 'package:venera_next/features/local_comics/local.dart';
 import 'package:venera_next/foundation/app.dart';
 import 'package:venera_next/foundation/comic_type.dart';
+import 'package:venera_next/foundation/context.dart';
+import 'package:venera_next/routing/app_navigation.dart';
 
 void main() {
   setUp(() => LocalManager.current?.dispose());
@@ -91,6 +93,67 @@ void main() {
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
     expect(manager.downloadingTasks, isEmpty);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('cancel while the queue is held tells the user to retry', (
+    tester,
+  ) async {
+    final root = Directory.systemTemp.createTempSync('downloading-page-');
+    App.dataPath = root.path;
+    final messages = <String>[];
+    registerShowMessageHandler((_, message) => messages.add(message));
+    addTearDown(() {
+      registerShowMessageHandler((_, _) {});
+      root.deleteSync(recursive: true);
+    });
+    final task = _Task('a')..label = 'Held';
+    // The manager's futures must belong to the real zone that awaits them.
+    final (manager, release) = (await tester.runAsync(() async {
+      final manager = LocalManager()..restorePausedDownloads([task]);
+      return (manager, await LocalManager.prepareDownloadsForExit());
+    }))!;
+    await tester.pumpWidget(
+      MaterialApp(
+        navigatorKey: appNavigation.rootNavigatorKey,
+        home: const DownloadingPage(),
+      ),
+    );
+    await tester.tap(find.byIcon(Icons.more_horiz));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(messages, ['Local comic storage is busy. Try again later.']);
+    expect(manager.downloadingTasks, [task]);
+    release();
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('a failed cancel is reported', (tester) async {
+    final root = Directory.systemTemp.createTempSync('downloading-page-');
+    App.dataPath = root.path;
+    final messages = <String>[];
+    registerShowMessageHandler((_, message) => messages.add(message));
+    addTearDown(() {
+      registerShowMessageHandler((_, _) {});
+      root.deleteSync(recursive: true);
+    });
+    final manager = LocalManager();
+    final task = _Task('a')
+      ..label = 'Failing'
+      ..cleanup = (Future<void>.error(StateError('cleanup failed'))..ignore());
+    manager.restorePausedDownloads([task]);
+    await tester.pumpWidget(
+      MaterialApp(
+        navigatorKey: appNavigation.rootNavigatorKey,
+        home: const DownloadingPage(),
+      ),
+    );
+    await tester.tap(find.byIcon(Icons.more_horiz));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(messages, ['Bad state: cleanup failed']);
     await tester.pumpWidget(const SizedBox());
   });
 

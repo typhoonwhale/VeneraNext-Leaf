@@ -267,6 +267,12 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
         'Pause all downloads before changing the local library.',
       );
     }
+    // Tasks discarded by a deletion may still be moving their folders.
+    if (_pendingDiscards.isNotEmpty) {
+      throw const LocalComicStorageBusy(
+        'Local comic storage is busy. Try again later.',
+      );
+    }
     String? library;
     try {
       library = _path;
@@ -274,6 +280,7 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
       // Not yet bound to a library.
     }
     final stopped = _downloadQueue.suspend(notify: false);
+    _deletionPurgeHeld = true;
     try {
       await stopped;
       if (recoverAuthority) {
@@ -284,11 +291,22 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
       }
       _storageAccess.check();
       await _withDeletionJournal(() => _deletionJournal.recoverUncommitted());
+      // Quarantines would otherwise be copied with the library. Journal rows
+      // are not written meanwhile: their data access could queue behind an
+      // exclusive operation that waits for this one.
       await _deletionCleaner.idle;
       return await action();
     } finally {
-      if (library != null) _relocateDownloadOutputs(library);
-      _downloadQueue.releaseSuspension(stopped, notify: false);
+      try {
+        if (library != null) await _relocateDownloadOutputs(library);
+      } finally {
+        _deletionPurgeHeld = false;
+        // Remove the journal rows left while held.
+        if (_database != null && _storageAccess.pending == null) {
+          _deletionCleaner.schedule();
+        }
+        _downloadQueue.releaseSuspension(stopped, notify: false);
+      }
     }
   });
 
@@ -299,13 +317,19 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
       (identical(task, _downloadQueue.activeTask) &&
           _downloadQueue.isResumePending);
 
-  /// Paused task folders were moved with the library.
-  void _relocateDownloadOutputs(String from) {
+  /// Paused task folders were moved with the library. The snapshot is
+  /// written before the move returns, so a restart never resolves the tasks
+  /// against the old library.
+  Future<void> _relocateDownloadOutputs(String from) async {
     if (_storageAccess.pending != null || p.equals(from, _path)) return;
     for (final task in downloadingTasks) {
       task.relocateOutput(from, _path);
     }
-    saveCurrentDownloadingTasks();
+    try {
+      await saveCurrentDownloadingTasks();
+    } catch (_) {
+      // Already reported by the store; the move itself has committed.
+    }
   }
 
   Future<String?> _setNewPath(String newPath) async {
@@ -481,7 +505,8 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
     if (restoreDownloadingTasks()) {
       // Before any task can start and create a new workspace. Workspaces of
       // an unreadable snapshot are never treated as orphans; entries that
-      // cannot be decoded are dropped with their workspaces.
+      // cannot be decoded are dropped with their workspaces, but their
+      // output folders in the library are kept.
       try {
         ArchiveDownloadTask.removeOrphanWorkspaces(
           App.cachePath,
@@ -491,7 +516,7 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
         Log.error('LocalManager', error, stack);
       }
       // Likewise for output folders left by tasks that no longer exist.
-      await _removeOrphanDownloadOutputs();
+      if (!_droppedUndecodedDownloads) await _removeOrphanDownloadOutputs();
     }
     // Initialization and UI do not wait for downloads to start.
     _downloadAutoResume = _resumeDownloadsByIntent();
@@ -508,6 +533,7 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
           for (final task in downloadingTasks) ?task.path,
           ...registeredComicDirectories,
         ],
+        tokens: [for (final task in downloadingTasks) ?task.ownerToken],
       );
       if (orphans.isEmpty) return;
       await _runDeletionJournal(
@@ -850,6 +876,8 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
 
   void resumeDownload(DownloadTask task) {
     _storageAccess.check();
+    // Its comic is being deleted; the task leaves the queue with it.
+    if (_deletingDownloads.contains(task)) return;
     _downloadQueue.resume(task);
   }
 
@@ -861,8 +889,13 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
 
   Future<void> moveToFirst(DownloadTask task) {
     _storageAccess.check();
+    if (_deletingDownloads.contains(task)) return Future.value();
     return _downloadQueue.moveToFirst(task);
   }
+
+  /// Exit preparation or a library move holds the queue; it accepts no
+  /// pause, cancellation or reordering meanwhile.
+  bool get isDownloadQueueSuspended => _downloadQueue.isSuspended;
 
   /// Do not initialize a library just to close a window that never used it.
   /// Keep the queue suspended on success until exit or explicit release.
@@ -968,10 +1001,19 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
   /// cannot be decoded are dropped.
   bool restoreDownloadingTasks() {
     _storageAccess.check();
+    _droppedUndecodedDownloads = false;
     try {
       final entries = _downloadTaskStore.restore(_taskSnapshotPath, (json) {
-        final task = _decodeDownloadTask(json, this);
-        if (task == null) return null;
+        DownloadTask? task;
+        try {
+          task = _decodeDownloadTask(json, this);
+        } catch (error, stack) {
+          Log.error('LocalManager', error, stack);
+        }
+        if (task == null) {
+          _droppedUndecodedDownloads = true;
+          return null;
+        }
         final error = json[_errorKey];
         return (task, _decodeState(json), error is String ? error : null);
       });
@@ -993,6 +1035,10 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
       return false;
     }
   }
+
+  /// Whether the last restore dropped an entry. Its output folder may hold
+  /// downloaded pages, so startup does not treat output folders as orphans.
+  bool _droppedUndecodedDownloads = false;
 
   String? _downloadAutoResumeMarkerPath;
   Future<void> _downloadAutoResume = Future.value();
@@ -1076,31 +1122,47 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
     _downloadQueue.add(task);
   }
 
-  Future<void> deleteComic(LocalComic c, [bool removeFileOnDisk = true]) =>
-      _runWithComicStorage(() => _deleteComic(c, removeFileOnDisk));
-
-  Future<void> _deleteComic(LocalComic c, bool removeFileOnDisk) async {
-    final current = find(c.id, c.comicType);
-    if (current == null) return;
-    c = current;
-    await _cancelDownloadsOf([c]);
-    final snapshot = _repository.deletionSnapshot();
-    final directories = removeFileOnDisk
-        ? await _resolveDeletionDirectories(
-            [Directory(c.baseDir)],
-            excluding: [c],
-          )
-        : const <Directory>[];
-    await _runDeletionJournal(
-      directories,
-      (markCommitted) => _deleteRecords(
-        [c],
-        c.comicType == ComicType.local,
-        markCommitted: markCommitted,
-        expectedSnapshot: snapshot,
-      ),
+  /// Downloads of deleted comics are discarded once the deletion commits;
+  /// their own cleanup is awaited after storage ownership is released, so a
+  /// deletion never waits for other tasks or for itself.
+  Future<void> deleteComic(LocalComic c, [bool removeFileOnDisk = true]) async {
+    final discarded = await _runWithComicStorage(
+      () => _deleteComic(c, removeFileOnDisk),
     );
-    notifyListeners();
+    await _awaitDiscardedDownloads(discarded);
+  }
+
+  Future<List<DownloadTask>> _deleteComic(
+    LocalComic c,
+    bool removeFileOnDisk,
+  ) async {
+    final current = find(c.id, c.comicType);
+    if (current == null) return const [];
+    c = current;
+    return _withDeletingDownloads([c], () async {
+      final scope = [c.baseDir];
+      final snapshot = _deletionSnapshot([c], scope);
+      final directories = removeFileOnDisk
+          ? await _resolveDeletionDirectories(
+              [Directory(c.baseDir)],
+              excluding: [c],
+              discarding: [c],
+            )
+          : const <Directory>[];
+      if (!removeFileOnDisk) _clearDownloadMarkers([c]);
+      await _runDeletionJournal(
+        directories,
+        (markCommitted) => _deleteRecords(
+          [c],
+          c.comicType == ComicType.local,
+          markCommitted: markCommitted,
+          validate: () => _validateDeletion(snapshot, [c], scope),
+        ),
+      );
+      final discarded = _discardDownloadsOf([c]);
+      notifyListeners();
+      return discarded;
+    });
   }
 
   Future<void> deleteComicChapters(LocalComic c, List<String> chapters) =>
@@ -1114,89 +1176,103 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
       return;
     }
     // A paused download keeps its own chapters; only a writing one conflicts.
-    _checkDownloadsIdle([c]);
-    final snapshot = _repository.deletionSnapshot();
-    final remainingChapters = c.downloadedChapters
-        .where((chapter) => !chapters.contains(chapter))
-        .toList();
-    final directories = localChapterDirectoriesToDelete(
-      removed: chapters,
-      retained: remainingChapters,
-    );
-    var shouldRemovedDirs = <Directory>[];
-    for (final directory in directories) {
-      var dir = Directory(FilePath.join(c.baseDir, directory));
-      if (dir.existsSync()) {
-        shouldRemovedDirs.add(dir);
+    await _withDeletingDownloads([c], () async {
+      final scope = [c.baseDir];
+      final snapshot = _deletionSnapshot([c], scope);
+      final remainingChapters = c.downloadedChapters
+          .where((chapter) => !chapters.contains(chapter))
+          .toList();
+      final directories = localChapterDirectoriesToDelete(
+        removed: chapters,
+        retained: remainingChapters,
+      );
+      var shouldRemovedDirs = <Directory>[];
+      for (final directory in directories) {
+        var dir = Directory(FilePath.join(c.baseDir, directory));
+        if (dir.existsSync()) {
+          shouldRemovedDirs.add(dir);
+        }
       }
-    }
-    shouldRemovedDirs = await _resolveDeletionDirectories(
-      shouldRemovedDirs,
-      chapterOwner: c,
-      retainedChapters: remainingChapters,
-    );
-    await _runDeletionJournal(shouldRemovedDirs, (markCommitted) async {
-      runSqliteTransaction(_db, () {
-        _validateDeletionSnapshot(snapshot);
-        _repository.removeChapters(c.id, c.comicType, chapters);
-        markCommitted();
+      shouldRemovedDirs = await _resolveDeletionDirectories(
+        shouldRemovedDirs,
+        chapterOwner: c,
+        retainedChapters: remainingChapters,
+      );
+      await _runDeletionJournal(shouldRemovedDirs, (markCommitted) async {
+        runSqliteTransaction(_db, () {
+          _validateDeletion(snapshot, [c], scope);
+          _repository.removeChapters(c.id, c.comicType, chapters);
+          markCommitted();
+        });
       });
+      notifyListeners();
     });
-    notifyListeners();
   }
 
   Future<void> batchDeleteComics(
     List<LocalComic> comics, [
     bool removeFileOnDisk = true,
     bool removeFavoriteAndHistory = true,
-  ]) => _runWithComicStorage(
-    () =>
-        _batchDeleteComics(comics, removeFileOnDisk, removeFavoriteAndHistory),
-  );
+  ]) async {
+    final discarded = await _runWithComicStorage(
+      () => _batchDeleteComics(
+        comics,
+        removeFileOnDisk,
+        removeFavoriteAndHistory,
+      ),
+    );
+    await _awaitDiscardedDownloads(discarded);
+  }
 
-  Future<void> _batchDeleteComics(
+  Future<List<DownloadTask>> _batchDeleteComics(
     List<LocalComic> comics,
     bool removeFileOnDisk,
     bool removeFavoriteAndHistory,
   ) async {
     comics = [for (final comic in comics) ?find(comic.id, comic.comicType)];
     if (comics.isEmpty) {
-      return;
+      return const [];
     }
-    await _cancelDownloadsOf(comics);
-
-    final snapshot = _repository.deletionSnapshot();
-    var shouldRemovedDirs = <Directory>[];
-    try {
-      for (final comic in comics) {
-        if (removeFileOnDisk) {
-          final dir = Directory(comic.baseDir);
-          if (dir.existsSync()) {
-            shouldRemovedDirs.add(dir);
+    return _withDeletingDownloads(comics, () async {
+      final scope = [for (final comic in comics) comic.baseDir];
+      final snapshot = _deletionSnapshot(comics, scope);
+      var shouldRemovedDirs = <Directory>[];
+      try {
+        for (final comic in comics) {
+          if (removeFileOnDisk) {
+            final dir = Directory(comic.baseDir);
+            if (dir.existsSync()) {
+              shouldRemovedDirs.add(dir);
+            }
           }
         }
-      }
-      if (removeFileOnDisk) {
-        shouldRemovedDirs = await _resolveDeletionDirectories(
+        if (removeFileOnDisk) {
+          shouldRemovedDirs = await _resolveDeletionDirectories(
+            shouldRemovedDirs,
+            excluding: comics,
+            discarding: comics,
+          );
+        } else {
+          _clearDownloadMarkers(comics);
+        }
+        await _runDeletionJournal(
           shouldRemovedDirs,
-          excluding: comics,
+          (markCommitted) => _deleteRecords(
+            comics,
+            removeFavoriteAndHistory,
+            markCommitted: markCommitted,
+            validate: () => _validateDeletion(snapshot, comics, scope),
+          ),
         );
+      } catch (e, s) {
+        Log.error("LocalManager", "Failed to batch delete comics: $e", s);
+        rethrow;
       }
-      await _runDeletionJournal(
-        shouldRemovedDirs,
-        (markCommitted) => _deleteRecords(
-          comics,
-          removeFavoriteAndHistory,
-          markCommitted: markCommitted,
-          expectedSnapshot: snapshot,
-        ),
-      );
-    } catch (e, s) {
-      Log.error("LocalManager", "Failed to batch delete comics: $e", s);
-      rethrow;
-    }
 
-    notifyListeners();
+      final discarded = _discardDownloadsOf(comics);
+      notifyListeners();
+      return discarded;
+    });
   }
 
   List<DownloadTask> _downloadsOf(List<LocalComic> comics) => [
@@ -1222,20 +1298,70 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
     }
   }
 
-  /// Queued, paused and failed downloads of deleted comics are canceled with
-  /// their workspaces and the folders they created.
-  Future<void> _cancelDownloadsOf(List<LocalComic> comics) async {
+  /// Downloads of comics being deleted. They are idle and must stay so until
+  /// the deletion ends: they are neither resumed nor moved to the front.
+  final _deletingDownloads = Set<DownloadTask>.identity();
+
+  Future<T> _withDeletingDownloads<T>(
+    List<LocalComic> comics,
+    Future<T> Function() action,
+  ) async {
     _checkDownloadsIdle(comics);
-    for (final task in _downloadsOf(comics)) {
+    final tasks = _downloadsOf(comics);
+    _deletingDownloads.addAll(tasks);
+    try {
+      return await action();
+    } finally {
+      _deletingDownloads.removeAll(tasks);
+    }
+  }
+
+  /// Cleanup of tasks discarded by deletions that has not finished yet.
+  final _pendingDiscards = <Future<void>>{};
+
+  /// Queued, paused and failed downloads of comics whose deletion has just
+  /// committed are discarded with their workspaces and the folders they
+  /// created. Their cleanup starts now and is awaited by the caller.
+  List<DownloadTask> _discardDownloadsOf(List<LocalComic> comics) {
+    final tasks = _downloadsOf(comics);
+    for (final task in tasks) {
       try {
-        final kept = await cancelDownload(task);
-        if (kept != null) {
-          Log.warning('LocalManager', 'Kept download folder: $kept');
-        }
+        final cleanup = _downloadQueue.discard(task).catchError((
+          Object error,
+          StackTrace stack,
+        ) {
+          Log.error('LocalManager', error, stack);
+        });
+        _pendingDiscards.add(cleanup);
+        unawaited(cleanup.whenComplete(() => _pendingDiscards.remove(cleanup)));
       } catch (error, stack) {
-        // The task already left the queue; its files are not the comic's.
+        // The comic is deleted; its task's files are not the comic's.
         Log.error('LocalManager', error, stack);
       }
+    }
+    return tasks;
+  }
+
+  Future<void> _awaitDiscardedDownloads(List<DownloadTask> tasks) async {
+    for (final task in tasks) {
+      try {
+        await task.pendingCleanup;
+      } catch (error, stack) {
+        Log.error('LocalManager', error, stack);
+      }
+      final kept = task.retainedOutputPath;
+      if (kept != null) {
+        Log.warning('LocalManager', 'Kept download folder: $kept');
+      }
+    }
+  }
+
+  /// Comic folders that stay on disk are no longer download outputs: a
+  /// leftover marker would make startup remove them and imports skip them.
+  void _clearDownloadMarkers(List<LocalComic> comics) {
+    for (final comic in comics) {
+      if (Directory(comic.baseDir) is AndroidDirectory) continue;
+      DownloadOwnerToken.clearOutputMarkers(comic.baseDir);
     }
   }
 
@@ -1243,11 +1369,11 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
     List<LocalComic> comics,
     bool removeFavoriteAndHistory, {
     required void Function() markCommitted,
-    required String expectedSnapshot,
+    required void Function() validate,
   }) async {
     if (!removeFavoriteAndHistory) {
       runSqliteTransaction(_db, () {
-        _validateDeletionSnapshot(expectedSnapshot);
+        validate();
         _repository.removeAll(comics);
         markCommitted();
       });
@@ -1262,7 +1388,7 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
       markCommitted: markCommitted,
       validate: () {
         _checkNotDisposed();
-        _validateDeletionSnapshot(expectedSnapshot);
+        validate();
       },
     );
     for (final comic in comics) {
@@ -1270,9 +1396,35 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
     }
   }
 
-  void _validateDeletionSnapshot(String expected) {
-    if (_repository.deletionSnapshot() != expected) {
-      throw StateError(
+  /// The records of [comics] and of any comic whose folder overlaps
+  /// [directories]. Unrelated records, such as a download committed
+  /// meanwhile into its own new folder, do not affect a deletion.
+  String _deletionSnapshot(List<LocalComic> comics, List<String> directories) {
+    String normalize(String value) => p.normalize(p.absolute(value));
+    final targets = directories.map(normalize).toList();
+    return _repository.deletionSnapshot((id, type, directory) {
+      if (comics.any((c) => c.id == id && c.comicType.value == type)) {
+        return true;
+      }
+      final resolved = normalize(_resolveComicDirectory(directory, path));
+      return targets.any(
+        (target) =>
+            p.equals(target, resolved) ||
+            p.isWithin(target, resolved) ||
+            p.isWithin(resolved, target),
+      );
+    });
+  }
+
+  /// Runs in the committing transaction.
+  void _validateDeletion(
+    String expected,
+    List<LocalComic> comics,
+    List<String> directories,
+  ) {
+    _checkDownloadsIdle(comics);
+    if (_deletionSnapshot(comics, directories) != expected) {
+      throw const LocalComicStorageBusy(
         'Local library changed during deletion; retry the operation',
       );
     }
@@ -1286,6 +1438,11 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
               FileSystemEntityType.notFound,
     deleteDirectory: debugDeleteQuarantine,
   );
+
+  /// Set by whole-library operations, which wait for quarantines to be
+  /// removed while holding data access: journal rows, which need access of
+  /// their own, are then left for the next pass.
+  bool _deletionPurgeHeld = false;
 
   /// Replaces the recursive removal of committed quarantines in tests.
   @visibleForTesting
@@ -1335,6 +1492,7 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
       write: (remove) => AppDataOperations.instance.access(() {
         if (!stopped()) remove();
       }),
+      deferWrites: () => _deletionPurgeHeld,
     );
   }, onError: (error, stack) => Log.error('LocalManager', error, stack));
 
@@ -1348,6 +1506,7 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
     LocalComic? chapterOwner,
     List<String>? retainedChapters,
     bool protectDownloads = true,
+    List<LocalComic> discarding = const [],
   }) async {
     if (directories.isEmpty) return const [];
     final retained = _repository.directoryReferences(
@@ -1369,12 +1528,17 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
       candidates: directories.map((directory) => directory.path),
       retained: [
         ...retained.map((directory) => _resolveComicDirectory(directory, path)),
-        // Folders still used by other queued downloads.
+        // Folders still used by other queued downloads. Downloads that are
+        // [discarding] leave the queue once the deletion commits.
         if (protectDownloads)
           for (final task in downloadingTasks)
-            if (chapterOwner == null ||
-                task.id != chapterOwner.id ||
-                task.comicType != chapterOwner.comicType)
+            if ((chapterOwner == null ||
+                    task.id != chapterOwner.id ||
+                    task.comicType != chapterOwner.comicType) &&
+                !discarding.any(
+                  (comic) =>
+                      comic.id == task.id && comic.comicType == task.comicType,
+                ))
               ?task.path,
         for (final chapter in remainingChapters)
           FilePath.join(

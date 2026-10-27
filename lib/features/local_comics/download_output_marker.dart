@@ -17,31 +17,55 @@ abstract final class DownloadOwnerToken {
   static const _markers = [imagesMarker, archiveMarker];
 
   /// Whether [directory] carries a well-formed marker of either task kind.
-  static bool hasOutputMarker(String directory) {
+  static bool hasOutputMarker(String directory) =>
+      outputToken(directory) != null;
+
+  /// The token of the first well-formed marker in [directory], if any.
+  static String? outputToken(String directory) {
     for (final marker in _markers) {
       final path = FilePath.join(directory, marker);
       try {
         if (FileSystemEntity.typeSync(path, followLinks: false) ==
-                FileSystemEntityType.file &&
-            pattern.hasMatch(File(path).readAsStringSync())) {
-          return true;
+            FileSystemEntityType.file) {
+          final token = File(path).readAsStringSync();
+          if (pattern.hasMatch(token)) return token;
         }
       } catch (error, stack) {
         Log.error('Download', error, stack);
       }
     }
-    return false;
+    return null;
+  }
+
+  /// Remove the markers of both task kinds from [directory], so the folder
+  /// is no longer taken for a download output. Failures are only logged.
+  static void clearOutputMarkers(String directory) {
+    for (final marker in _markers) {
+      final path = FilePath.join(directory, marker);
+      try {
+        if (FileSystemEntity.typeSync(path, followLinks: false) ==
+            FileSystemEntityType.file) {
+          File(path).deleteSync();
+        }
+      } catch (error, stack) {
+        Log.error('Download', error, stack);
+      }
+    }
   }
 
   /// Real directories directly under [root] that carry a download marker but
   /// belong to no restored task and no registered comic: outputs left by a
-  /// task that no longer exists. Links are never followed.
+  /// task that no longer exists. A marker holding one of [tokens] belongs to
+  /// a restored task even if that task's path names another folder. Links
+  /// are never followed.
   static List<Directory> orphanOutputs({
     required String root,
     required Iterable<String> referenced,
+    Iterable<String> tokens = const [],
   }) {
     String normalize(String path) => p.normalize(p.absolute(path));
     final kept = referenced.map(normalize).toList();
+    final keptTokens = tokens.toSet();
     final orphans = <Directory>[];
     for (final entry in Directory(root).listSync(followLinks: false)) {
       if (entry is! Directory) continue;
@@ -53,10 +77,11 @@ abstract final class DownloadOwnerToken {
                 p.equals(other, path) ||
                 p.isWithin(other, path) ||
                 p.isWithin(path, other),
-          ) ||
-          !hasOutputMarker(entry.path)) {
+          )) {
         continue;
       }
+      final token = outputToken(entry.path);
+      if (token == null || keptTokens.contains(token)) continue;
       orphans.add(entry);
     }
     return orphans;

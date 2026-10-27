@@ -50,8 +50,13 @@ void main() {
     LocalManager(
       initializeSources: () async {},
       relatedData: relatedData,
-      decodeDownloadTask: (json, storage) =>
-          _Task(json['id'] as String)..path = json['path'] as String?,
+      decodeDownloadTask: (json, storage) {
+        final id = json['id'] as String;
+        if (id == 'undecodable') throw const FormatException('damaged entry');
+        return _Task(id)
+          ..path = json['path'] as String?
+          ..token = json['token'] as String?;
+      },
     );
     manager = LocalManager();
     await manager.init();
@@ -217,6 +222,183 @@ void main() {
       expect(manager.find(item.id, item.comicType), isNull);
       expect(next.isPaused, isFalse);
     });
+
+    test('deletion does not wait for another task that is stopping', () async {
+      final item = await addComic('book');
+      final other = _Task('other');
+      final task = _Task('book')..path = '${manager.path}/book';
+      manager.restorePausedDownloads(
+        [other, task],
+        states: {task: DownloadTaskState.paused},
+      );
+      manager.resumeDownload(other);
+      // A system pause whose stop never ends, like a task waiting for the
+      // storage guard to allocate its folder.
+      other.cleanup = Completer<void>().future;
+      unawaited(manager.pauseDownload(other));
+
+      await manager.deleteComic(item).timeout(const Duration(seconds: 5));
+      expect(task.cancels, 1);
+      expect(manager.downloadingTasks, [other]);
+      expect(manager.find(item.id, item.comicType), isNull);
+    });
+
+    test('a discarded task may need storage for its own cleanup', () async {
+      final item = await addComic('book');
+      final task = _Task('book')..path = '${manager.path}/book';
+      var cleaned = false;
+      task.onCancel = () => task.cleanup = LocalComicStorageGuard.instance
+          .runImport(() async => cleaned = true);
+      manager.restorePausedDownloads(
+        [task],
+        states: {task: DownloadTaskState.paused},
+      );
+      await manager
+          .batchDeleteComics([item], true, false)
+          .timeout(const Duration(seconds: 5));
+      expect(cleaned, isTrue);
+      expect(manager.downloadingTasks, isEmpty);
+    });
+
+    test('a start held during deletion survives the discarded task', () async {
+      final entered = Completer<void>();
+      final commit = Completer<void>();
+      await start(relatedData: _GatedRelatedData(entered, commit.future));
+      final item = await addComic('book');
+      final first = _Task('first');
+      final book = _Task('book');
+      final next = _Task('next');
+      manager.restorePausedDownloads([first, book, next]);
+      manager.resumeDownload(first);
+      final deleting = manager.batchDeleteComics([item], true, true);
+      await entered.future;
+      await manager.cancelDownload(first);
+      await pumpEventQueue();
+      expect(book.isPaused, isTrue);
+      commit.complete();
+      await deleting;
+      await pumpEventQueue();
+      expect(book.cancels, 1);
+      expect(manager.downloadingTasks, [next]);
+      expect(next.isPaused, isFalse);
+    });
+
+    test('a download committed meanwhile does not fail the deletion', () async {
+      final entered = Completer<void>();
+      final commit = Completer<void>();
+      await start(relatedData: _GatedRelatedData(entered, commit.future));
+      final item = await addComic('book');
+      final running = _Task('fresh')..completed = comic('fresh');
+      Directory('${manager.path}/fresh').createSync();
+      manager.addTask(running);
+      final deleting = manager.batchDeleteComics([item], true, true);
+      await entered.future;
+      manager.completeTask(running);
+      expect(manager.find('fresh', _type), isNotNull);
+      commit.complete();
+      await deleting;
+      expect(manager.find(item.id, item.comicType), isNull);
+      expect(manager.find('fresh', _type), isNotNull);
+    });
+
+    test('a changed owner of the folder fails the deletion and keeps its '
+        'downloads', () async {
+      final entered = Completer<void>();
+      final commit = Completer<void>();
+      await start(relatedData: _GatedRelatedData(entered, commit.future));
+      final item = await addComic('book');
+      final task = _Task('book')..path = '${manager.path}/book';
+      final alias = _Task('alias')
+        ..completed = LocalComic(
+          id: 'alias',
+          title: 'alias',
+          subtitle: '',
+          tags: [],
+          directory: 'book',
+          chapters: null,
+          cover: '0.jpg',
+          comicType: _type,
+          downloadedChapters: const [],
+          createdAt: DateTime(2024),
+        );
+      manager.restorePausedDownloads(
+        [alias, task],
+        states: {task: DownloadTaskState.paused},
+      );
+      manager.resumeDownload(alias);
+      final deleting = manager.batchDeleteComics([item], true, true);
+      await entered.future;
+      manager.completeTask(alias);
+      commit.complete();
+      await expectLater(
+        deleting,
+        throwsA(
+          isA<LocalComicStorageBusy>().having(
+            (e) => e.toString(),
+            'message',
+            'Local library changed during deletion; retry the operation',
+          ),
+        ),
+      );
+      expect(manager.find(item.id, item.comicType), isNotNull);
+      expect(File('${manager.path}/book/0.jpg').existsSync(), isTrue);
+      expect(manager.downloadingTasks, [task]);
+      expect(task.cancels, 0);
+    });
+
+    test('a download of a comic being deleted is not resumed', () async {
+      final entered = Completer<void>();
+      final commit = Completer<void>();
+      await start(relatedData: _GatedRelatedData(entered, commit.future));
+      final item = await addComic('book');
+      final task = _Task('book')..path = '${manager.path}/book';
+      manager.restorePausedDownloads(
+        [task],
+        states: {task: DownloadTaskState.paused},
+      );
+      final deleting = manager.batchDeleteComics([item], true, true);
+      await entered.future;
+      manager.resumeDownload(task);
+      await manager.moveToFirst(task);
+      expect(task.isPaused, isTrue);
+      commit.complete();
+      await deleting;
+      expect(manager.downloadingTasks, isEmpty);
+    });
+
+    test('keeping the files clears the download markers', () async {
+      final item = await addComic('book');
+      for (final marker in [
+        DownloadOwnerToken.imagesMarker,
+        DownloadOwnerToken.archiveMarker,
+      ]) {
+        File('${manager.path}/book/$marker').writeAsStringSync(_token);
+      }
+      await manager.batchDeleteComics([item], false, false);
+      expect(manager.find(item.id, item.comicType), isNull);
+      expect(DownloadOwnerToken.hasOutputMarker('${manager.path}/book'), false);
+      expect(File('${manager.path}/book/0.jpg').readAsStringSync(), 'book');
+      // Startup no longer takes the kept folder for an orphan output.
+      await start();
+      await manager.pendingDeletionCleanup;
+      expect(File('${manager.path}/book/0.jpg').readAsStringSync(), 'book');
+    });
+  });
+
+  test('a library move returns after saving the moved task paths', () async {
+    final folder = Directory('${manager.path}/paused')..createSync();
+    File('${folder.path}/1.jpg').writeAsStringSync('page');
+    manager.restorePausedDownloads([_Task('paused')..path = folder.path]);
+    final destination = Directory('${root.path}/destination')..createSync();
+    expect(await manager.setNewPath(destination.path), isNull);
+    // Read without waiting for pending writes: a crash now must not leave
+    // the snapshot naming the old library.
+    final saved =
+        jsonDecode(
+              File('${root.path}/downloading_tasks.json').readAsStringSync(),
+            )
+            as List;
+    expect(saved.single['path'], p.join(destination.path, 'paused'));
   });
 
   test('imports skip folders a queued download writes', () async {
@@ -359,6 +541,38 @@ void main() {
       );
     });
 
+    test('a marker holding a restored token is kept under any path', () async {
+      // The library moved but the snapshot still names the old folder.
+      final moved = output('moved', marker: DownloadOwnerToken.imagesMarker);
+      File('${root.path}/downloading_tasks.json').writeAsStringSync(
+        jsonEncode([
+          {
+            'id': 'moved',
+            'path': '${root.path}/old-library/moved',
+            'token': _token,
+            'state': 'paused',
+          },
+        ]),
+      );
+      await start();
+      await manager.pendingDeletionCleanup;
+      expect(File('${moved.path}/1.jpg').readAsStringSync(), 'moved');
+    });
+
+    test('an undecodable entry keeps output folders only', () async {
+      final orphan = output('orphan', marker: DownloadOwnerToken.imagesMarker);
+      File('${root.path}/downloading_tasks.json').writeAsStringSync(
+        jsonEncode([
+          {'id': 'kept', 'state': 'paused'},
+          {'id': 'undecodable', 'state': 'paused'},
+        ]),
+      );
+      await start();
+      await manager.pendingDeletionCleanup;
+      expect(manager.downloadingTasks.map((task) => task.id), ['kept']);
+      expect(File('${orphan.path}/1.jpg').readAsStringSync(), 'orphan');
+    });
+
     test('a damaged snapshot removes nothing', () async {
       final orphan = output('orphan', marker: DownloadOwnerToken.imagesMarker);
       File('${root.path}/downloading_tasks.json').writeAsStringSync('{damaged');
@@ -402,6 +616,12 @@ class _Task extends DownloadTask {
   bool extracting = false;
   int pauses = 0;
   int cancels = 0;
+  Future<void> cleanup = Future.value();
+  void Function()? onCancel;
+  String? token;
+  LocalComic? completed;
+  @override
+  String? get ownerToken => token;
   @override
   ComicType get comicType => _type;
   @override
@@ -421,7 +641,7 @@ class _Task extends DownloadTask {
   @override
   double get progress => 0;
   @override
-  Future<void> get pendingCleanup => Future.value();
+  Future<void> get pendingCleanup => cleanup;
   @override
   void pause() {
     if (!paused) pauses++;
@@ -434,10 +654,12 @@ class _Task extends DownloadTask {
   void cancel() {
     cancels++;
     paused = true;
+    onCancel?.call();
   }
 
   @override
-  Map<String, dynamic> toJson() => {'id': id, 'path': path};
+  Map<String, dynamic> toJson() => {'id': id, 'path': path, 'token': token};
   @override
-  LocalComic toLocalComic() => throw UnsupportedError('conflict fixture');
+  LocalComic toLocalComic() =>
+      completed ?? (throw UnsupportedError('conflict fixture'));
 }

@@ -230,6 +230,7 @@ class DownloadQueue {
     if (!identical(activeTask, task)) return Future.value();
     _revision++;
     _scheduledResumeRevision = null;
+    _heldAutomaticStartRevision = null;
     final stopped = _stopBeforeScheduling(task, task.pause);
     notifyChanged();
     return stopped;
@@ -268,6 +269,7 @@ class DownloadQueue {
       _parked.putIfAbsent(task, () => DownloadTaskState.paused);
     }
     _scheduledResumeRevision = null;
+    _heldAutomaticStartRevision = null;
     final stopped = _stopBeforeScheduling(active, active.pause);
     _revision++;
     _publish();
@@ -300,6 +302,20 @@ class DownloadQueue {
       );
     }
     return stopped;
+  }
+
+  /// Remove a task that is neither running nor about to start. Unlike
+  /// [cancel], this does not wait for other tasks to stop; the result is the
+  /// task's own cleanup only.
+  Future<void> discard(DownloadTask task) {
+    if (_indexOf(task) < 0 || !_canceling.add(task)) return Future.value();
+    try {
+      task.cancel();
+      remove(task);
+    } finally {
+      _canceling.remove(task);
+    }
+    return task.pendingCleanup;
   }
 
   void remove(DownloadTask task) {
@@ -356,11 +372,14 @@ class DownloadQueue {
           _automaticStartHolds.isNotEmpty) {
         return;
       }
-      final revision = _heldAutomaticStartRevision;
+      // Queue changes during the hold (such as removed tasks) do not void a
+      // held start; it only needs an idle queue with a normal task.
+      final held = _heldAutomaticStartRevision != null;
       _heldAutomaticStartRevision = null;
-      if (revision == _revision) {
-        _resumeIfUnchanged(revision!, automatic: true);
+      if (!held || _hasRunningTask || isResumePending || activeTask == null) {
+        return;
       }
+      _resumeIfUnchanged(_revision, automatic: true);
     };
   }
 
@@ -372,6 +391,7 @@ class DownloadQueue {
     completion.future.ignore();
     _revision++;
     _scheduledResumeRevision = null;
+    _heldAutomaticStartRevision = null;
     for (final task in List<DownloadTask>.of(tasks)) {
       _stopBeforeScheduling(task, task.pause);
     }

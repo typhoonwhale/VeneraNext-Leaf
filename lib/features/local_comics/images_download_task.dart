@@ -180,6 +180,9 @@ class ImagesDownloadTask extends DownloadTask with _TransferSpeedMixin {
   String? get cover => _cover ?? comic?.cover;
 
   @override
+  String get ownerToken => _ownerToken;
+
+  @override
   String get message => isWaitingToRetry
       ? 'Connection interrupted. Waiting to retry...'.tl
       : _message;

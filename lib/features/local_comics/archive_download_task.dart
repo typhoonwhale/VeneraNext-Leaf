@@ -223,6 +223,9 @@ class ArchiveDownloadTask extends DownloadTask {
   }
 
   @override
+  String get ownerToken => _ownerToken;
+
+  @override
   String get message => isWaitingToRetry
       ? 'Connection interrupted. Waiting to retry...'.tl
       : _message;

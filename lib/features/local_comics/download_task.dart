@@ -22,6 +22,10 @@ abstract class DownloadTask with ChangeNotifier {
   /// task created it, for example one restored from an older snapshot.
   String? get retainedOutputPath => null;
 
+  /// The random token this task writes into the marker of an output folder
+  /// it creates.
+  String? get ownerToken => null;
+
   /// The paused task's library moved from [from] to [to] with its folders.
   void relocateOutput(String from, String to) {
     final output = path;

@@ -7,6 +7,7 @@ import 'package:sqlite3/sqlite3.dart';
 import 'package:venera_next/features/local_comics/local.dart';
 import 'package:venera_next/features/local_comics/local_storage_guard.dart';
 import 'package:venera_next/foundation/app.dart';
+import 'package:venera_next/foundation/app_data_operations.dart';
 import 'package:venera_next/foundation/comic_type.dart';
 
 void main() {
@@ -220,6 +221,35 @@ void main() {
     await migrating;
     expect(moved, isTrue);
     expect(quarantines(destination.path), isEmpty);
+  });
+
+  test('a migration does not wait for journal rows behind an exclusive '
+      'operation', () async {
+    final item = await addComic('moved', pages: 10);
+    final removal = Completer<void>();
+    final removing = Completer<void>();
+    manager.debugDeleteQuarantine = (path) async {
+      removing.complete();
+      await removal.future;
+      await Directory(path).delete(recursive: true);
+    };
+    await manager.deleteComic(item);
+    await removing.future;
+    final destination = Directory('${root.path}/destination')..createSync();
+    final migrating = manager.setNewPath(destination.path);
+    await pumpEventQueue();
+    // Queued after the migration's access, like a sync or an import.
+    var exclusiveRan = false;
+    final exclusive = AppDataOperations.instance.run(() => exclusiveRan = true);
+    await pumpEventQueue();
+    expect(exclusiveRan, isFalse);
+    removal.complete();
+    expect(await migrating.timeout(const Duration(seconds: 5)), isNull);
+    await exclusive.timeout(const Duration(seconds: 5));
+    expect(exclusiveRan, isTrue);
+    expect(quarantines(destination.path), isEmpty);
+    await manager.pendingDeletionCleanup;
+    expect(journalRows(), isEmpty);
   });
 
   test('a malformed committed row never deletes outside quarantine and does '

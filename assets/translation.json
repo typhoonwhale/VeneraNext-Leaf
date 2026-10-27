@@ -957,7 +957,8 @@
     "Downloading. Pause or cancel it first.": "正在下载，请先暂停或取消",
     "Extracting. Try again later.": "正在解压，请稍后",
     "Pause all downloads before changing the local library.": "请先全部暂停下载，再更改本地漫画库",
-    "The download folder was kept: @path": "已保留下载文件夹：@path"
+    "The download folder was kept: @path": "已保留下载文件夹：@path",
+    "Local library changed during deletion; retry the operation": "删除期间本地漫画库发生了变化，请重试"
   },
   "zh_TW": {
     "Update cache cannot be cleaned": "更新快取無法清理",
@@ -1916,6 +1917,7 @@
     "Downloading. Pause or cancel it first.": "正在下載，請先暫停或取消",
     "Extracting. Try again later.": "正在解壓，請稍後",
     "Pause all downloads before changing the local library.": "請先全部暫停下載，再變更本機漫畫庫",
-    "The download folder was kept: @path": "已保留下載資料夾：@path"
+    "The download folder was kept: @path": "已保留下載資料夾：@path",
+    "Local library changed during deletion; retry the operation": "刪除期間本機漫畫庫發生了變化，請重試"
   }
 }

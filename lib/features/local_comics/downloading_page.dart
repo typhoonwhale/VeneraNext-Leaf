@@ -440,16 +440,32 @@ class _DownloadTaskTileState extends State<_DownloadTaskTile> {
                             // page that stays.
                             final messages =
                                 appNavigation.rootNavigatorKey.currentContext;
-                            final kept = await widget.manager.cancelDownload(
-                              widget.task,
-                            );
-                            if (kept != null &&
-                                messages != null &&
-                                messages.mounted) {
-                              messages.showMessage(
-                                message: 'The download folder was kept: @path'
-                                    .tlParams({'path': kept}),
+                            void report(String message) {
+                              if (messages != null && messages.mounted) {
+                                messages.showMessage(message: message);
+                              }
+                            }
+
+                            // A suspended queue would ignore the request.
+                            if (widget.manager.isDownloadQueueSuspended) {
+                              report(
+                                'Local comic storage is busy. Try again later.'
+                                    .tl,
                               );
+                              return;
+                            }
+                            try {
+                              final kept = await widget.manager.cancelDownload(
+                                widget.task,
+                              );
+                              if (kept != null) {
+                                report(
+                                  'The download folder was kept: @path'
+                                      .tlParams({'path': kept}),
+                                );
+                              }
+                            } catch (error) {
+                              report(error.toString().tl);
                             }
                           },
                         ),
