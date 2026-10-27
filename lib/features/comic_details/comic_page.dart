@@ -646,7 +646,13 @@ class _ComicPageState extends LoadingState<ComicPage, ComicDetails>
           builder: (tagContext) {
             return Material(
               color: color,
-              borderRadius: borderRadius,
+              borderRadius: context.isEInk ? null : borderRadius,
+              shape: context.isEInk
+                  ? RoundedRectangleBorder(
+                      borderRadius: borderRadius,
+                      side: const BorderSide(color: Colors.black),
+                    )
+                  : null,
               child: ClickInkWell(
                 borderRadius: borderRadius,
                 onTap: onTap,
@@ -682,7 +688,11 @@ class _ComicPageState extends LoadingState<ComicPage, ComicDetails>
         );
       } else {
         return Container(
-          decoration: BoxDecoration(color: color, borderRadius: borderRadius),
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: borderRadius,
+            border: context.einkBorder(),
+          ),
           child: Text(text).padding(padding),
         );
       }

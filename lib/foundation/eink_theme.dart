@@ -159,6 +159,37 @@ ThemeData applyEInkTheme(ThemeData base) {
     cardTheme: CardThemeData(elevation: 0, shape: shape),
     popupMenuTheme: PopupMenuThemeData(elevation: 0, shape: shape),
     snackBarTheme: SnackBarThemeData(elevation: 0, shape: shape),
+    floatingActionButtonTheme: const FloatingActionButtonThemeData(
+      elevation: 0,
+      focusElevation: 0,
+      hoverElevation: 0,
+      highlightElevation: 0,
+      disabledElevation: 0,
+      backgroundColor: Colors.white,
+      foregroundColor: Colors.black,
+      shape: RoundedRectangleBorder(
+        side: BorderSide(color: Colors.black, width: 2),
+        borderRadius: BorderRadius.all(Radius.circular(16)),
+      ),
+    ),
+    segmentedButtonTheme: SegmentedButtonThemeData(
+      style: ButtonStyle(
+        backgroundColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? Colors.black
+              : Colors.white,
+        ),
+        foregroundColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? Colors.white
+              : Colors.black,
+        ),
+        side: const WidgetStatePropertyAll(
+          BorderSide(color: Colors.black, width: 1.5),
+        ),
+        overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+      ),
+    ),
     extensions: [...base.extensions.values, const EInkStyle(enabled: true)],
   );
 }

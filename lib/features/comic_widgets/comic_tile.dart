@@ -945,7 +945,9 @@ class _ComicDescription extends StatelessWidget {
             subtitle,
             style: TextStyle(
               fontSize: 10.0,
-              color: context.colorScheme.onSurface.toOpacity(0.7),
+              color: context.isEInk
+                  ? context.colorScheme.onSurface
+                  : context.colorScheme.onSurface.toOpacity(0.7),
             ),
             maxLines: 1,
             softWrap: true,
@@ -984,6 +986,7 @@ class _ComicDescription extends StatelessWidget {
                                 ? context.colorScheme.errorContainer
                                 : context.colorScheme.secondaryContainer,
                             borderRadius: BorderRadius.circular(8),
+                            border: context.einkBorder(),
                           ),
                           child: Center(
                             widthFactor: 1,

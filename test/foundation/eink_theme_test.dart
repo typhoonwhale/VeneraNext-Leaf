@@ -248,6 +248,56 @@ void main() {
       expect((regular.decoration! as BoxDecoration).border, isNull);
     });
 
+    testWidgets('FAB has no elevation and a black outline', (tester) async {
+      final fab = _theme(eink: true).floatingActionButtonTheme;
+      expect(fab.elevation, 0);
+      expect(fab.focusElevation, 0);
+      expect(fab.hoverElevation, 0);
+      expect(fab.highlightElevation, 0);
+      final side = (fab.shape! as RoundedRectangleBorder).side;
+      expect(side.color, Colors.black);
+      expect(side.width, inInclusiveRange(1.5, 2));
+      expect(fab.backgroundColor, Colors.white);
+      expect(fab.foregroundColor, Colors.black);
+      await pump(
+        tester,
+        FloatingActionButton(onPressed: () {}, child: const Icon(Icons.add)),
+      );
+      final material = tester.widget<Material>(
+        find
+            .descendant(
+              of: find.byType(FloatingActionButton),
+              matching: find.byType(Material),
+            )
+            .first,
+      );
+      expect(material.elevation, 0);
+    });
+
+    test('segmented button selected state is black on white inverse', () {
+      final style = _theme(eink: true).segmentedButtonTheme.style!;
+      final on = {WidgetState.selected};
+      final bg = style.backgroundColor!.resolve(on)!;
+      final fg = style.foregroundColor!.resolve(on)!;
+      expect(bg, Colors.black);
+      expect(_contrast(bg, fg), greaterThanOrEqualTo(7));
+      final offBg = style.backgroundColor!.resolve({})!;
+      final offFg = style.foregroundColor!.resolve({})!;
+      expect(offBg, Colors.white);
+      expect(_contrast(offBg, offFg), greaterThanOrEqualTo(7));
+    });
+
+    testWidgets('tag outline helper is 1px black in E-Ink only', (
+      tester,
+    ) async {
+      final eink = await _context(tester, _theme(eink: true));
+      final border = eink.einkBorder()!;
+      expect(border.top.color, Colors.black);
+      expect(border.top.width, 1);
+      final regular = await _context(tester, _theme(eink: false));
+      expect(regular.einkBorder(), isNull);
+    });
+
     for (final width in [400.0, 1000.0]) {
       testWidgets('navigation selection is black with white icon at $width', (
         tester,
