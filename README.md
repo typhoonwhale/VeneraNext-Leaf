@@ -15,9 +15,9 @@
 
 > 下方保留的 VeneraNext 介绍、徽章、截图和各平台下载链接属于上游项目，不代表 Leaf 定制版的发布或验收状态。Leaf 的构建、包身份和升级规则见 [Leaf Android 构建说明](docs/LEAF_BUILD.md)；已交付本地测试包不等于已发布 GitHub Release。
 
-**Leaf 正式版下载：[1.18.2 / Android ARM64](https://github.com/typhoonwhale/VeneraNext-Leaf/releases/tag/v1.18.2)**。已有固定签名Leaf Release可覆盖安装；1.18.2的应用内检查更新会引导到本仓库发布页。
+**Leaf 正式版下载：[1.18.4 / Android ARM64](https://github.com/typhoonwhale/VeneraNext-Leaf/releases/tag/v1.18.4)**。已有固定签名Leaf Release可覆盖安装；1.18.4起支持应用内下载并安装新版，从1.18.2及更早版本升级需手动覆盖安装一次。
 
-本功能分支正在验证1.18.4-rc.6应用内更新：直接下载、验包后交由Android确认安装；首次升级仍需手动覆盖安装。范围和验收见[方案](docs/LEAF_IN_APP_UPDATE_DESIGN.md)与[验证记录](docs/LEAF_IN_APP_UPDATE_VALIDATION.md)。
+应用内更新直接下载、验包后交由Android确认安装。范围和验收见[方案](docs/LEAF_IN_APP_UPDATE_DESIGN.md)与[验证记录](docs/LEAF_IN_APP_UPDATE_VALIDATION.md)。
 
 ---
 

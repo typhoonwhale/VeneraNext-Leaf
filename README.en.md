@@ -8,9 +8,9 @@ The footer uses a 1 logical-pixel divider, a fixed 2-pixel gap, natural text hei
 
 The VeneraNext badges, screenshots, platform descriptions and download links below are retained upstream references; they do not describe Leaf release availability or device validation status.
 
-**Download Leaf: [1.18.2 / Android ARM64](https://github.com/typhoonwhale/VeneraNext-Leaf/releases/tag/v1.18.2).** Existing Leaf Release builds with the same signing key can be updated in place.
+**Download Leaf: [1.18.4 / Android ARM64](https://github.com/typhoonwhale/VeneraNext-Leaf/releases/tag/v1.18.4).** Existing Leaf Release builds with the same signing key can be updated in place. Starting with 1.18.4, Leaf downloads and installs new versions in the app; upgrading from 1.18.2 or earlier requires one manual install.
 
-This feature branch implements in-app downloading and verification followed by Android installation confirmation for the 1.18.4-rc.6 prerelease build. Install this first supporting version manually. See the [design](docs/LEAF_IN_APP_UPDATE_DESIGN.md) and [validation record](docs/LEAF_IN_APP_UPDATE_VALIDATION.md).
+In-app updates download and verify the package, then hand it to Android for installation confirmation. See the [design](docs/LEAF_IN_APP_UPDATE_DESIGN.md) and [validation record](docs/LEAF_IN_APP_UPDATE_VALIDATION.md).
 
 ---
 
