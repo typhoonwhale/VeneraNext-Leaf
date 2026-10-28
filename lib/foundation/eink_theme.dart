@@ -132,10 +132,7 @@ IconThemeData einkHaloIconTheme() => IconThemeData(
     for (var i = 0; i < 16; i++)
       Shadow(
         color: Colors.white,
-        offset: Offset.fromDirection(
-          i * math.pi / 8,
-          EInkStyle.hatchHaloWidth,
-        ),
+        offset: Offset.fromDirection(i * math.pi / 8, EInkStyle.hatchHaloWidth),
       ),
   ],
 );
@@ -416,6 +413,54 @@ ThemeData applyEInkTheme(ThemeData base) {
             ? const Icon(Icons.circle_outlined, color: Colors.black)
             : null,
       ),
+    ),
+    // Material greys disabled text and icons with disabledColor (black38 on
+    // the light theme); keep them black, the hatch marks the disabled state.
+    disabledColor: Colors.black,
+    iconButtonTheme: IconButtonThemeData(
+      style: ButtonStyle(foregroundColor: disabledForeground),
+    ),
+    inputDecorationTheme: base.inputDecorationTheme.copyWith(
+      labelStyle: WidgetStateTextStyle.resolveWith(
+        (states) => TextStyle(
+          color: states.contains(WidgetState.disabled) ? Colors.black : null,
+        ),
+      ),
+      floatingLabelStyle: WidgetStateTextStyle.resolveWith(
+        (states) => TextStyle(
+          color: states.contains(WidgetState.disabled) ? Colors.black : null,
+        ),
+      ),
+      helperStyle: WidgetStateTextStyle.resolveWith(
+        (states) => TextStyle(
+          color: states.contains(WidgetState.disabled) ? Colors.black : null,
+        ),
+      ),
+      hintStyle: WidgetStateTextStyle.resolveWith(
+        (states) => TextStyle(
+          color: states.contains(WidgetState.disabled) ? Colors.black : null,
+        ),
+      ),
+      prefixIconColor: WidgetStateColor.resolveWith((_) => Colors.black),
+      suffixIconColor: WidgetStateColor.resolveWith((_) => Colors.black),
+    ),
+    checkboxTheme: base.checkboxTheme.copyWith(
+      side: border,
+      fillColor: WidgetStateProperty.resolveWith<Color?>(
+        (states) => states.contains(WidgetState.disabled)
+            ? (states.contains(WidgetState.selected)
+                  ? Colors.black
+                  : Colors.white)
+            : null,
+      ),
+      checkColor: WidgetStateProperty.resolveWith<Color?>(
+        (states) => states.contains(WidgetState.disabled) ? Colors.white : null,
+      ),
+    ),
+    sliderTheme: base.sliderTheme.copyWith(
+      disabledActiveTrackColor: Colors.black,
+      disabledInactiveTrackColor: Colors.white,
+      disabledThumbColor: Colors.black,
     ),
     splashFactory: NoSplash.splashFactory,
     highlightColor: Colors.transparent,

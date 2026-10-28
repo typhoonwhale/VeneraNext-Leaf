@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:venera_next/foundation/context.dart';
 import 'package:venera_next/foundation/eink_theme.dart';
@@ -170,13 +172,18 @@ class _ButtonState extends State<Button> {
     var padding =
         widget.padding ??
         EdgeInsets.symmetric(horizontal: context.isEInk ? 18 : 16);
+    // On E-Ink the outline is part of the decoration padding, so the fixed
+    // size gives up its width to keep the outer size as requested.
+    final einkOutline = context.isEInk && widget.type != ButtonType.filled
+        ? 2 * EInkStyle.strokeWidth
+        : 0.0;
     var width = widget.width;
     if (width != null) {
-      width = width - padding.horizontal;
+      width = math.max(0.0, width - padding.horizontal - einkOutline);
     }
     var height = widget.height;
     if (height != null) {
-      height = height - padding.vertical;
+      height = math.max(0.0, height - padding.vertical - einkOutline);
     }
     Widget child = IconTheme(
       data: IconThemeData(color: textColor),
@@ -215,9 +222,7 @@ class _ButtonState extends State<Button> {
           constraints: const BoxConstraints(minWidth: 76, minHeight: 32),
           decoration: BoxDecoration(
             color: buttonColor,
-            borderRadius: BorderRadius.circular(
-              context.isEInk ? 999 : 16,
-            ),
+            borderRadius: BorderRadius.circular(context.isEInk ? 999 : 16),
             boxShadow:
                 (isHover &&
                     !isLoading &&

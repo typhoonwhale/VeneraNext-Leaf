@@ -357,91 +357,111 @@ class _DoubleLineSelectSettingsState
   @override
   Widget build(BuildContext context) {
     final value = currentValue;
-    return withSaveStatus(
-      ListTile(
-        title: Row(
-          children: [
-            Expanded(child: Text(widget.title)),
-            const SizedBox(width: 4),
-            if (widget.help != null)
-              Button.icon(
-                size: 18,
-                icon: const Icon(Icons.help_outline),
-                onPressed: () {
-                  showDialog(
-                    context: context,
-                    builder: (context) {
-                      return ContentDialog(
-                        title: "Help".tl,
-                        content: Text(
-                          widget.help!,
-                        ).paddingHorizontal(16).fixWidth(double.infinity),
-                        actions: [
-                          Button.filled(
-                            onPressed: context.pop,
-                            child: Text("OK".tl),
-                          ),
-                        ],
-                      );
-                    },
-                  );
-                },
-              ),
-          ],
-        ),
-        enabled: widget.enabled,
-        subtitle: Text(
-          widget.subtitle ?? widget.optionTranslation[value] ?? "None",
-        ),
-        trailing: saving ? _savingIndicator : const Icon(Icons.arrow_drop_down),
-        onTap: saving || !widget.enabled
-            ? null
-            : () {
-                var renderBox = context.findRenderObject() as RenderBox;
-                var offset = renderBox.localToGlobal(Offset.zero);
-                var size = renderBox.size;
-                var rect = offset & size;
-                final target = field;
-                final eink = context.isEInk;
-                showMenu(
-                  elevation: eink ? 0 : 3,
-                  color: eink
-                      ? context.colorScheme.surface
-                      : context.brightness == Brightness.light
-                      ? const Color(0xFFF6F6F6)
-                      : const Color(0xFF1E1E1E),
-                  shape: eink
-                      ? RoundedRectangleBorder(
-                          side: const BorderSide(
-                            color: Colors.black,
-                            width: EInkStyle.strokeWidth,
-                          ),
-                          borderRadius: BorderRadius.circular(4),
-                        )
-                      : null,
+    final hatched = context.isEInk && !widget.enabled;
+    Widget halo(Widget child) => hatched ? einkHaloLabel(child) : child;
+    final tile = ListTile(
+      title: Row(
+        children: [
+          Expanded(child: halo(Text(widget.title))),
+          const SizedBox(width: 4),
+          if (widget.help != null)
+            Button.icon(
+              size: 18,
+              icon: halo(const Icon(Icons.help_outline)),
+              onPressed: () {
+                showDialog(
                   context: context,
-                  position: RelativeRect.fromRect(
-                    rect,
-                    Offset.zero & MediaQuery.of(context).size,
-                  ),
-                  items: widget.optionTranslation.keys
-                      .map(
-                        (key) => PopupMenuItem(
-                          value: key,
-                          height: App.isMobile ? 46 : 40,
-                          child: Text(widget.optionTranslation[key]!),
+                  builder: (context) {
+                    return ContentDialog(
+                      title: "Help".tl,
+                      content: Text(
+                        widget.help!,
+                      ).paddingHorizontal(16).fixWidth(double.infinity),
+                      actions: [
+                        Button.filled(
+                          onPressed: context.pop,
+                          child: Text("OK".tl),
                         ),
-                      )
-                      .toList(),
-                ).then((value) async {
-                  if (value != null &&
-                      mounted &&
-                      target.matches(field) &&
-                      widget.optionTranslation.containsKey(value)) {
-                    await change(value);
-                  }
-                });
+                      ],
+                    );
+                  },
+                );
               },
+            ),
+        ],
+      ),
+      enabled: widget.enabled,
+      subtitle: halo(
+        Text(widget.subtitle ?? widget.optionTranslation[value] ?? "None"),
+      ),
+      trailing: saving
+          ? _savingIndicator
+          : halo(const Icon(Icons.arrow_drop_down)),
+      onTap: saving || !widget.enabled
+          ? null
+          : () {
+              var renderBox = context.findRenderObject() as RenderBox;
+              var offset = renderBox.localToGlobal(Offset.zero);
+              var size = renderBox.size;
+              var rect = offset & size;
+              final target = field;
+              final eink = context.isEInk;
+              showMenu(
+                elevation: eink ? 0 : 3,
+                color: eink
+                    ? context.colorScheme.surface
+                    : context.brightness == Brightness.light
+                    ? const Color(0xFFF6F6F6)
+                    : const Color(0xFF1E1E1E),
+                shape: eink
+                    ? RoundedRectangleBorder(
+                        side: const BorderSide(
+                          color: Colors.black,
+                          width: EInkStyle.strokeWidth,
+                        ),
+                        borderRadius: BorderRadius.circular(4),
+                      )
+                    : null,
+                context: context,
+                position: RelativeRect.fromRect(
+                  rect,
+                  Offset.zero & MediaQuery.of(context).size,
+                ),
+                items: widget.optionTranslation.keys
+                    .map(
+                      (key) => PopupMenuItem(
+                        value: key,
+                        height: App.isMobile ? 46 : 40,
+                        child: Text(widget.optionTranslation[key]!),
+                      ),
+                    )
+                    .toList(),
+              ).then((value) async {
+                if (value != null &&
+                    mounted &&
+                    target.matches(field) &&
+                    widget.optionTranslation.containsKey(value)) {
+                  await change(value);
+                }
+              });
+            },
+    );
+    if (!hatched) return withSaveStatus(tile);
+    // Same hatched, outlined look as the disabled Select of the wide layout.
+    final radius = BorderRadius.circular(4);
+    return withSaveStatus(
+      DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.black, width: EInkStyle.strokeWidth),
+          borderRadius: radius,
+        ),
+        child: ClipRRect(
+          borderRadius: radius,
+          child: EInkHatch(
+            shape: RoundedRectangleBorder(borderRadius: radius),
+            child: tile,
+          ),
+        ),
       ),
     );
   }

@@ -126,7 +126,7 @@ class Select extends StatelessWidget {
       decoration: BoxDecoration(
         border: Border.all(
           color: hatched ? Colors.black : context.colorScheme.outlineVariant,
-          width: hatched ? EInkStyle.strokeWidth : 1,
+          width: context.isEInk ? EInkStyle.strokeWidth : 1,
         ),
         borderRadius: radius,
       ),
