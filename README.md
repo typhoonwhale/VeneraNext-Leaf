@@ -17,7 +17,7 @@
 
 **Leaf 正式版下载：[1.18.2 / Android ARM64](https://github.com/typhoonwhale/VeneraNext-Leaf/releases/tag/v1.18.2)**。已有固定签名Leaf Release可覆盖安装；1.18.2的应用内检查更新会引导到本仓库发布页。
 
-本功能分支正在验证1.18.4-rc.5应用内更新：直接下载、验包后交由Android确认安装；首次升级仍需手动覆盖安装。范围和验收见[方案](docs/LEAF_IN_APP_UPDATE_DESIGN.md)与[验证记录](docs/LEAF_IN_APP_UPDATE_VALIDATION.md)。
+本功能分支正在验证1.18.4-rc.6应用内更新：直接下载、验包后交由Android确认安装；首次升级仍需手动覆盖安装。范围和验收见[方案](docs/LEAF_IN_APP_UPDATE_DESIGN.md)与[验证记录](docs/LEAF_IN_APP_UPDATE_VALIDATION.md)。
 
 ---
 
