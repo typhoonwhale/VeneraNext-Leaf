@@ -114,6 +114,104 @@ class LeafWorkflowTests(unittest.TestCase):
                 )
                 self.assertEqual(result.returncode == 0, success, result.stderr)
 
+    def test_formal_release_tag_must_be_on_main(self):
+        script = step_script('main.yml', '校验正式版标签位于 main')
+
+        def git(cwd, *args):
+            subprocess.run(['git', *args], cwd=cwd, check=True, capture_output=True,
+                           env={**os.environ, 'GIT_AUTHOR_NAME': 't', 'GIT_AUTHOR_EMAIL': 't@t',
+                                'GIT_COMMITTER_NAME': 't', 'GIT_COMMITTER_EMAIL': 't@t'})
+
+        cases = [('v1.18.5', 'main', True), ('v1.18.5', 'feature', False),
+                 ('v1.18.5-rc.1', 'main', True), ('v1.18.5-rc.1', 'feature', True)]
+        for tag, branch, success in cases:
+            with self.subTest(tag=tag, branch=branch), tempfile.TemporaryDirectory() as directory:
+                origin = Path(directory) / 'origin.git'
+                work = Path(directory) / 'work'
+                git(directory, 'init', '--bare', '-b', 'main', str(origin))
+                git(directory, 'clone', str(origin), str(work))
+                git(work, 'checkout', '-b', 'main')
+                git(work, 'commit', '--allow-empty', '-m', 'base')
+                git(work, 'push', 'origin', 'main')
+                if branch == 'feature':
+                    git(work, 'checkout', '-b', 'feature')
+                    git(work, 'commit', '--allow-empty', '-m', 'feature only')
+                git(work, 'tag', tag)
+                result = subprocess.run(
+                    ['bash', '-e', '-c', script], cwd=work, capture_output=True, text=True,
+                    env={**os.environ, 'GITHUB_REF_NAME': tag})
+                self.assertEqual(result.returncode == 0, success, result.stdout + result.stderr)
+                if not success:
+                    self.assertIn('::error::', result.stdout)
+
+    def run_cleanup(self, tag, fail_delete=False):
+        script = step_script('main.yml', '清理同版本预发布')
+        fake = (
+            '#!/bin/bash\n'
+            'echo "$*" >> "$GH_LOG"\n'
+            'case "$1 $2" in\n'
+            '  "release list") printf "%s\\n" v1.18.5-rc.1 v1.18.5 v1.18.50-rc.1 v1.18.4-rc.1;;\n'
+            '  "api --paginate") printf "%s\\n" refs/tags/v1.18.5-rc.1 refs/tags/v1.18.5-rc.2 '
+            'refs/tags/v1.18.5-beta;;\n'
+            '  *) [[ -n "${FAKE_FAIL_DELETE:-}" ]] && exit 1;;\n'
+            'esac\n'
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'bin').mkdir()
+            gh = root / 'bin/gh'
+            gh.write_text(fake)
+            gh.chmod(0o755)
+            env = {**os.environ, 'PATH': f"{root / 'bin'}:{os.environ['PATH']}",
+                   'GH_LOG': str(root / 'log'), 'GITHUB_REF_NAME': tag,
+                   'GITHUB_REPOSITORY': 'o/r'}
+            if fail_delete:
+                env['FAKE_FAIL_DELETE'] = '1'
+            (root / 'log').touch()
+            result = subprocess.run(['bash', '-c', script], cwd=directory,
+                                    capture_output=True, text=True, env=env)
+            deletes = [line for line in (root / 'log').read_text().splitlines()
+                       if line.startswith(('release delete', 'api -X DELETE'))]
+            return result, deletes
+
+    def test_cleanup_removes_only_same_version_prereleases(self):
+        result, deletes = self.run_cleanup('v1.18.5')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(sorted(deletes), sorted([
+            'release delete v1.18.5-rc.1 --cleanup-tag --yes',
+            'api -X DELETE repos/o/r/git/refs/tags/v1.18.5-rc.2',
+            'api -X DELETE repos/o/r/git/refs/tags/v1.18.5-beta',
+        ]))
+
+    def test_cleanup_skips_prerelease_runs(self):
+        result, deletes = self.run_cleanup('v1.18.5-rc.3')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(deletes, [])
+
+    def test_cleanup_failure_only_warns(self):
+        result, deletes = self.run_cleanup('v1.18.5', fail_delete=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(len(deletes), 3)
+        self.assertEqual(result.stdout.count('::warning::'), 3)
+
+    def test_analyze_skips_windows_script_tests_only(self):
+        script = step_script('analyze.yml', '运行脚本单元测试')
+        with tempfile.TemporaryDirectory() as directory:
+            tests = Path(directory) / '.github/scripts/tests'
+            tests.mkdir(parents=True)
+            for name in ['test_alpha', 'test_windows_build', 'test_windows_installer',
+                         'test_windows_headless_output', 'test_beta']:
+                (tests / f'{name}.py').write_text(
+                    'import unittest\n'
+                    f'class T(unittest.TestCase):\n'
+                    f'    def test_ran(self):\n'
+                    f'        open("ran_{name}", "w").close()\n')
+            result = subprocess.run(['bash', '-c', script], cwd=directory,
+                                    capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            ran = sorted(p.name for p in Path(directory).glob('ran_*'))
+            self.assertEqual(ran, ['ran_test_alpha', 'ran_test_beta'])
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -51,7 +51,12 @@ jobs:
       - run: python3 .github/scripts/release_version.py --check
       - run: python3 .github/scripts/check_structure_imports.py
       - run: python3 .github/scripts/check_architecture_dependencies.py
-      - run: python3 -m unittest discover -s .github/scripts/tests -p "test_*.py"
+      - name: 运行脚本单元测试
+        run: |
+          set -euo pipefail
+          # Leaf 只维护 Android ARM64：保留上游同步来的 Windows 脚本与测试文件，但 CI 不运行 test_windows_*.py。
+          tests="$(cd .github/scripts/tests && ls test_*.py | grep -v '^test_windows_' | sed 's/\.py$//')"
+          PYTHONPATH=.github/scripts/tests python3 -m unittest $tests
       - run: flutter pub get --enforce-lockfile
       - name: 准备并验证独立代码审查工具
         working-directory: tool/code_audit

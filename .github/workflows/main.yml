@@ -20,6 +20,23 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: 校验正式版标签位于 main
+        if: github.ref_type == 'tag'
+        run: |
+          set -euo pipefail
+          # 预发布标签（含 -）可从任意分支发布；正式版只能发布 main 上的提交。
+          if [[ "${GITHUB_REF_NAME}" == *-* ]]; then
+            echo "预发布标签 ${GITHUB_REF_NAME} 不限制来源分支。"
+            exit 0
+          fi
+          git fetch --no-tags origin main:refs/remotes/origin/main
+          commit="$(git rev-parse "${GITHUB_REF_NAME}^{commit}")"
+          if ! git merge-base --is-ancestor "$commit" refs/remotes/origin/main; then
+            echo "::error::正式版标签 ${GITHUB_REF_NAME} 指向的提交 ${commit} 不在 main 上；请先合入 main 再打标签，或改用含 - 的预发布标签。"
+            exit 1
+          fi
       - name: 校验发布标签元数据
         if: github.ref_type == 'tag'
         run: python3 .github/scripts/validate_release.py
@@ -82,3 +99,34 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: gh release edit "${GITHUB_REF_NAME}" --draft=false
+      - name: 清理同版本预发布
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          # 仅正式版发布成功后清理；清理失败只告警，不影响已成功的发布。
+          if [[ "${GITHUB_REF_NAME}" == *-* ]]; then
+            echo "预发布不清理。"
+            exit 0
+          fi
+          prefix="${GITHUB_REF_NAME}-"
+          if ! releases="$(gh release list --limit 1000 --json tagName --jq '.[].tagName')"; then
+            echo "::warning::无法列出 Release，跳过 ${prefix}* 清理。"
+            exit 0
+          fi
+          if ! refs="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/git/matching-refs/tags/${prefix}" --jq '.[].ref')"; then
+            echo "::warning::无法列出标签，跳过 ${prefix}* 清理。"
+            exit 0
+          fi
+          while IFS= read -r ref; do
+            tag="${ref#refs/tags/}"
+            [[ "$tag" == "$prefix"* ]] || continue
+            if grep -qxF -- "$tag" <<< "$releases"; then
+              gh release delete "$tag" --cleanup-tag --yes \
+                || echo "::warning::删除 Release ${tag} 失败。"
+            else
+              gh api -X DELETE "repos/${GITHUB_REPOSITORY}/git/refs/tags/${tag}" \
+                || echo "::warning::删除标签 ${tag} 失败。"
+            fi
+          done <<< "$refs"
+          exit 0

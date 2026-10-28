@@ -114,9 +114,10 @@ AGP 增量更新 APK 时可能保留旧 ZIP 条目占用的空闲区域。若文
 Leaf仅维护Android ARM64产物；工作流职责见下表。正式发布流程：
 
 1. 修改 `CHANGELOG.md`（新增 `## v<version>` 一节）、`pubspec.yaml` 和 `release.json`，保持版本一致。
-2. 提交到 main。
-3. 推送 `v*` 标签，格式为 `v1.2.3` 或 `v1.2.3-rc.1`。
+2. 提交到 main。正式版标签（不含 `-`）指向的提交必须已在 `origin/main` 上，否则 `Release_Metadata` 失败，不会构建和发布；手动运行不受此限制。
+3. 推送 `v*` 标签，格式为 `v1.2.3` 或 `v1.2.3-rc.1`。`-rc` 等预发布标签可在功能分支上发布，不受 main 限制。
 4. CI 自动校验标签与元数据、质量检查、固定签名构建，用 `apksigner` 核对证书 SHA-256 为 `ddf1ca6f03578cd9b41470670cd3a21637772ea9e3ceab4f6d9ea9c0e8d5e909`，核对 `SHA256SUMS.txt` 后创建 Release 并上传 APK 与摘要；`-rc` 等含 `-` 的标签发布为预发布。
+5. 正式版发布成功后，CI 自动删除同版本（`v<version>-*`）的预发布 Release 及其标签，包括只有标签没有 Release 的情况；不会触碰正式版或其他版本，清理失败只告警，不影响已发布的正式版。预发布发布时不清理。
 
 首次使用前，在仓库 Settings → Secrets and variables → Actions 中配置：
 
