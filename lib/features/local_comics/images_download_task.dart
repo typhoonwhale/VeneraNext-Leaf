@@ -15,6 +15,7 @@ import 'package:venera_next/foundation/log.dart';
 import 'package:venera_next/foundation/res.dart';
 import 'package:venera_next/foundation/translations.dart';
 import 'package:venera_next/network/images.dart';
+import 'package:venera_next/network/cache.dart';
 import 'package:venera_next/foundation/extensions.dart';
 import 'package:venera_next/foundation/file_type.dart';
 import 'package:venera_next/foundation/file_interaction.dart';
@@ -466,6 +467,10 @@ class ImagesDownloadTask extends DownloadTask with _TransferSpeedMixin {
     }
 
     if (_refreshImages) {
+      // Source requests cannot be traced to this task, and a revalidated
+      // cache entry keeps the old addresses when only the body changed.
+      // The cache is memory-only, so other readers just fetch again.
+      NetworkCacheManager().clear();
       if (_images != null && !await _refreshRemainingImages(generation)) {
         return;
       }

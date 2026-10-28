@@ -4,7 +4,6 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:dio/dio.dart';
 import 'package:rhttp/rhttp.dart' as rhttp;
 import 'package:sqlite3/sqlite3.dart';
 import 'package:venera_next/foundation/res.dart';
@@ -19,6 +18,8 @@ import 'package:venera_next/features/local_comics/download_task_storage.dart';
 import 'package:venera_next/features/local_comics/local_chapter_storage.dart';
 import 'package:venera_next/network/images.dart';
 import 'package:venera_next/network/file_downloader.dart';
+import 'package:venera_next/network/app_dio.dart';
+import 'package:venera_next/network/cache.dart';
 
 void main() {
   const sourceKey = 'download_task_test_source';
@@ -1228,17 +1229,23 @@ void main() {
     };
 
     /// Chapter c1 is complete and the first image of c2 is saved.
-    ImagesDownloadTask failedTask({int index = 1, int downloaded = 3}) {
+    ImagesDownloadTask failedTask({
+      int index = 1,
+      int downloaded = 3,
+      LoadComicPagesFunc? loadComicPages,
+    }) {
       ComicSourceManager().remove(sourceKey);
       ComicSourceManager().add(
         _testSource(
           sourceKey,
-          loadComicPages: (id, ep) async {
-            listRequests.add(ep);
-            final result = pages[ep]!;
-            if (result is Error) throw result;
-            return Res(result as List<String>);
-          },
+          loadComicPages:
+              loadComicPages ??
+              (id, ep) async {
+                listRequests.add(ep);
+                final result = pages[ep]!;
+                if (result is Error) throw result;
+                return Res(result as List<String>);
+              },
         ),
       );
       final task = ImagesDownloadTask.fromJson(
@@ -1397,6 +1404,94 @@ void main() {
       expect(listRequests, isEmpty);
       expect(imageRequests, ['old-2b', 'old-3a']);
       expect(storage.completed, [same(task)]);
+    });
+
+    group('through the network cache', () {
+      late Map<String, List<String>> server;
+      late List<String> methods;
+      late Dio dio;
+      final cache = NetworkCacheManager();
+
+      Uri listUri(String? ep) =>
+          Uri.parse('http://127.0.0.1:1/api/comics/multi/pages?chapter=$ep');
+
+      /// Lists come from the source over the shared cache, like a script
+      /// request; HEAD answers with the headers of the cached GET.
+      Future<Res<List<String>>> loadThroughCache(String id, String? ep) async {
+        listRequests.add(ep);
+        final response = await dio.getUri<String>(listUri(ep));
+        return Res(List<String>.from(jsonDecode(response.data!) as List));
+      }
+
+      setUp(() async {
+        final initialized = App.isInitialized;
+        App.isInitialized = true;
+        cache.clear();
+        server = {
+          for (final entry in oldImages.entries) entry.key: entry.value,
+        };
+        methods = [];
+        dio = AppDio(BaseOptions(responseType: ResponseType.plain))
+          ..httpClientAdapter = _ListAdapter((options) {
+            methods.add('${options.method} ${options.uri.query}');
+            final ep = options.uri.queryParameters['chapter'];
+            const headers = {
+              'x-list': ['same'],
+            };
+            if (options.method == 'HEAD') {
+              return ResponseBody.fromString('', 200, headers: headers);
+            }
+            return ResponseBody.fromString(
+              jsonEncode(server[ep]),
+              200,
+              headers: headers,
+            );
+          });
+        addTearDown(() {
+          dio.close(force: true);
+          cache.clear();
+          App.isInitialized = initialized;
+        });
+        // The first run cached the old lists a while ago.
+        for (final ep in ['c2', 'c3']) {
+          await dio.getUri<String>(listUri(ep));
+          final fresh = cache.getCache(listUri(ep))!;
+          cache.setCache(
+            NetworkCache(
+              uri: fresh.uri,
+              requestHeaders: fresh.requestHeaders,
+              responseHeaders: fresh.responseHeaders,
+              data: fresh.data,
+              time: DateTime.now().subtract(const Duration(minutes: 10)),
+              size: fresh.size,
+              responseType: fresh.responseType,
+            ),
+          );
+        }
+        methods.clear();
+      });
+
+      test('a failed task refetches the lists from the server', () async {
+        server = {
+          'c2': ['new-2a', 'new-2b'],
+          'c3': ['new-3a'],
+        };
+        final task = failedTask(loadComicPages: loadThroughCache);
+        await resumeAfterFailure(task);
+        expect(methods, ['GET chapter=c2', 'GET chapter=c3']);
+        expect(imageRequests, ['new-2b', 'new-3a']);
+        expect(storage.completed, [same(task)]);
+      });
+
+      test('an ordinary resume keeps the cached responses', () async {
+        final task = failedTask(loadComicPages: loadThroughCache);
+        task.resume();
+        await task.debugResumeFuture;
+        expect(methods, isEmpty);
+        expect(imageRequests, ['old-2b', 'old-3a']);
+        expect(cache.getCache(listUri('c2')), isNotNull);
+        expect(cache.getCache(listUri('c3')), isNotNull);
+      });
     });
   });
 
@@ -2328,6 +2423,21 @@ class _ArchiveDownloader extends FileDownloader {
     await super.stop();
     stopped = true;
   }
+}
+
+class _ListAdapter implements HttpClientAdapter {
+  _ListAdapter(this.respond);
+  final ResponseBody Function(RequestOptions) respond;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async => respond(options);
+
+  @override
+  void close({bool force = false}) {}
 }
 
 class _TaskStorage implements DownloadTaskStorage {

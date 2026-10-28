@@ -282,8 +282,20 @@ void main() {
     expect(messages, [
       'Deleted 1. Skipped 1 being downloaded or extracted: "first"',
     ]);
-    // The skipped comic stays selected.
+    // The skipped comic stays selected, and its tile shows it after the
+    // list is rebuilt with new comic objects.
     expect(find.text('1 selected'), findsOneWidget);
+    expect(find.text('first'), findsWidgets);
+    expect(find.byIcon(Icons.check_box), findsOneWidget);
+    expect(find.byIcon(Icons.check_box_outline_blank), findsNothing);
+    // Toggling it off and on again keeps the count and the tile in step.
+    await tester.tap(find.text('first').first);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('1 selected'), findsNothing);
+    await tester.longPress(find.text('first').first);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('1 selected'), findsOneWidget);
+    expect(find.byIcon(Icons.check_box), findsOneWidget);
     task.pause();
   });
 

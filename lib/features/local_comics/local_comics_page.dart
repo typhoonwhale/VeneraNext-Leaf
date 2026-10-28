@@ -52,12 +52,29 @@ class _LocalComicsPageState extends State<LocalComicsPage> {
     if (keyword.isEmpty) {
       setState(() {
         comics = LocalManager().getComics(sortType);
+        _keepSelection();
       });
     } else {
       setState(() {
         comics = LocalManager().search(keyword);
+        _keepSelection();
       });
     }
+  }
+
+  /// A reload creates new comic objects; selections follow the same comic
+  /// to its new object and drop comics that no longer exist.
+  void _keepSelection() {
+    if (selectedComics.isEmpty) return;
+    final current = {for (final c in comics) (c.id, c.comicType): c};
+    final kept = <LocalComic, bool>{};
+    for (final selected in selectedComics.keys) {
+      final key = (selected.id, selected.comicType);
+      final comic =
+          current[key] ?? LocalManager().find(selected.id, selected.comicType);
+      if (comic != null) kept[comic] = true;
+    }
+    selectedComics = kept;
   }
 
   @override
@@ -127,10 +144,14 @@ class _LocalComicsPageState extends State<LocalComicsPage> {
 
   Widget buildMultiSelectMenu() {
     final selection = selectedComics.keys.toList();
+    List<(String, ComicType)> identities(Iterable<LocalComic> comics) => [
+      for (final c in comics) (c.id, c.comicType),
+    ];
+    final selected = identities(selection);
     bool currentSelection() =>
         mounted &&
         multiSelectMode &&
-        listEquals(selectedComics.keys.toList(), selection);
+        listEquals(identities(selectedComics.keys), selected);
     return MenuButton(
       entries: [
         MenuEntry(
