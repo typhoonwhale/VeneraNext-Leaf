@@ -12,8 +12,23 @@ import 'package:venera_next/foundation/appdata.dart';
 import 'package:venera_next/foundation/application_preferences.dart';
 import 'package:venera_next/foundation/global_preference_store.dart';
 import 'package:venera_next/foundation/context.dart';
+import 'package:venera_next/foundation/eink_theme.dart';
 import 'package:venera_next/foundation/translations.dart';
 import 'package:venera_next/foundation/widget_utils.dart';
+
+const _einkChapterShape = RoundedRectangleBorder(
+  side: BorderSide(color: Colors.black, width: EInkStyle.strokeWidth),
+  borderRadius: BorderRadius.all(Radius.circular(4)),
+);
+
+Color _einkChapterFill(BuildContext context, bool visited) =>
+    visited ? context.einkStyle.selectedBackground : Colors.white;
+
+TextStyle _einkChapterTextStyle(BuildContext context, bool visited) =>
+    TextStyle(
+      color: visited ? context.einkStyle.selectedForeground : Colors.black,
+      fontWeight: FontWeight.w600,
+    );
 
 class ComicChaptersView extends StatefulWidget {
   const ComicChaptersView({
@@ -199,8 +214,13 @@ class _NormalComicChaptersState extends State<_NormalComicChapters> {
                 return Padding(
                   padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
                   child: Material(
-                    color: context.colorScheme.surfaceContainer,
-                    borderRadius: BorderRadius.circular(16),
+                    color: context.isEInk
+                        ? _einkChapterFill(context, visited)
+                        : context.colorScheme.surfaceContainer,
+                    borderRadius: context.isEInk
+                        ? null
+                        : BorderRadius.circular(16),
+                    shape: context.isEInk ? _einkChapterShape : null,
                     child: ClickInkWell(
                       onTap: () => widget.readChapter(i + 1),
                       borderRadius: BorderRadius.circular(16),
@@ -212,11 +232,13 @@ class _NormalComicChaptersState extends State<_NormalComicChapters> {
                             maxLines: 1,
                             textAlign: TextAlign.center,
                             overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: visited
-                                  ? context.colorScheme.outline
-                                  : null,
-                            ),
+                            style: context.isEInk
+                                ? _einkChapterTextStyle(context, visited)
+                                : TextStyle(
+                                    color: visited
+                                        ? context.colorScheme.outline
+                                        : null,
+                                  ),
                           ),
                         ),
                       ),
@@ -415,8 +437,13 @@ class _GroupedComicChaptersState extends State<_GroupedComicChapters>
                 return Padding(
                   padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
                   child: Material(
-                    color: context.colorScheme.surfaceContainerLow,
-                    borderRadius: BorderRadius.circular(12),
+                    color: context.isEInk
+                        ? _einkChapterFill(context, visited)
+                        : context.colorScheme.surfaceContainerLow,
+                    borderRadius: context.isEInk
+                        ? null
+                        : BorderRadius.circular(12),
+                    shape: context.isEInk ? _einkChapterShape : null,
                     child: ClickInkWell(
                       onTap: () => widget.readChapter(chapterIndex + 1),
                       borderRadius: BorderRadius.circular(12),
@@ -428,11 +455,13 @@ class _GroupedComicChaptersState extends State<_GroupedComicChapters>
                             maxLines: 1,
                             textAlign: TextAlign.center,
                             overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: visited
-                                  ? context.colorScheme.outline
-                                  : null,
-                            ),
+                            style: context.isEInk
+                                ? _einkChapterTextStyle(context, visited)
+                                : TextStyle(
+                                    color: visited
+                                        ? context.colorScheme.outline
+                                        : null,
+                                  ),
                           ),
                         ),
                       ),

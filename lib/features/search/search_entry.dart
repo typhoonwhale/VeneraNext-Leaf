@@ -23,7 +23,10 @@ class SearchEntry extends StatelessWidget {
           borderRadius: context.isEInk ? null : BorderRadius.circular(32),
           shape: context.isEInk
               ? const StadiumBorder(
-                  side: BorderSide(color: Colors.black, width: 1.5),
+                  side: BorderSide(
+                    color: Colors.black,
+                    width: EInkStyle.strokeWidth,
+                  ),
                 )
               : null,
           child: ClickInkWell(

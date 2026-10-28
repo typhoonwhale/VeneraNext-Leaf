@@ -27,7 +27,10 @@ class ReaderTopBar extends StatelessWidget {
               : context.colorScheme.surface.toOpacity(0.92),
           border: Border(
             bottom: context.isEInk
-                ? const BorderSide(color: Colors.black)
+                ? const BorderSide(
+                    color: Colors.black,
+                    width: EInkStyle.strokeWidth,
+                  )
                 : BorderSide(color: Colors.grey.toOpacity(0.5), width: 0.5),
           ),
         ),

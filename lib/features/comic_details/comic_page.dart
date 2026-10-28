@@ -362,7 +362,9 @@ class _ComicPageState extends LoadingState<ComicPage, ComicDetails>
               child: Container(
                 decoration: BoxDecoration(
                   color: context.colorScheme.primaryContainer,
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: context.einkCoverRadius(
+                    BorderRadius.circular(8),
+                  ),
                   border: context.einkBorder(),
                   boxShadow: context.isEInk
                       ? null
@@ -404,7 +406,7 @@ class _ComicPageState extends LoadingState<ComicPage, ComicDetails>
                   ).paddingVertical(4),
                 Text(
                   (ComicSource.find(comic.sourceKey)?.name) ?? '',
-                  style: ts.s12,
+                  style: context.einkSmallText(ts.s12),
                 ),
               ],
             ),
@@ -650,7 +652,10 @@ class _ComicPageState extends LoadingState<ComicPage, ComicDetails>
               shape: context.isEInk
                   ? RoundedRectangleBorder(
                       borderRadius: borderRadius,
-                      side: const BorderSide(color: Colors.black),
+                      side: const BorderSide(
+                        color: Colors.black,
+                        width: EInkStyle.strokeWidth,
+                      ),
                     )
                   : null,
               child: ClickInkWell(
@@ -1034,7 +1039,7 @@ class _ComicPageLoadingPlaceHolder extends StatelessWidget {
       child: Container(
         decoration: BoxDecoration(
           color: context.colorScheme.primaryContainer,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: context.einkCoverRadius(BorderRadius.circular(8)),
           border: context.einkBorder(),
           boxShadow: context.isEInk
               ? null

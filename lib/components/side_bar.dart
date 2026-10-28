@@ -138,7 +138,10 @@ class SideBarRoute<T> extends PopupRoute<T> {
         border: context.isEInk
             ? Border(
                 left: showSideBar
-                    ? const BorderSide(color: Colors.black, width: 2)
+                    ? const BorderSide(
+                        color: Colors.black,
+                        width: EInkStyle.strokeWidth,
+                      )
                     : BorderSide.none,
               )
             : null,

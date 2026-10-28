@@ -36,6 +36,7 @@ class ReaderInformationFooter extends StatelessWidget {
     final light = theme.brightness == Brightness.light;
     final style = TextStyle(
       fontSize: fontSize,
+      fontWeight: FontWeight.w400,
       height: 1.2,
       color: light ? Colors.black : theme.colorScheme.onSurface,
     );

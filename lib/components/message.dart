@@ -532,7 +532,10 @@ class ContentDialog extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
         side: context.isEInk
-            ? const BorderSide(color: Colors.black, width: 2)
+            ? const BorderSide(
+                color: Colors.black,
+                width: EInkStyle.strongStrokeWidth,
+              )
             : context.brightness == Brightness.dark
             ? BorderSide(color: context.colorScheme.outlineVariant)
             : BorderSide.none,

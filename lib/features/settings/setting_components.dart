@@ -412,7 +412,10 @@ class _DoubleLineSelectSettingsState
                       : const Color(0xFF1E1E1E),
                   shape: eink
                       ? RoundedRectangleBorder(
-                          side: const BorderSide(color: Colors.black),
+                          side: const BorderSide(
+                            color: Colors.black,
+                            width: EInkStyle.strokeWidth,
+                          ),
                           borderRadius: BorderRadius.circular(4),
                         )
                       : null,

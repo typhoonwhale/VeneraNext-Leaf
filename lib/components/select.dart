@@ -49,7 +49,10 @@ class Select extends StatelessWidget {
                 : const Color(0xFF1E1E1E),
             shape: eink
                 ? RoundedRectangleBorder(
-                    side: const BorderSide(color: Colors.black),
+                    side: const BorderSide(
+                      color: Colors.black,
+                      width: EInkStyle.strokeWidth,
+                    ),
                     borderRadius: BorderRadius.circular(4),
                   )
                 : null,
@@ -156,7 +159,7 @@ class _FilterChipFixedWidthState extends State<FilterChipFixedWidth> {
           decoration: BoxDecoration(
             border: Border.all(
               color: Theme.of(context).colorScheme.outline,
-              width: eink ? 1.5 : 1.0,
+              width: eink ? EInkStyle.strokeWidth : 1.0,
             ),
             borderRadius: const BorderRadius.all(Radius.circular(8)),
             color: filled
@@ -307,7 +310,10 @@ class OptionChip extends StatelessWidget {
             ? context.colorScheme.secondaryContainer
             : context.colorScheme.surface,
         border: eink
-            ? Border.all(color: context.colorScheme.outline, width: 1.5)
+            ? Border.all(
+                color: context.colorScheme.outline,
+                width: EInkStyle.strokeWidth,
+              )
             : isSelected
             ? Border.all(color: context.colorScheme.secondaryContainer)
             : Border.all(color: context.colorScheme.outline),

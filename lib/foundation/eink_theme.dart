@@ -39,6 +39,12 @@ class EInkProgressIndicator extends StatelessWidget {
 /// Theme-carried E-Ink flag and the shared selected-state colors.
 @immutable
 class EInkStyle extends ThemeExtension<EInkStyle> {
+  /// Outline width for tags, badges, cards, inputs, chips and buttons.
+  static const double strokeWidth = 2.0;
+
+  /// Outline width for dialogs, sheets and the FAB.
+  static const double strongStrokeWidth = 3.0;
+
   const EInkStyle({
     this.enabled = false,
     this.selectedBackground = Colors.black,
@@ -75,8 +81,17 @@ extension EInkContext on BuildContext {
 
   /// Outline used by E-Ink in place of fills that become indistinguishable
   /// on a white surface; null for the regular theme.
-  Border? einkBorder({double width = 1}) =>
+  Border? einkBorder({double width = EInkStyle.strokeWidth}) =>
       isEInk ? Border.all(color: Colors.black, width: width) : null;
+
+  /// Heavier weight for hard-coded small text, which does not inherit the
+  /// E-Ink text theme; unchanged on the regular theme.
+  TextStyle einkSmallText(TextStyle style) =>
+      isEInk ? style.copyWith(fontWeight: FontWeight.w600) : style;
+
+  /// Comic covers are square-cornered on E-Ink so the outline reads as a frame.
+  BorderRadius einkCoverRadius(BorderRadius normal) =>
+      isEInk ? BorderRadius.zero : normal;
 
   /// Selected-state colors for E-Ink; only meaningful when [isEInk] is true.
   EInkStyle get einkStyle =>
@@ -135,14 +150,78 @@ class _NoTransitionsBuilder extends PageTransitionsBuilder {
   ) => child;
 }
 
+/// Raises weights so thin strokes survive the E-Ink panel: every style is at
+/// least w500 and small (<= 12) styles are w600. Font sizes are unchanged.
+TextTheme _einkTextTheme(TextTheme t) {
+  TextStyle? bump(TextStyle? s) {
+    if (s == null) return null;
+    final small = (s.fontSize ?? 14) <= 12;
+    final floor = small ? FontWeight.w600 : FontWeight.w500;
+    final current = s.fontWeight;
+    final weight = current == null || current.value < floor.value
+        ? floor
+        : current;
+    return s.copyWith(fontWeight: weight);
+  }
+
+  return t.copyWith(
+    displayLarge: bump(t.displayLarge),
+    displayMedium: bump(t.displayMedium),
+    displaySmall: bump(t.displaySmall),
+    headlineLarge: bump(t.headlineLarge),
+    headlineMedium: bump(t.headlineMedium),
+    headlineSmall: bump(t.headlineSmall),
+    titleLarge: bump(t.titleLarge),
+    titleMedium: bump(t.titleMedium),
+    titleSmall: bump(t.titleSmall),
+    bodyLarge: bump(t.bodyLarge),
+    bodyMedium: bump(t.bodyMedium),
+    bodySmall: bump(t.bodySmall),
+    labelLarge: bump(t.labelLarge),
+    labelMedium: bump(t.labelMedium),
+    labelSmall: bump(t.labelSmall),
+  );
+}
+
 /// Applies the E-Ink component overrides on top of a base theme.
 ThemeData applyEInkTheme(ThemeData base) {
-  const border = BorderSide(color: Colors.black, width: 2);
+  const border = BorderSide(color: Colors.black, width: EInkStyle.strokeWidth);
+  const strongBorder = BorderSide(
+    color: Colors.black,
+    width: EInkStyle.strongStrokeWidth,
+  );
   final shape = RoundedRectangleBorder(
     side: border,
     borderRadius: BorderRadius.circular(12),
   );
+  final strongShape = RoundedRectangleBorder(
+    side: strongBorder,
+    borderRadius: BorderRadius.circular(12),
+  );
+  final buttonShape = RoundedRectangleBorder(
+    side: border,
+    borderRadius: BorderRadius.circular(4),
+  );
   return base.copyWith(
+    textTheme: _einkTextTheme(base.textTheme),
+    primaryTextTheme: _einkTextTheme(base.primaryTextTheme),
+    textButtonTheme: TextButtonThemeData(
+      style: ButtonStyle(
+        shape: WidgetStatePropertyAll(buttonShape),
+        side: const WidgetStatePropertyAll(border),
+        padding: const WidgetStatePropertyAll(
+          EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        ),
+      ),
+    ),
+    outlinedButtonTheme: const OutlinedButtonThemeData(
+      style: ButtonStyle(side: WidgetStatePropertyAll(border)),
+    ),
+    chipTheme: base.chipTheme.copyWith(side: border),
+    switchTheme: base.switchTheme.copyWith(
+      trackOutlineColor: const WidgetStatePropertyAll(Colors.black),
+      trackOutlineWidth: const WidgetStatePropertyAll(EInkStyle.strokeWidth),
+    ),
     splashFactory: NoSplash.splashFactory,
     highlightColor: Colors.transparent,
     pageTransitionsTheme: PageTransitionsTheme(
@@ -154,7 +233,7 @@ ThemeData applyEInkTheme(ThemeData base) {
     dialogTheme: DialogThemeData(
       barrierColor: Colors.transparent,
       elevation: 0,
-      shape: shape,
+      shape: strongShape,
     ),
     cardTheme: CardThemeData(elevation: 0, shape: shape),
     popupMenuTheme: PopupMenuThemeData(elevation: 0, shape: shape),
@@ -168,7 +247,7 @@ ThemeData applyEInkTheme(ThemeData base) {
       backgroundColor: Colors.white,
       foregroundColor: Colors.black,
       shape: RoundedRectangleBorder(
-        side: BorderSide(color: Colors.black, width: 2),
+        side: strongBorder,
         borderRadius: BorderRadius.all(Radius.circular(16)),
       ),
     ),
@@ -184,9 +263,7 @@ ThemeData applyEInkTheme(ThemeData base) {
               ? Colors.white
               : Colors.black,
         ),
-        side: const WidgetStatePropertyAll(
-          BorderSide(color: Colors.black, width: 1.5),
-        ),
+        side: const WidgetStatePropertyAll(border),
         overlayColor: const WidgetStatePropertyAll(Colors.transparent),
       ),
     ),

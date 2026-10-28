@@ -223,7 +223,10 @@ class FlyoutContent extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(8),
               border: context.isEInk
-                  ? Border.all(color: Colors.black, width: 2)
+                  ? Border.all(
+                      color: Colors.black,
+                      width: EInkStyle.strongStrokeWidth,
+                    )
                   : context.brightness == ui.Brightness.dark
                   ? Border.all(color: context.colorScheme.outlineVariant)
                   : null,

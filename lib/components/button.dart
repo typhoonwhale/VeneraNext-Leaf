@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:venera_next/foundation/context.dart';
+import 'package:venera_next/foundation/eink_theme.dart';
 import 'package:venera_next/foundation/translations.dart';
 import 'package:venera_next/foundation/widget_utils.dart';
 
@@ -166,7 +167,9 @@ class _ButtonState extends State<Button> {
 
   @override
   Widget build(BuildContext context) {
-    var padding = widget.padding ?? const EdgeInsets.symmetric(horizontal: 16);
+    var padding =
+        widget.padding ??
+        EdgeInsets.symmetric(horizontal: context.isEInk ? 18 : 16);
     var width = widget.width;
     if (width != null) {
       width = width - padding.horizontal;
@@ -212,7 +215,9 @@ class _ButtonState extends State<Button> {
           constraints: const BoxConstraints(minWidth: 76, minHeight: 32),
           decoration: BoxDecoration(
             color: buttonColor,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(
+              context.isEInk && widget.type != ButtonType.filled ? 4 : 16,
+            ),
             boxShadow:
                 (isHover &&
                     !isLoading &&
@@ -231,8 +236,10 @@ class _ButtonState extends State<Button> {
                     color:
                         widget.color ??
                         Theme.of(context).colorScheme.outlineVariant,
-                    width: 0.6,
+                    width: context.isEInk ? EInkStyle.strokeWidth : 0.6,
                   )
+                : context.isEInk && widget.type != ButtonType.filled
+                ? Border.all(color: Colors.black, width: EInkStyle.strokeWidth)
                 : null,
           ),
           child: AnimatedSize(

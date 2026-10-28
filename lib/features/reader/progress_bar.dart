@@ -127,7 +127,10 @@ class ReaderBottomBar extends StatelessWidget {
           border: isOpen
               ? Border(
                   top: context.isEInk
-                      ? const BorderSide(color: Colors.black)
+                      ? const BorderSide(
+                          color: Colors.black,
+                          width: EInkStyle.strokeWidth,
+                        )
                       : BorderSide(
                           color: Colors.grey.toOpacity(0.5),
                           width: 0.5,

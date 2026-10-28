@@ -297,7 +297,10 @@ class _FavoritesFolderSidebarState extends State<FavoritesFolderSidebar>
               decoration: BoxDecoration(
                 color: context.colorScheme.surfaceContainer,
                 border: context.isEInk
-                    ? Border.all(color: context.colorScheme.outline)
+                    ? Border.all(
+                        color: context.colorScheme.outline,
+                        width: EInkStyle.strokeWidth,
+                      )
                     : null,
                 borderRadius: BorderRadius.circular(8),
               ),

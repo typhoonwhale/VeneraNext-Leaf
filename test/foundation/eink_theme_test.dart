@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:venera_next/components/button.dart';
 import 'package:venera_next/components/effects.dart';
 import 'package:venera_next/components/navigation_bar.dart';
 import 'package:venera_next/components/select.dart';
@@ -199,7 +200,7 @@ void main() {
       );
       final border = deco('off').border! as Border;
       expect(border.top.color, Colors.black);
-      expect(border.top.width, 1.5);
+      expect(border.top.width, EInkStyle.strokeWidth);
     });
 
     testWidgets(
@@ -256,7 +257,7 @@ void main() {
       expect(fab.highlightElevation, 0);
       final side = (fab.shape! as RoundedRectangleBorder).side;
       expect(side.color, Colors.black);
-      expect(side.width, inInclusiveRange(1.5, 2));
+      expect(side.width, EInkStyle.strongStrokeWidth);
       expect(fab.backgroundColor, Colors.white);
       expect(fab.foregroundColor, Colors.black);
       await pump(
@@ -287,13 +288,137 @@ void main() {
       expect(_contrast(offBg, offFg), greaterThanOrEqualTo(7));
     });
 
-    testWidgets('tag outline helper is 1px black in E-Ink only', (
+    test('stroke constants are used by the theme', () {
+      final t = _theme(eink: true);
+      expect(EInkStyle.strokeWidth, 2.0);
+      expect(EInkStyle.strongStrokeWidth, 3.0);
+      final seg = t.segmentedButtonTheme.style!.side!.resolve({})!;
+      expect(seg.width, EInkStyle.strokeWidth);
+      expect(
+        t.switchTheme.trackOutlineWidth!.resolve({}),
+        EInkStyle.strokeWidth,
+      );
+      expect(t.chipTheme.side!.width, EInkStyle.strokeWidth);
+      expect(
+        t.outlinedButtonTheme.style!.side!.resolve({})!.width,
+        EInkStyle.strokeWidth,
+      );
+      final dialog = t.dialogTheme.shape! as RoundedRectangleBorder;
+      expect(dialog.side.width, EInkStyle.strongStrokeWidth);
+    });
+
+    test('text weights: small >= w600, others >= w500, light theme intact', () {
+      final eink = _theme(eink: true);
+      final light = _theme(eink: false);
+      for (final theme in [eink.textTheme, eink.primaryTextTheme]) {
+        final styles = [
+          theme.displayLarge,
+          theme.displayMedium,
+          theme.displaySmall,
+          theme.headlineLarge,
+          theme.headlineMedium,
+          theme.headlineSmall,
+          theme.titleLarge,
+          theme.titleMedium,
+          theme.titleSmall,
+          theme.bodyLarge,
+          theme.bodyMedium,
+          theme.bodySmall,
+          theme.labelLarge,
+          theme.labelMedium,
+          theme.labelSmall,
+        ];
+        for (final s in styles) {
+          final min = (s!.fontSize ?? 14) <= 12 ? 600 : 500;
+          expect(s.fontWeight!.value, greaterThanOrEqualTo(min));
+        }
+      }
+      expect(
+        eink.textTheme.bodySmall!.fontSize,
+        light.textTheme.bodySmall!.fontSize,
+      );
+      expect(
+        light.textTheme.bodySmall!.fontWeight,
+        anyOf(isNull, FontWeight.w400),
+      );
+      expect(
+        light.textTheme.bodyMedium!.fontWeight,
+        anyOf(isNull, FontWeight.w400),
+      );
+    });
+
+    testWidgets('TextButton is outlined in E-Ink only', (tester) async {
+      Future<ShapeBorder?> shapeOf(bool eink) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: _theme(eink: eink),
+            home: Material(
+              child: TextButton(onPressed: () {}, child: const Text('OK')),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final style = Theme.of(
+          tester.element(find.text('OK')),
+        ).textButtonTheme.style;
+        final side = style?.side?.resolve({});
+        final shape = style?.shape?.resolve({});
+        expect(side?.width, eink ? EInkStyle.strokeWidth : isNull);
+        expect(shape?.side.width, eink ? EInkStyle.strokeWidth : isNull);
+        return shape;
+      }
+
+      await shapeOf(true);
+      await shapeOf(false);
+    });
+
+    testWidgets('Button.text is outlined in E-Ink, icon and filled are not', (
+      tester,
+    ) async {
+      Border? borderOf(String label) {
+        final box = tester.widget<AnimatedContainer>(
+          find.ancestor(
+            of: find.text(label),
+            matching: find.byType(AnimatedContainer),
+          ),
+        );
+        return (box.decoration! as BoxDecoration).border as Border?;
+      }
+
+      for (final eink in [true, false]) {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: _theme(eink: eink),
+            home: Material(
+              child: Column(
+                children: [
+                  Button.text(onPressed: () {}, child: const Text('t')),
+                  Button.normal(onPressed: () {}, child: const Text('n')),
+                  Button.filled(onPressed: () {}, child: const Text('f')),
+                ],
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        if (eink) {
+          expect(borderOf('t')!.top.width, EInkStyle.strokeWidth);
+          expect(borderOf('n')!.top.width, EInkStyle.strokeWidth);
+        } else {
+          expect(borderOf('t'), isNull);
+          expect(borderOf('n'), isNull);
+        }
+        expect(borderOf('f'), isNull);
+      }
+    });
+
+    testWidgets('tag outline helper is strokeWidth black in E-Ink only', (
       tester,
     ) async {
       final eink = await _context(tester, _theme(eink: true));
       final border = eink.einkBorder()!;
       expect(border.top.color, Colors.black);
-      expect(border.top.width, 1);
+      expect(border.top.width, EInkStyle.strokeWidth);
       final regular = await _context(tester, _theme(eink: false));
       expect(regular.einkBorder(), isNull);
     });
