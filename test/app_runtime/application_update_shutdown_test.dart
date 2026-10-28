@@ -11,6 +11,7 @@ import 'package:venera_next/foundation/app.dart';
 import 'package:venera_next/foundation/app_data_operations.dart';
 import 'package:venera_next/foundation/appdata.dart';
 import 'package:venera_next/foundation/application_update_service.dart';
+import 'package:venera_next/foundation/application_update_download.dart';
 import 'package:venera_next/network/app_dio.dart';
 import 'package:venera_next/network/request_scope.dart';
 
@@ -27,9 +28,65 @@ CoreBootstrap _core(Future<void> Function() close) => CoreBootstrap(
   failureCleanup: [(name: 'stores', close: close)],
 );
 
+class _LocalUpdateRecovery extends ApplicationUpdateDownload {
+  _LocalUpdateRecovery()
+    : super(
+        cacheRoot: Directory.systemTemp.path,
+        repository: ApplicationUpdateService.androidDefaultReleaseRepository,
+        dioFactory: Dio.new,
+      );
+  int recoveries = 0;
+  final closing = Completer<void>();
+  final released = Completer<void>();
+  @override
+  Future<void> initialize() async {
+    recoveries++;
+  }
+
+  @override
+  Future<void> closeAndWait() async {
+    if (!closing.isCompleted) closing.complete();
+    await released.future;
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   App.dataPath = Directory.systemTemp.path;
+  test(
+    'local update recovery is independent and host joins cache shutdown',
+    () async {
+      final download = _LocalUpdateRecovery();
+      var storesClosed = false;
+      final core = _core(() async {
+        storesClosed = true;
+      });
+      await core.start();
+      final fixture = SyncTestFixture();
+      final host = ApplicationHost(
+        core: core,
+        sync: fixture.controller,
+        dataOperations: AppDataOperations(),
+        applicationUpdateDownload: download,
+        applicationUpdates: ApplicationUpdateService(
+          createClient: () =>
+              throw StateError('Recovery must not use the network'),
+          currentVersion: () => '1.18.2',
+        ),
+      );
+      await host.initializeApplicationUpdates();
+      expect(download.recoveries, 1);
+      final closed = host.close();
+      await download.closing.future;
+      expect(storesClosed, isFalse);
+      await host.initializeApplicationUpdates();
+      expect(download.recoveries, 1);
+      download.released.complete();
+      await closed;
+      expect(storesClosed, isTrue);
+    },
+  );
+
   test(
     'host joins startup timestamp queued behind real data admission before stores close',
     () async {

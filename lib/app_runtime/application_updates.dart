@@ -1,10 +1,13 @@
 import 'package:venera_next/features/comic_source/comic_source_api.dart';
+import 'package:venera_next/features/local_comics/local.dart';
 import 'package:venera_next/foundation/app.dart';
 import 'package:venera_next/foundation/appdata.dart';
 import 'package:venera_next/foundation/application_preferences.dart';
 import 'package:venera_next/foundation/global_preference_store.dart';
 import 'package:venera_next/foundation/application_update_service.dart';
+import 'package:venera_next/foundation/application_update_download.dart';
 import 'package:venera_next/foundation/startup_update_check.dart';
+import 'package:venera_next/foundation/update_check_schedule.dart';
 import 'package:venera_next/network/app_dio.dart';
 import 'package:venera_next/network/request_scope.dart';
 
@@ -39,27 +42,43 @@ ApplicationUpdateService createApplicationUpdates({
   );
 }
 
+/// Created only after bootstrap has established the private cache path.
+ApplicationUpdateDownload? createApplicationUpdateDownload(
+  ApplicationUpdateService service, {
+  bool? isAndroid,
+  String? cacheRoot,
+}) {
+  if (!(isAndroid ?? App.isAndroid) || !service.isEnabled) return null;
+  return ApplicationUpdateDownload(
+    cacheRoot: cacheRoot ?? App.cachePath,
+    repository: service.releaseRepository!,
+    dioFactory: () => Dio()..httpClientAdapter = RHttpAdapter(),
+    holdDownloadQueue: LocalManager.holdAutomaticDownloadStarts,
+  );
+}
+
+UpdateCheckSchedule createUpdateCheckSchedule({DateTime Function()? now}) =>
+    UpdateCheckSchedule(
+      read: () => appdata.implicitData,
+      update: (change) => appdata.updateImplicit(change),
+      now: now,
+    );
+
 StartupUpdateCheck createStartupUpdateCheck({
   required SourceUpdateService sources,
   required Future<void> Function(RequestScope) checkApplication,
-}) => StartupUpdateCheck(
-  reserveCheck: () async {
-    final now = DateTime.now().millisecondsSinceEpoch;
-    const interval = 24 * 60 * 60 * 1000;
-    final last = appdata.implicitData['lastCheckUpdate'] ?? 0;
-    if (now - last < interval) return false;
-    return appdata.updateImplicit((data) {
-      final latest = data['lastCheckUpdate'] ?? 0;
-      if (now - latest < interval) return false;
-      data['lastCheckUpdate'] = now;
-      return true;
-    });
-  },
-  checkSources: () async {
-    await sources.checkUpdates();
-  },
-  applicationCheckEnabled: () => GlobalPreferenceStore(
-    appdata.settings,
-  ).read(AppPreferences.checkUpdateOnStart),
-  checkApplication: checkApplication,
-);
+  UpdateCheckSchedule? schedule,
+}) {
+  final timing = schedule ?? createUpdateCheckSchedule();
+  return StartupUpdateCheck(
+    reserveSourceCheck: timing.reserveSourceCheck,
+    reserveApplicationCheck: timing.reserveApplicationCheck,
+    checkSources: () async {
+      await sources.checkUpdates();
+    },
+    applicationCheckEnabled: () => GlobalPreferenceStore(
+      appdata.settings,
+    ).read(AppPreferences.checkUpdateOnStart),
+    checkApplication: checkApplication,
+  );
+}

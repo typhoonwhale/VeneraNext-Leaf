@@ -6,6 +6,7 @@ import 'package:dio/io.dart';
 import 'package:venera_next/network/app_dio.dart';
 import 'package:venera_next/network/proxy.dart';
 import 'package:venera_next/foundation/extensions.dart';
+import 'package:venera_next/foundation/log.dart';
 
 class FileDownloader {
   final String url;
@@ -41,7 +42,13 @@ class FileDownloader {
 
   bool _canceled = false;
 
+  /// Set by [stop], unlike [_canceled] which a failed block also sets.
+  bool _stopped = false;
+
   late List<_DownloadBlock> _blocks;
+
+  /// Completes when [_download] has closed the file and its result stream.
+  Completer<void>? _finished;
 
   void _cancelActiveRequests([String reason = 'Download canceled']) {
     if (!_cancelToken.isCancelled) {
@@ -55,32 +62,50 @@ class FileDownloader {
     await file.writeAsString(_blocks.map((e) => e.toString()).join("\n"));
   }
 
-  Future<void> _readStatus() async {
-    var file = File("$savePath.download");
-    if (!await file.exists()) {
-      return;
+  /// Trust a status file only when its blocks exactly cover the current file.
+  Future<bool> _readStatus() async {
+    final List<_DownloadBlock> blocks;
+    try {
+      final lines = await File("$savePath.download").readAsLines();
+      blocks = lines.map((e) => _DownloadBlock.fromString(e)).toList();
+    } catch (_) {
+      return false;
     }
-
-    var lines = await file.readAsLines();
-    _blocks = lines.map((e) => _DownloadBlock.fromString(e)).toList();
+    var offset = 0;
+    for (final block in blocks) {
+      if (block.start != offset ||
+          block.end <= block.start ||
+          block.downloadedBytes < 0 ||
+          block.downloadedBytes > block.end - block.start) {
+        return false;
+      }
+      offset = block.end;
+    }
+    if (blocks.isEmpty || offset != _fileSize) return false;
+    _blocks = blocks;
+    return true;
   }
 
-  /// create file and write empty bytes
-  Future<void> _prepareFile() async {
+  /// Create the file and write empty bytes, or reuse a same-size partial file
+  /// that still has its status. Returns whether the partial file was reused.
+  Future<bool> _prepareFile() async {
     var file = File(savePath);
-    if (await file.exists()) {
-      if (file.lengthSync() == _fileSize &&
-          File("$savePath.download").existsSync()) {
-        _file = await file.open(mode: FileMode.append);
-        return;
-      } else {
-        await file.delete();
-      }
+    final status = File("$savePath.download");
+    if (await file.exists() &&
+        file.lengthSync() == _fileSize &&
+        status.existsSync()) {
+      _file = await file.open(mode: FileMode.append);
+      return true;
     }
+    // A status file never describes a newly created file. Remove it first so
+    // an interruption cannot pair it with the new zero-filled file.
+    if (await status.exists()) await status.delete();
+    if (await file.exists()) await file.delete();
 
     await file.create(recursive: true);
     _file = await file.open(mode: FileMode.append);
     await _file!.truncate(_fileSize);
+    return false;
   }
 
   Future<void> _createTasks() async {
@@ -88,15 +113,17 @@ class FileDownloader {
     var length = res.headers["content-length"]?.first;
     _fileSize = length == null ? 0 : int.parse(length);
 
-    await _prepareFile();
+    final resumed = await _prepareFile() && await _readStatus();
 
-    if (File("$savePath.download").existsSync()) {
-      await _readStatus();
+    if (resumed) {
       _currentBytes = _blocks.fold<int>(
         0,
         (previousValue, element) => previousValue + element.downloadedBytes,
       );
     } else {
+      // Damaged or mismatched status: download the whole file again.
+      final status = File("$savePath.download");
+      if (await status.exists()) await status.delete();
       if (_fileSize > 1024 * 1024 * 1024) {
         _kChunkSize = 64 * 1024 * 1024;
       } else if (_fileSize > 512 * 1024 * 1024) {
@@ -117,7 +144,8 @@ class FileDownloader {
 
   Stream<DownloadingStatus> start() {
     var stream = StreamController<DownloadingStatus>();
-    _download(stream);
+    final finished = _finished = Completer<void>();
+    _download(stream).whenComplete(finished.complete);
     return stream.stream;
   }
 
@@ -125,7 +153,9 @@ class FileDownloader {
     stream.add(DownloadingStatus(_currentBytes, _fileSize, 0));
   }
 
-  void _download(StreamController<DownloadingStatus> resultStream) async {
+  Future<void> _download(
+    StreamController<DownloadingStatus> resultStream,
+  ) async {
     Timer? statusTimer;
     try {
       var proxy = await getProxy();
@@ -140,17 +170,24 @@ class FileDownloader {
       await _createTasks();
 
       if (_canceled) {
-        await _file?.close();
-        _file = null;
+        await _closeFile();
         resultStream.close();
         return;
       }
 
       // check if file is downloaded
       if (_currentBytes >= _fileSize) {
-        await _file!.close();
-        _file = null;
-        _reportStatus(resultStream);
+        await _closeFile();
+        if (_fileSize > 0) {
+          // Every block of a verified status was written before the process
+          // ended; finish instead of failing on each resume.
+          await File("$savePath.download").delete();
+          resultStream.add(
+            DownloadingStatus(_currentBytes, _fileSize, 0, true),
+          );
+        } else {
+          _reportStatus(resultStream);
+        }
         resultStream.close();
         return;
       }
@@ -175,12 +212,11 @@ class FileDownloader {
       // start downloading
       await _scheduleDownload();
       if (_canceled) {
+        await _closeFile();
         resultStream.close();
         return;
       }
-      await _writeQueue;
-      await _file!.close();
-      _file = null;
+      await _closeFile();
       await File("$savePath.download").delete();
 
       // check if download is finished
@@ -201,12 +237,18 @@ class FileDownloader {
       final wasCanceled = _canceled;
       _canceled = true;
       _cancelActiveRequests();
-      await _writeQueue.catchError((_) {});
-      await _file?.close();
-      _file = null;
-      if (wasCanceled &&
-          e is DioException &&
-          e.type == DioExceptionType.cancel) {
+      try {
+        await _closeFile();
+      } catch (closeError, closeStack) {
+        // Still close the result stream so its listener is not left waiting.
+        Log.error('Download', closeError, closeStack);
+      }
+      // A stopped download may fail with any transport error from its
+      // aborted connections; stopping is not a failure.
+      if (_stopped ||
+          (wasCanceled &&
+              e is DioException &&
+              e.type == DioExceptionType.cancel)) {
         resultStream.close();
         return;
       }
@@ -316,11 +358,12 @@ class FileDownloader {
     final bytes = Uint8List.fromList(buffer);
     buffer.clear();
     return _enqueueWrite(() async {
-      if (_canceled || _file == null) {
+      final file = _file;
+      if (_canceled || file == null) {
         return;
       }
-      await _file!.setPosition(block.start + block.downloadedBytes);
-      await _file!.writeFrom(bytes);
+      await file.setPosition(block.start + block.downloadedBytes);
+      await file.writeFrom(bytes);
       block.downloadedBytes += bytes.length;
       _currentBytes += bytes.length;
       await _writeStatus();
@@ -333,12 +376,23 @@ class FileDownloader {
     return next;
   }
 
+  /// Close the file after every write queued before it, at most once. Writes
+  /// queued later see no file and are dropped, so the status file never
+  /// counts bytes that were not written.
+  Future<void> _closeFile() => _enqueueWrite(() async {
+    final file = _file;
+    _file = null;
+    await file?.close();
+  });
+
+  /// Returns once the download has stopped and released its file, so another
+  /// downloader may resume the same path.
   Future<void> stop() async {
+    _stopped = true;
     _canceled = true;
     _cancelActiveRequests();
-    await _writeQueue.catchError((_) {});
-    await _file?.close();
-    _file = null;
+    await _closeFile().catchError((_) {});
+    await _finished?.future;
   }
 }
 

@@ -113,13 +113,21 @@ jobs:
             exit 1
           fi
           printf '%s\n' "$output"
-          signers=$(printf '%s\n' "$output" | grep -c '^Signer #[0-9]* certificate SHA-256 digest:' || true)
+          # apksigner prints "Signer #1 certificate ..." or, in newer build-tools,
+          # "V2 Signer: certificate ..." (one line per signature scheme).
+          pairs=$(printf '%s\n' "$output" | sed -n -E 's/^(V[0-9.]+ )?Signer( ?#([0-9]+))?:? certificate SHA-256 digest: *([0-9A-Fa-f]+).*$/\3 \4/p')
+          signers=$(printf '%s\n' "$pairs" | awk 'NF { print (NF == 2 ? $1 : 1) }' | sort -u | wc -l | tr -d '[:space:]')
           if [[ "$signers" != "1" ]]; then
             echo "::error::Expected exactly one signer, found $signers."
             exit 1
           fi
-          actual=$(printf '%s\n' "$output" | sed -n 's/^Signer #1 certificate SHA-256 digest: *//p' | tr -d '[:space:]')
-          actual_lc=$(printf '%s' "$actual" | tr '[:upper:]' '[:lower:]')
+          digests=$(printf '%s\n' "$pairs" | awk 'NF { print tolower($NF) }' | sort -u)
+          if [[ $(printf '%s\n' "$digests" | wc -l | tr -d '[:space:]') != "1" ]]; then
+            echo "::error::Signature schemes report different certificates."
+            exit 1
+          fi
+          actual="$digests"
+          actual_lc="$digests"
           expected_lc=$(printf '%s' "$EXPECTED_CERT_SHA256" | tr '[:upper:]' '[:lower:]')
           if [[ "$actual_lc" != "$expected_lc" ]]; then
             echo "::error::APK signing certificate mismatch: expected $EXPECTED_CERT_SHA256, got ${actual:-none}."

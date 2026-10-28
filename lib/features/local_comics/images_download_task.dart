@@ -15,15 +15,21 @@ import 'package:venera_next/foundation/log.dart';
 import 'package:venera_next/foundation/res.dart';
 import 'package:venera_next/foundation/translations.dart';
 import 'package:venera_next/network/images.dart';
+import 'package:venera_next/network/cache.dart';
 import 'package:venera_next/foundation/extensions.dart';
 import 'package:venera_next/foundation/file_type.dart';
 import 'package:venera_next/foundation/file_interaction.dart';
 
 import 'download_task.dart';
 import 'download_directory_allocator.dart';
+import 'download_output_marker.dart';
 import 'download_retry.dart';
 
 class ImagesDownloadTask extends DownloadTask with _TransferSpeedMixin {
+  /// Holds [_ownerToken] inside an output directory this task created, until
+  /// the comic is registered. Dot files are ignored by comic storage.
+  static const _outputMarker = DownloadOwnerToken.imagesMarker;
+
   final ComicSource source;
 
   final String comicId;
@@ -65,6 +71,11 @@ class ImagesDownloadTask extends DownloadTask with _TransferSpeedMixin {
   _allocateDirectory;
   Future<void>? _allocationFuture;
   String? _ownedOutputPath;
+  String _ownerToken = DownloadOwnerToken.create();
+
+  /// Whether this task created [path]; persisted so a restored task can
+  /// verify the claim with [_outputMarker] before deleting anything there.
+  bool _outputOwned = false;
   final DownloadTaskStorage _storage;
 
   Future<void> _allocateOutput() async {
@@ -76,8 +87,15 @@ class ImagesDownloadTask extends DownloadTask with _TransferSpeedMixin {
           comic!.title,
         );
     final directory = allocation.directory;
+    _outputOwned = allocation.isNew;
     if (allocation.isNew) _ownedOutputPath = directory.path;
     if (!await directory.exists()) await directory.create();
+    if (allocation.isNew) {
+      await DownloadOwnerToken.write(
+        FilePath.join(directory.path, _outputMarker),
+        _ownerToken,
+      );
+    }
     // Pause/resume and cancellation drain this operation before reusing or
     // cleaning its result, including a result returned after pause/cancel.
     path = directory.path;
@@ -105,10 +123,18 @@ class ImagesDownloadTask extends DownloadTask with _TransferSpeedMixin {
           if (cleanupPath == null) return;
           final local = manager.find(id, comicType);
           if (local == null) {
-            if (_ownedOutputPath != cleanupPath) return;
+            if (_ownedOutputPath != cleanupPath || !_ownsOutput(cleanupPath)) {
+              // No ownership evidence, e.g. an older snapshot: keep the files
+              // and report the folder.
+              if (FileSystemEntity.typeSync(cleanupPath, followLinks: false) !=
+                  FileSystemEntityType.notFound) {
+                _retainedOutputPath = cleanupPath;
+              }
+              return;
+            }
             final directory = Directory(cleanupPath);
             if (await directory.exists()) {
-              await directory.delete(recursive: true);
+              await manager.discardDownloadOutput(directory);
             }
           } else if (p.equals(
             p.absolute(FilePath.join(manager.path, local.directory)),
@@ -133,12 +159,29 @@ class ImagesDownloadTask extends DownloadTask with _TransferSpeedMixin {
 
   Future<void>? _pendingStops;
 
+  String? _retainedOutputPath;
+
+  @override
+  String? get retainedOutputPath => _retainedOutputPath;
+
+  @override
+  void relocateOutput(String from, String to) {
+    final previous = path;
+    super.relocateOutput(from, to);
+    if (previous != null && _ownedOutputPath == previous) {
+      _ownedOutputPath = path;
+    }
+  }
+
   /// Drain image transfer cancellation and any directory cleanup already queued.
   @override
   Future<void> get pendingCleanup => _pendingStops ?? Future.value();
 
   @override
   String? get cover => _cover ?? comic?.cover;
+
+  @override
+  String get ownerToken => _ownerToken;
 
   @override
   String get message => isWaitingToRetry
@@ -154,6 +197,13 @@ class ImagesDownloadTask extends DownloadTask with _TransferSpeedMixin {
   void retryNow() {
     if (_isRunning) _retry?.wake();
   }
+
+  /// Set by a manual resume after a failure; the next run refetches the
+  /// image lists of the chapters that are not complete, once.
+  bool _refreshImages = false;
+
+  @override
+  void retryAfterFailure() => _refreshImages = true;
 
   @override
   void pause() {
@@ -416,6 +466,17 @@ class ImagesDownloadTask extends DownloadTask with _TransferSpeedMixin {
       if (!_isCurrentRun(generation)) return;
     }
 
+    if (_refreshImages) {
+      // Source requests cannot be traced to this task, and a revalidated
+      // cache entry keeps the old addresses when only the body changed.
+      // The cache is memory-only, so other readers just fetch again.
+      NetworkCacheManager().clear();
+      if (_images != null && !await _refreshRemainingImages(generation)) {
+        return;
+      }
+      _refreshImages = false;
+    }
+
     if (_images == null) {
       if (comic!.chapters == null) {
         _message = "Fetching image list...".tl;
@@ -504,9 +565,90 @@ class ImagesDownloadTask extends DownloadTask with _TransferSpeedMixin {
     }
 
     _storage.completeTask(this);
-    _ownedOutputPath = null;
     _isRunning = false;
     stopRecorder();
+    // Keep ownership evidence until the comic is registered; a suspended
+    // queue does not register it.
+    if (_storage.find(id, comicType) == null) return;
+    _ownedOutputPath = null;
+    await File(FilePath.join(path!, _outputMarker)).deleteIgnoreError();
+  }
+
+  /// An output is this task's only if it is a real directory directly under
+  /// the library root that still carries this task's marker.
+  bool _ownsOutput(String outputPath) => DownloadOwnerToken.ownsOutput(
+    root: _storage.path,
+    outputPath: outputPath,
+    marker: _outputMarker,
+    token: _ownerToken,
+  );
+
+  /// Whether this task saved any page of [chapter], including prefetched
+  /// pages after the current index.
+  Future<bool> _hasSavedImages(String chapter) async {
+    final directory = Directory(
+      comic!.chapters == null
+          ? path!
+          : FilePath.join(path!, localChapterDirectoryName(chapter)),
+    );
+    if (!await directory.exists()) return false;
+    await for (final entity in directory.list()) {
+      final name = p.basename(entity.path);
+      if (entity is File &&
+          int.tryParse(p.basenameWithoutExtension(name)) != null &&
+          isComicImageFileName(name)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// Image addresses may expire, so a failed task gets fresh lists for the
+  /// current and later chapters. The current chapter continues from its
+  /// progress only with the same image count, unless none of it was saved. Returns whether the run may
+  /// continue; an interrupted refresh is repeated by the next run.
+  Future<bool> _refreshRemainingImages(int generation) async {
+    final images = _images!;
+    final keys = images.keys.toList();
+    final refreshed = <String, List<String>>{};
+    for (var i = _chapter; i < keys.length; i++) {
+      final key = keys[i];
+      _message = "Fetching image list...".tl;
+      notifyListeners();
+      final res = await _runDownloadStepWithRetry(generation, () async {
+        var r = await source.loadComicPages!(
+          comicId,
+          comic!.chapters == null ? null : key,
+        );
+        return r.data;
+      });
+      if (!_isCurrentRun(generation)) return false;
+      if (res.error) {
+        Log.error("Download", res.errorMessage!);
+        _refreshImages = false;
+        _setError("Error: ${res.errorMessage}");
+        return false;
+      }
+      if (i == _chapter && res.data.length != images[key]!.length) {
+        final started = _index > 0 || await _hasSavedImages(key);
+        if (!_isCurrentRun(generation)) return false;
+        if (started) {
+          // Downloaded pages would no longer match; keep them untouched.
+          _refreshImages = false;
+          _setError(
+            "Chapter content has changed. Cancel and download again.".tl,
+          );
+          return false;
+        }
+      }
+      refreshed[key] = res.data;
+    }
+    _images = {...images, ...refreshed};
+    _totalCount = _images!.values.fold(0, (sum, list) => sum + list.length);
+    _message = "$_downloadedCount/$_totalCount";
+    notifyListeners();
+    await _storage.saveCurrentDownloadingTasks();
+    return _isCurrentRun(generation);
   }
 
   @override
@@ -520,6 +662,7 @@ class ImagesDownloadTask extends DownloadTask with _TransferSpeedMixin {
     _isError = true;
     _message = message;
     notifyListeners();
+    _storage.failTask(this);
   }
 
   @override
@@ -543,6 +686,8 @@ class ImagesDownloadTask extends DownloadTask with _TransferSpeedMixin {
       "totalCount": _totalCount,
       "index": _index,
       "chapter": _chapter,
+      "ownerToken": _ownerToken,
+      "outputOwned": _outputOwned,
     };
   }
 
@@ -563,23 +708,47 @@ class ImagesDownloadTask extends DownloadTask with _TransferSpeedMixin {
       }
     }
 
-    return ImagesDownloadTask(
-        storage: storage,
-        loadImage: loadImage,
-        source: ComicSource.find(json["source"])!,
-        comicId: json["comicId"],
-        comic: json["comic"] == null
-            ? null
-            : ComicDetails.fromJson(json["comic"]),
-        chapters: ListOrNull.from(json["chapters"]),
-      )
-      ..path = json["path"]
-      .._cover = json["cover"]
-      .._images = images
-      .._downloadedCount = json["downloadedCount"]
-      .._totalCount = json["totalCount"]
-      .._index = json["index"]
-      .._chapter = json["chapter"];
+    final task =
+        ImagesDownloadTask(
+            storage: storage,
+            loadImage: loadImage,
+            source: ComicSource.find(json["source"])!,
+            comicId: json["comicId"],
+            comic: json["comic"] == null
+                ? null
+                : ComicDetails.fromJson(json["comic"]),
+            chapters: ListOrNull.from(json["chapters"]),
+          )
+          ..path = json["path"]
+          .._cover = json["cover"]
+          .._images = images
+          .._downloadedCount = json["downloadedCount"]
+          .._totalCount = json["totalCount"]
+          .._index = json["index"]
+          .._chapter = json["chapter"];
+    // Snapshots without an owner token restore without any ownership claims.
+    final token = json["ownerToken"];
+    final path = task.path;
+    if (token is! String || !DownloadOwnerToken.pattern.hasMatch(token)) {
+      return task;
+    }
+    task._ownerToken = token;
+    if (path != null && json["outputOwned"] == true) {
+      task._outputOwned = true;
+      final registered = storage.find(task.id, task.comicType);
+      if (registered != null && registered.directory == p.basename(path)) {
+        // Registered in the folder this task created: the marker is stale.
+        try {
+          final marker = File(FilePath.join(path, _outputMarker));
+          if (marker.existsSync()) marker.deleteSync();
+        } catch (error, stack) {
+          Log.error('Download', error, stack);
+        }
+      } else if (task._ownsOutput(path)) {
+        task._ownedOutputPath = path;
+      }
+    }
+    return task;
   }
 
   @override

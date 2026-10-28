@@ -4,7 +4,6 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:dio/dio.dart';
 import 'package:rhttp/rhttp.dart' as rhttp;
 import 'package:sqlite3/sqlite3.dart';
 import 'package:venera_next/foundation/res.dart';
@@ -16,8 +15,11 @@ import 'package:venera_next/features/comic_source/comic_source.dart';
 import 'package:venera_next/features/local_comics/local_comics.dart';
 import 'package:venera_next/features/local_comics/download_directory_allocator.dart';
 import 'package:venera_next/features/local_comics/download_task_storage.dart';
+import 'package:venera_next/features/local_comics/local_chapter_storage.dart';
 import 'package:venera_next/network/images.dart';
 import 'package:venera_next/network/file_downloader.dart';
+import 'package:venera_next/network/app_dio.dart';
+import 'package:venera_next/network/cache.dart';
 
 void main() {
   const sourceKey = 'download_task_test_source';
@@ -631,6 +633,12 @@ void main() {
         task.resume();
         await started.future.timeout(const Duration(seconds: 2));
         final output = Directory(task.path!);
+        // The ownership marker is the only file before the thumbnail.
+        List<String> pages() => [
+          for (final entry in output.listSync())
+            if (!entry.uri.pathSegments.last.startsWith('.')) entry.path,
+        ];
+        expect(output.listSync(), hasLength(1));
         first.add(
           ImageDownloadProgress(
             currentBytes: 4,
@@ -652,7 +660,7 @@ void main() {
         await pumpEventQueue();
         expect(cleaned, isFalse);
         expect(output.existsSync(), isTrue);
-        expect(output.listSync(), isEmpty);
+        expect(pages(), isEmpty);
         expect(loads, 1);
         release.complete();
         await cleanup;
@@ -660,7 +668,7 @@ void main() {
         if (resumeAfterPause) {
           await restarted.future.timeout(const Duration(seconds: 2));
           expect(loads, 2);
-          expect(output.listSync(), isEmpty);
+          expect(pages(), isEmpty);
           task.cancel();
           await task.pendingCleanup;
         }
@@ -934,7 +942,7 @@ void main() {
   );
 
   test(
-    'restoration publishes only complete snapshots and does not duplicate tasks',
+    'restoration drops undecodable entries and does not duplicate tasks',
     () async {
       final root = Directory.systemTemp.createTempSync('download-restore-');
       App.dataPath = root.path;
@@ -961,8 +969,10 @@ void main() {
         {'type': 'ImagesDownloadTask', 'source': 'missing'},
       ]);
       file.writeAsStringSync(invalid);
-      manager.restoreDownloadingTasks();
-      expect(manager.downloadingTasks, [existing]);
+      // An entry that cannot be decoded is dropped like an unknown kind;
+      // the snapshot itself is left as it was.
+      expect(manager.restoreDownloadingTasks(), isTrue);
+      expect(manager.downloadingTasks.map((task) => task.id), ['restored']);
       expect(file.readAsStringSync(), invalid);
       file.writeAsStringSync(
         jsonEncode([
@@ -1201,6 +1211,289 @@ void main() {
       expect(task.timer, isNull);
     },
   );
+
+  group('resume after a failure refetches remaining image lists', () {
+    late Directory root;
+    late _TaskStorage storage;
+    late Map<String, Object> pages;
+    late List<String?> listRequests;
+    late List<String> imageRequests;
+    late File downloaded;
+    final bytes = base64Decode(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6uwAAAABJRU5ErkJggg==',
+    );
+    const oldImages = {
+      'c1': ['old-1a', 'old-1b'],
+      'c2': ['old-2a', 'old-2b'],
+      'c3': ['old-3a'],
+    };
+
+    /// Chapter c1 is complete and the first image of c2 is saved.
+    ImagesDownloadTask failedTask({
+      int index = 1,
+      int downloaded = 3,
+      LoadComicPagesFunc? loadComicPages,
+    }) {
+      ComicSourceManager().remove(sourceKey);
+      ComicSourceManager().add(
+        _testSource(
+          sourceKey,
+          loadComicPages:
+              loadComicPages ??
+              (id, ep) async {
+                listRequests.add(ep);
+                final result = pages[ep]!;
+                if (result is Error) throw result;
+                return Res(result as List<String>);
+              },
+        ),
+      );
+      final task = ImagesDownloadTask.fromJson(
+        storage,
+        {
+          'type': 'ImagesDownloadTask',
+          'source': sourceKey,
+          'comicId': 'one',
+          'comic': {
+            'title': 'One',
+            'subtitle': '',
+            'cover': 'cover.jpg',
+            'description': '',
+            'tags': <String, List<String>>{},
+            'chapters': {'c1': 'C1', 'c2': 'C2', 'c3': 'C3'},
+            'sourceKey': sourceKey,
+            'comicId': 'one',
+          },
+          'chapters': null,
+          'path': root.path,
+          'cover': 'file://${root.path}/cover.png',
+          'images': oldImages,
+          'downloadedCount': downloaded,
+          'totalCount': 5,
+          'index': index,
+          'chapter': 1,
+        },
+        loadImage: (key, _, _, _) async* {
+          imageRequests.add(key);
+          yield ImageDownloadProgress(
+            currentBytes: bytes.length,
+            totalBytes: bytes.length,
+            imageBytes: bytes,
+          );
+        },
+      )!;
+      addTearDown(() async {
+        task.pause();
+        await task.pendingCleanup;
+        await task.debugResumeFuture;
+      });
+      return task;
+    }
+
+    Future<void> resumeAfterFailure(ImagesDownloadTask task) async {
+      task.retryAfterFailure();
+      task.resume();
+      await task.debugResumeFuture;
+    }
+
+    setUp(() {
+      root = Directory.systemTemp.createTempSync('download-refresh-');
+      storage = _TaskStorage(root.path);
+      listRequests = [];
+      imageRequests = [];
+      final chapter = Directory(
+        '${root.path}/${localChapterDirectoryName('c2')}',
+      )..createSync();
+      downloaded = File('${chapter.path}/0.png')..writeAsStringSync('kept');
+      addTearDown(() => root.deleteSync(recursive: true));
+    });
+
+    test('same image count continues with the new addresses', () async {
+      pages = {
+        'c1': ['unused'],
+        'c2': ['new-2a', 'new-2b'],
+        'c3': ['new-3a', 'new-3b'],
+      };
+      final task = failedTask();
+      await resumeAfterFailure(task);
+      // Completed chapters are not fetched again.
+      expect(listRequests, ['c2', 'c3']);
+      expect(imageRequests, ['new-2b', 'new-3a', 'new-3b']);
+      expect(storage.completed, [same(task)]);
+      expect(task.toJson()['totalCount'], 6);
+      expect(task.toJson()['downloadedCount'], 6);
+      expect(downloaded.readAsStringSync(), 'kept');
+    });
+
+    test('a changed image count fails without touching files', () async {
+      pages = {
+        'c2': ['new-2a', 'new-2b', 'new-2c'],
+        'c3': ['new-3a'],
+      };
+      final task = failedTask();
+      await resumeAfterFailure(task);
+      expect(task.isError, isTrue);
+      expect(
+        task.message,
+        'Chapter content has changed. Cancel and download again.',
+      );
+      expect(storage.failed, [same(task)]);
+      expect(imageRequests, isEmpty);
+      expect(task.toJson()['images'], oldImages);
+      expect(task.toJson()['totalCount'], 5);
+      expect(downloaded.readAsStringSync(), 'kept');
+    });
+
+    test('a failed refetch keeps the failure and its reason', () async {
+      pages = {
+        'c2': StateError('list unavailable'),
+        'c3': ['new-3a'],
+      };
+      final task = failedTask();
+      await resumeAfterFailure(task);
+      expect(task.isError, isTrue);
+      expect(task.message, contains('list unavailable'));
+      expect(storage.failed, [same(task)]);
+      expect(listRequests, ['c2']);
+      expect(imageRequests, isEmpty);
+      expect(task.toJson()['images'], oldImages);
+    });
+
+    test(
+      'a changed count in an unstarted chapter takes the new list',
+      () async {
+        downloaded.deleteSync();
+        pages = {
+          'c2': ['new-2a', 'new-2b', 'new-2c'],
+          'c3': ['new-3a'],
+        };
+        final task = failedTask(index: 0, downloaded: 2);
+        await resumeAfterFailure(task);
+        expect(task.isError, isFalse);
+        expect(imageRequests, ['new-2a', 'new-2b', 'new-2c', 'new-3a']);
+        expect(storage.completed, [same(task)]);
+        expect(task.toJson()['totalCount'], 6);
+      },
+    );
+
+    test(
+      'a page saved ahead of the progress marks the chapter started',
+      () async {
+        // Prefetch saved page 0 although the progress still points at it.
+        pages = {
+          'c2': ['new-2a', 'new-2b', 'new-2c'],
+          'c3': ['new-3a'],
+        };
+        final task = failedTask(index: 0, downloaded: 2);
+        await resumeAfterFailure(task);
+        expect(task.isError, isTrue);
+        expect(imageRequests, isEmpty);
+        expect(task.toJson()['images'], oldImages);
+        expect(downloaded.readAsStringSync(), 'kept');
+      },
+    );
+
+    test('an ordinary resume does not refetch', () async {
+      pages = {
+        'c2': ['new-2a', 'new-2b'],
+        'c3': ['new-3a'],
+      };
+      final task = failedTask();
+      task.resume();
+      await task.debugResumeFuture;
+      expect(listRequests, isEmpty);
+      expect(imageRequests, ['old-2b', 'old-3a']);
+      expect(storage.completed, [same(task)]);
+    });
+
+    group('through the network cache', () {
+      late Map<String, List<String>> server;
+      late List<String> methods;
+      late Dio dio;
+      final cache = NetworkCacheManager();
+
+      Uri listUri(String? ep) =>
+          Uri.parse('http://127.0.0.1:1/api/comics/multi/pages?chapter=$ep');
+
+      /// Lists come from the source over the shared cache, like a script
+      /// request; HEAD answers with the headers of the cached GET.
+      Future<Res<List<String>>> loadThroughCache(String id, String? ep) async {
+        listRequests.add(ep);
+        final response = await dio.getUri<String>(listUri(ep));
+        return Res(List<String>.from(jsonDecode(response.data!) as List));
+      }
+
+      setUp(() async {
+        final initialized = App.isInitialized;
+        App.isInitialized = true;
+        cache.clear();
+        server = {
+          for (final entry in oldImages.entries) entry.key: entry.value,
+        };
+        methods = [];
+        dio = AppDio(BaseOptions(responseType: ResponseType.plain))
+          ..httpClientAdapter = _ListAdapter((options) {
+            methods.add('${options.method} ${options.uri.query}');
+            final ep = options.uri.queryParameters['chapter'];
+            const headers = {
+              'x-list': ['same'],
+            };
+            if (options.method == 'HEAD') {
+              return ResponseBody.fromString('', 200, headers: headers);
+            }
+            return ResponseBody.fromString(
+              jsonEncode(server[ep]),
+              200,
+              headers: headers,
+            );
+          });
+        addTearDown(() {
+          dio.close(force: true);
+          cache.clear();
+          App.isInitialized = initialized;
+        });
+        // The first run cached the old lists a while ago.
+        for (final ep in ['c2', 'c3']) {
+          await dio.getUri<String>(listUri(ep));
+          final fresh = cache.getCache(listUri(ep))!;
+          cache.setCache(
+            NetworkCache(
+              uri: fresh.uri,
+              requestHeaders: fresh.requestHeaders,
+              responseHeaders: fresh.responseHeaders,
+              data: fresh.data,
+              time: DateTime.now().subtract(const Duration(minutes: 10)),
+              size: fresh.size,
+              responseType: fresh.responseType,
+            ),
+          );
+        }
+        methods.clear();
+      });
+
+      test('a failed task refetches the lists from the server', () async {
+        server = {
+          'c2': ['new-2a', 'new-2b'],
+          'c3': ['new-3a'],
+        };
+        final task = failedTask(loadComicPages: loadThroughCache);
+        await resumeAfterFailure(task);
+        expect(methods, ['GET chapter=c2', 'GET chapter=c3']);
+        expect(imageRequests, ['new-2b', 'new-3a']);
+        expect(storage.completed, [same(task)]);
+      });
+
+      test('an ordinary resume keeps the cached responses', () async {
+        final task = failedTask(loadComicPages: loadThroughCache);
+        task.resume();
+        await task.debugResumeFuture;
+        expect(methods, isEmpty);
+        expect(imageRequests, ['old-2b', 'old-3a']);
+        expect(cache.getCache(listUri('c2')), isNotNull);
+        expect(cache.getCache(listUri('c3')), isNotNull);
+      });
+    });
+  });
 
   test(
     'paused chapter-list fetch cannot publish a partial list to a newer run',
@@ -1531,8 +1824,9 @@ void main() {
       await previous;
       await task.pendingRun;
       await manager.pendingDownloadTaskWrites;
-      expect(transfers, 2);
-      expect(transferPaths[0], transferPaths[1]);
+      // The completed archive is reused; only extraction runs again.
+      expect(transfers, 1);
+      expect(extractions, 2);
       expect(File(transferPaths[0]).parent.existsSync(), isFalse);
       expect(task.isError, isFalse);
       expect(task.isPaused, isTrue);
@@ -1824,6 +2118,119 @@ void main() {
     },
   );
 
+  group('restored image task output ownership', () {
+    const marker = '.venera-images-download';
+    late Directory root;
+    late _TaskStorage storage;
+
+    setUp(() {
+      root = Directory.systemTemp.createTempSync('image-output-owner-');
+      storage = _TaskStorage(root.path);
+    });
+    tearDown(() => root.deleteSync(recursive: true));
+
+    /// A task that created its output, saved one page and was stopped,
+    /// then restored from its JSON snapshot as after a restart.
+    Future<Map<String, dynamic>> stoppedSnapshot() async {
+      final thumbnail = StreamController<ImageDownloadProgress>();
+      final task = ImagesDownloadTask(
+        storage: storage,
+        source: ComicSource.find(sourceKey)!,
+        comicId: 'owned',
+        comic: _archiveComic(sourceKey, id: 'owned'),
+        loadThumbnail: (_, _) => thumbnail.stream,
+      );
+      task.resume();
+      await _waitFor(() => thumbnail.hasListener);
+      expect(task.path, '${root.path}/output');
+      File('${task.path}/0.png').writeAsBytesSync([1]);
+      task.pause();
+      await task.pendingCleanup;
+      await task.debugResumeFuture;
+      task.dispose();
+      await thumbnail.close();
+      return jsonDecode(jsonEncode(task.toJson())) as Map<String, dynamic>;
+    }
+
+    Future<String?> cancelRestored(Map<String, dynamic> json) async {
+      final restored = ImagesDownloadTask.fromJson(storage, json)!;
+      restored.cancel();
+      await restored.pendingCleanup;
+      expect(storage.removed, [same(restored)]);
+      return restored.retainedOutputPath;
+    }
+
+    test('cancel after restart deletes the output the task created', () async {
+      final json = await stoppedSnapshot();
+      expect(json['outputOwned'], isTrue);
+      final output = Directory(json['path'] as String);
+      expect(
+        File('${output.path}/$marker').readAsStringSync(),
+        json['ownerToken'],
+      );
+      expect(await cancelRestored(json), isNull);
+      expect(output.existsSync(), isFalse);
+      // Large folders go through the library's background removal.
+      expect(storage.discarded, [output.path]);
+    });
+
+    test('snapshots without ownership keep the output', () async {
+      final json = await stoppedSnapshot()
+        ..remove('ownerToken')
+        ..remove('outputOwned');
+      expect(await cancelRestored(json), json['path']);
+      expect(File('${json['path']}/0.png').existsSync(), isTrue);
+      expect(storage.discarded, isEmpty);
+    });
+
+    test('a marker held by another token keeps the output', () async {
+      final json = await stoppedSnapshot();
+      File('${json['path']}/$marker').writeAsStringSync('0' * 32);
+      await cancelRestored(json);
+      expect(File('${json['path']}/0.png').existsSync(), isTrue);
+    });
+
+    test('a claimed folder without the marker is never deleted', () async {
+      final json = await stoppedSnapshot();
+      final other = Directory('${root.path}/other')..createSync();
+      final sentinel = File('${other.path}/sentinel')..writeAsStringSync('x');
+      json['path'] = other.path;
+      await cancelRestored(json);
+      expect(sentinel.readAsStringSync(), 'x');
+      expect(File('${root.path}/output/0.png').existsSync(), isTrue);
+    });
+
+    test('completion removes the marker', () async {
+      final bytes = base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6uwAAAABJRU5ErkJggg==',
+      );
+      Stream<ImageDownloadProgress> image() => Stream.value(
+        ImageDownloadProgress(
+          currentBytes: bytes.length,
+          totalBytes: bytes.length,
+          imageBytes: bytes,
+        ),
+      );
+      final task = ImagesDownloadTask(
+        storage: storage,
+        source: _testSource(
+          sourceKey,
+          loadComicPages: (_, _) async => Res(['page.png']),
+        ),
+        comicId: 'complete',
+        comic: _archiveComic(sourceKey, id: 'complete'),
+        loadThumbnail: (_, _) => image(),
+        loadImage: (_, _, _, _) => image(),
+      );
+      task.resume();
+      await _waitFor(() => storage.completed.isNotEmpty);
+      await task.debugResumeFuture;
+      expect(File('${task.path}/0.png').existsSync(), isTrue);
+      expect(File('${task.path}/$marker').existsSync(), isFalse);
+      task.dispose();
+    });
+  });
+
   test('ImagesDownloadTask cancel before path stops speed recorder', () async {
     final dataDir = Directory.systemTemp.createTempSync(
       'venera-download-data-',
@@ -2018,6 +2425,21 @@ class _ArchiveDownloader extends FileDownloader {
   }
 }
 
+class _ListAdapter implements HttpClientAdapter {
+  _ListAdapter(this.respond);
+  final ResponseBody Function(RequestOptions) respond;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async => respond(options);
+
+  @override
+  void close({bool force = false}) {}
+}
+
 class _TaskStorage implements DownloadTaskStorage {
   _TaskStorage(this.path);
   @override
@@ -2025,6 +2447,7 @@ class _TaskStorage implements DownloadTaskStorage {
   Future<void> Function()? afterAllocate;
   final completed = <DownloadTask>[];
   final removed = <DownloadTask>[];
+  final failed = <DownloadTask>[];
   int saves = 0;
   LocalComic? comic;
 
@@ -2052,5 +2475,16 @@ class _TaskStorage implements DownloadTaskStorage {
   }
 
   @override
+  void failTask(DownloadTask task) => failed.add(task);
+
+  @override
   void removeTask(DownloadTask task) => removed.add(task);
+
+  final discarded = <String>[];
+
+  @override
+  Future<void> discardDownloadOutput(Directory directory) {
+    discarded.add(directory.path);
+    return directory.delete(recursive: true);
+  }
 }

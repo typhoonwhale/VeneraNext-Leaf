@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:isolate';
 
+import 'package:path/path.dart' as p;
+
 import 'package:flutter_saf/flutter_saf.dart';
 import 'package:venera_next/features/comic_storage/comic_storage.dart';
 import 'package:venera_next/foundation/app.dart';
@@ -14,10 +16,25 @@ import 'package:venera_next/network/file_downloader.dart';
 import 'package:venera_next/foundation/file_interaction.dart';
 import 'package:zip_flutter/zip_flutter.dart';
 
+import 'download_output_marker.dart';
 import 'download_task.dart';
 import 'download_retry.dart';
 
+/// Persisted stage of an archive task. [extracting] means the archive was
+/// fully downloaded; extraction may not have started or may be partial.
+enum ArchiveDownloadPhase { downloading, extracting }
+
 class ArchiveDownloadTask extends DownloadTask {
+  /// Name prefix of task workspaces created directly under [App.cachePath].
+  static const workspacePrefix = 'archive-download-';
+
+  /// Holds [_ownerToken] inside a workspace this task created.
+  static const _workspaceMarker = '.owner';
+
+  /// Holds [_ownerToken] inside an output directory this task created, until
+  /// the comic is registered. Dot files are ignored by comic storage.
+  static const _outputMarker = DownloadOwnerToken.archiveMarker;
+
   final String archiveUrl;
 
   final ComicDetails comic;
@@ -49,6 +66,15 @@ class ArchiveDownloadTask extends DownloadTask {
   Future<void>? _cleanup;
   Directory? _workspace;
   String? _ownedOutputPath;
+  String _ownerToken = DownloadOwnerToken.create();
+
+  /// Whether this task created [path]; persisted so a restored task can
+  /// verify the claim with [_outputMarker] before deleting anything there.
+  bool _outputOwned = false;
+  ArchiveDownloadPhase _phase = ArchiveDownloadPhase.downloading;
+
+  /// Size of the completed archive, recorded when entering extraction.
+  int? _archiveBytes;
   final DownloadTaskStorage _storage;
   DownloadRetry? _retry;
 
@@ -60,25 +86,55 @@ class ArchiveDownloadTask extends DownloadTask {
     if (_isRunning) _retry?.wake();
   }
 
-  Future<void> _clearOwnedOutput() async {
-    final outputPath = _ownedOutputPath;
-    if (outputPath == null) return;
+  /// [outputPath] is the task's output when it was canceled.
+  Future<void> _clearOwnedOutput(String? outputPath) async {
+    final owned = _ownedOutputPath;
     // A successfully registered comic owns its files, even if cancellation
     // arrived while a prior run was finishing. Use the original manager.
     if (_storage.find(id, comicType) != null) {
       _ownedOutputPath = null;
       return;
     }
-    final directory = Directory(outputPath);
-    if (await directory.exists()) await directory.delete(recursive: true);
+    if (owned != null && _ownsOutput(owned)) {
+      // Includes pages of an interrupted extraction.
+      await _storage.discardDownloadOutput(Directory(owned));
+    } else if (outputPath != null &&
+        FileSystemEntity.typeSync(outputPath, followLinks: false) !=
+            FileSystemEntityType.notFound) {
+      // No ownership evidence, e.g. an older snapshot: keep the files and
+      // report the folder.
+      _retainedOutputPath = outputPath;
+    }
     _ownedOutputPath = null;
+  }
+
+  String? _retainedOutputPath;
+
+  @override
+  String? get retainedOutputPath => _retainedOutputPath;
+
+  bool _extracting = false;
+
+  @override
+  bool get isExtracting => _extracting;
+
+  @override
+  void relocateOutput(String from, String to) {
+    final previous = path;
+    super.relocateOutput(from, to);
+    if (previous != null && _ownedOutputPath == previous) {
+      _ownedOutputPath = path;
+    }
   }
 
   Future<void> _clearWorkspace() async {
     final workspace = _workspace;
     if (workspace == null) return;
     try {
-      if (await workspace.exists()) await workspace.delete(recursive: true);
+      // Never remove a workspace whose marker no longer holds this token.
+      if (_ownsWorkspace(workspace.path)) {
+        await workspace.delete(recursive: true);
+      }
       if (identical(_workspace, workspace)) _workspace = null;
     } catch (error, stack) {
       // A completed database commit remains successful if temporary cleanup
@@ -124,10 +180,12 @@ class ArchiveDownloadTask extends DownloadTask {
     _message = message;
     notifyListeners();
     Log.error("Download", message);
+    _storage.failTask(this);
   }
 
   @override
   void cancel() {
+    final outputPath = path;
     _stop();
     path = null;
     _storage.removeTask(this);
@@ -135,8 +193,9 @@ class ArchiveDownloadTask extends DownloadTask {
     _cleanup =
         () async {
           await stopped;
+          // SAF staging lives inside the workspace.
           await _clearWorkspace();
-          await _clearOwnedOutput();
+          await _clearOwnedOutput(outputPath);
         }().catchError((Object error, StackTrace stack) {
           Log.error('Download', error, stack);
         });
@@ -162,6 +221,9 @@ class ArchiveDownloadTask extends DownloadTask {
     _stop();
     super.dispose();
   }
+
+  @override
+  String get ownerToken => _ownerToken;
 
   @override
   String get message => isWaitingToRetry
@@ -216,6 +278,21 @@ class ArchiveDownloadTask extends DownloadTask {
     if (!_isCurrent(generation)) return;
     notifyListeners();
     if (!_isCurrent(generation)) return;
+    if (path != null && _outputOwned && _ownedOutputPath != path) {
+      // A restored claim of ownership is trusted only with its marker.
+      if (_ownsOutput(path!)) {
+        _ownedOutputPath = path;
+      } else if (FileSystemEntity.typeSync(path!, followLinks: false) ==
+          FileSystemEntityType.notFound) {
+        path = null;
+        _outputOwned = false;
+      } else {
+        _setError(
+          "Cannot verify that the download folder belongs to this task: $path",
+        );
+        return;
+      }
+    }
     if (path == null) {
       final manager = _storage;
       final allocation = await manager.allocateDownloadDirectory(
@@ -224,22 +301,91 @@ class ArchiveDownloadTask extends DownloadTask {
         comic.title,
       );
       final dir = allocation.directory;
+      _outputOwned = allocation.isNew;
       if (allocation.isNew) {
         _ownedOutputPath = dir.path;
       }
       if (!_isCurrent(generation)) return;
       if (!(await dir.exists())) await dir.create();
+      if (allocation.isNew) {
+        await DownloadOwnerToken.write(
+          FilePath.join(dir.path, _outputMarker),
+          _ownerToken,
+        );
+      }
       if (!_isCurrent(generation)) return;
       path = dir.path;
     }
     final outputPath = path!;
-    // Retain this task-owned workspace across pause/resume for range-download
-    // sidecars, but never share it with another task or task instance.
-    final workspace = _workspace ??= await Directory(
-      App.cachePath,
-    ).createTemp('archive-download-');
+    // Retain this task-owned workspace across pause/resume and restarts for
+    // range-download sidecars, but never share it with another task.
+    var workspace = _workspace;
+    if (workspace != null && !_ownsWorkspace(workspace.path)) {
+      // Removed by the system or replaced: do not trust what is there.
+      workspace = _workspace = null;
+    }
+    if (workspace == null) {
+      _phase = ArchiveDownloadPhase.downloading;
+      _archiveBytes = null;
+      workspace = _workspace = await Directory(
+        App.cachePath,
+      ).createTemp(workspacePrefix);
+      await DownloadOwnerToken.write(
+        FilePath.join(workspace.path, _workspaceMarker),
+        _ownerToken,
+      );
+    }
+    if (!_isCurrent(generation)) return;
+    await _storage.saveCurrentDownloadingTasks();
     if (!_isCurrent(generation)) return;
     final archiveFile = File(FilePath.join(workspace.path, 'download.zip'));
+    if (!(_phase == ArchiveDownloadPhase.extracting &&
+        await _isDownloaded(archiveFile))) {
+      if (_phase == ArchiveDownloadPhase.extracting) {
+        _phase = ArchiveDownloadPhase.downloading;
+        _archiveBytes = null;
+        await archiveFile.deleteIgnoreError();
+        await File('${archiveFile.path}.download').deleteIgnoreError();
+        await _storage.saveCurrentDownloadingTasks();
+        if (!_isCurrent(generation)) return;
+      }
+      if (!await _download(generation, archiveFile)) return;
+    }
+    // Extraction may have been interrupted before; never leave partial pages
+    // from that attempt, but only clear an output this task verifiably owns.
+    if (_ownedOutputPath == outputPath) {
+      await _clearOutputContents(outputPath);
+      if (!_isCurrent(generation)) return;
+    }
+    _extracting = true;
+    try {
+      await _extract(archiveFile.path, outputPath);
+    } catch (error) {
+      if (_isCurrent(generation)) {
+        // The archive may be damaged; the next run downloads it again.
+        _phase = ArchiveDownloadPhase.downloading;
+        _archiveBytes = null;
+        _setError("Failed to extract archive: $error");
+        unawaited(_storage.saveCurrentDownloadingTasks());
+      }
+      return;
+    } finally {
+      _extracting = false;
+    }
+    if (!_isCurrent(generation)) return;
+    _storage.completeTask(this);
+    _isRunning = false;
+    _speed = 0;
+    // Keep ownership evidence and the archive until the comic is registered;
+    // a suspended queue does not register it.
+    if (_storage.find(id, comicType) == null) return;
+    _ownedOutputPath = null;
+    await File(FilePath.join(outputPath, _outputMarker)).deleteIgnoreError();
+    await _clearWorkspace();
+  }
+
+  /// Returns whether the run may continue to extraction.
+  Future<bool> _download(int generation, File archiveFile) async {
     Log.info("Download", "Downloading $archiveUrl");
     final isDownloaded = await _retry!.run(() async {
       final downloader = _downloader = _createDownloader(
@@ -265,25 +411,92 @@ class ArchiveDownloadTask extends DownloadTask {
         if (_isCurrent(generation)) _speed = 0;
       }
     });
-    if (!_isCurrent(generation)) return;
+    if (!_isCurrent(generation)) return false;
     if (!isDownloaded) {
       _setError("Error: Download failed");
-      return;
+      return false;
     }
+    _archiveBytes = await archiveFile.exists()
+        ? await archiveFile.length()
+        : null;
+    _phase = ArchiveDownloadPhase.extracting;
+    await _storage.saveCurrentDownloadingTasks();
+    return _isCurrent(generation);
+  }
+
+  /// A completed download has no range sidecar and keeps its recorded size.
+  Future<bool> _isDownloaded(File archive) async {
+    final bytes = _archiveBytes;
+    return bytes != null &&
+        FileSystemEntity.typeSync(archive.path, followLinks: false) ==
+            FileSystemEntityType.file &&
+        await archive.length() == bytes &&
+        !await File('${archive.path}.download').exists();
+  }
+
+  static Future<void> _clearOutputContents(String outputPath) async {
+    final entries = await Directory(
+      outputPath,
+    ).list(followLinks: false).toList();
+    for (final entry in entries) {
+      if (p.basename(entry.path) == _outputMarker) continue;
+      await entry.delete(recursive: entry is Directory);
+    }
+  }
+
+  /// A workspace is this task's only if it is a real directory directly under
+  /// the cache root, named with [workspacePrefix] and marked with its token.
+  bool _ownsWorkspace(String workspacePath) {
     try {
-      await _extract(archiveFile.path, outputPath);
-    } catch (error) {
-      if (_isCurrent(generation)) {
-        _setError("Failed to extract archive: $error");
-      }
-      return;
+      final name = p.basename(workspacePath);
+      return name.startsWith(workspacePrefix) &&
+          p.equals(p.dirname(workspacePath), App.cachePath) &&
+          FileSystemEntity.typeSync(workspacePath, followLinks: false) ==
+              FileSystemEntityType.directory &&
+          DownloadOwnerToken.isHeldBy(
+            FilePath.join(workspacePath, _workspaceMarker),
+            _ownerToken,
+          );
+    } catch (error, stack) {
+      Log.error('Download', error, stack);
+      return false;
     }
-    if (!_isCurrent(generation)) return;
-    _storage.completeTask(this);
-    _ownedOutputPath = null;
-    _isRunning = false;
-    _speed = 0;
-    await _clearWorkspace();
+  }
+
+  /// An output is this task's only if it is a real directory directly under
+  /// the library root that still carries this task's marker.
+  bool _ownsOutput(String outputPath) => DownloadOwnerToken.ownsOutput(
+    root: _storage.path,
+    outputPath: outputPath,
+    marker: _outputMarker,
+    token: _ownerToken,
+  );
+
+  /// Delete workspaces under [cachePath] that no task in [tasks] references.
+  /// Only real directories named with [workspacePrefix] are considered.
+  static void removeOrphanWorkspaces(
+    String cachePath,
+    Iterable<DownloadTask> tasks,
+  ) {
+    final referenced = {
+      for (final task in tasks.whereType<ArchiveDownloadTask>())
+        if (task._workspace case final workspace?) p.basename(workspace.path),
+    };
+    final root = Directory(cachePath);
+    if (!root.existsSync()) return;
+    for (final entry in root.listSync(followLinks: false)) {
+      final name = p.basename(entry.path);
+      if (entry is! Directory ||
+          !name.startsWith(workspacePrefix) ||
+          referenced.contains(name)) {
+        continue;
+      }
+      try {
+        entry.deleteSync(recursive: true);
+      } catch (error, stack) {
+        Log.error('Download', error, stack);
+      }
+    }
   }
 
   static Future<void> _extractArchive(String archive, String outDir) async {
@@ -320,21 +533,79 @@ class ArchiveDownloadTask extends DownloadTask {
       "archiveUrl": archiveUrl,
       "comic": comic.toJson(),
       "path": path,
+      "ownerToken": _ownerToken,
+      "workspace": _workspace?.path,
+      "outputOwned": _outputOwned,
+      "phase": _phase.name,
+      "archiveBytes": _archiveBytes,
     };
   }
 
+  /// Returns null for other task kinds, malformed entries, and tasks whose
+  /// comic was already registered before the snapshot was rewritten.
+  /// Snapshots without an owner token restore without any ownership claims.
   static ArchiveDownloadTask? fromJson(
     DownloadTaskStorage storage,
-    Map<String, dynamic> json,
-  ) {
+    Map<String, dynamic> json, {
+    FileDownloader Function(String, String)? createDownloader,
+    Future<void> Function(String, String)? extractArchive,
+  }) {
     if (json["type"] != "ArchiveDownloadTask") {
       return null;
     }
-    return ArchiveDownloadTask(
-      json["archiveUrl"],
-      ComicDetails.fromJson(json["comic"]),
-      storage: storage,
-    )..path = json["path"];
+    try {
+      final url = json["archiveUrl"];
+      final comicJson = json["comic"];
+      final path = json["path"];
+      if (url is! String ||
+          comicJson is! Map<String, dynamic> ||
+          (path != null && path is! String)) {
+        return null;
+      }
+      final comic = ComicDetails.fromJson(comicJson);
+      if (ComicSource.find(comic.sourceKey) == null) return null;
+      final task = ArchiveDownloadTask(
+        url,
+        comic,
+        storage: storage,
+        createDownloader: createDownloader,
+        extractArchive: extractArchive,
+      )..path = path as String?;
+      final token = json["ownerToken"];
+      if (token is! String || !DownloadOwnerToken.pattern.hasMatch(token)) {
+        return task;
+      }
+      task._ownerToken = token;
+      final workspace = json["workspace"];
+      if (workspace is String && task._ownsWorkspace(workspace)) {
+        task._workspace = Directory(workspace);
+        final bytes = json["archiveBytes"];
+        if (json["phase"] == ArchiveDownloadPhase.extracting.name &&
+            bytes is int) {
+          task._phase = ArchiveDownloadPhase.extracting;
+          task._archiveBytes = bytes;
+        }
+      }
+      if (path is String && json["outputOwned"] == true) {
+        task._outputOwned = true;
+        final registered = storage.find(task.id, task.comicType);
+        if (registered != null && registered.directory == p.basename(path)) {
+          // Registered in the folder this task created: already complete.
+          try {
+            final marker = File(FilePath.join(path, _outputMarker));
+            if (marker.existsSync()) marker.deleteSync();
+          } catch (error, stack) {
+            Log.error('Download', error, stack);
+          }
+          return null;
+        }
+        if (task._ownsOutput(path)) task._ownedOutputPath = path;
+      }
+      return task;
+    } catch (error, stack) {
+      Log.error('Download', error, stack);
+      return null;
+    }
   }
 
   String _findCover() {

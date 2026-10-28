@@ -266,6 +266,70 @@ void main() {
     },
   );
 
+  testWidgets('directory import always copies into the library', (
+    tester,
+  ) async {
+    final root = Directory.systemTemp.createTempSync('import-copy-only-');
+    App.dataPath = root.path;
+    App.cachePath = root.path;
+    LocalManager.current?.dispose();
+    LocalManager(initializeSources: () async {});
+    final manager = LocalManager();
+    await tester.runAsync(manager.init);
+    final source = Directory('${root.path}/Original')..createSync();
+    File('${source.path}/1.jpg').writeAsStringSync('page');
+    final task = await host(tester);
+    final calls = <String>[];
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    // Desktop pickers use file_selector; Apple platforms use the app channel.
+    const selector = MethodChannel('plugins.flutter.io/file_selector');
+    const native = MethodChannel('venera/method_channel');
+    messenger.setMockMethodCallHandler(selector, (call) async {
+      calls.add(call.method);
+      return source.path;
+    });
+    messenger.setMockMethodCallHandler(native, (call) async {
+      calls.add(call.method);
+      return call.method == 'getDirectoryPath'
+          ? {'path': source.path, 'token': 'token'}
+          : null;
+    });
+    try {
+      final result = await tester.runAsync(
+        () => task.run(
+          (operation) => ImportComic(
+            service: const ComicImportService(
+              localManager: LocalManager.new,
+              favoritesManager: _favoritesForView,
+            ),
+            presentation: ImportComicPresentation.forTask(task),
+          ).directory(true, operation),
+        ),
+      );
+      expect(result, isTrue);
+      final imported = manager.findByName('Original')!;
+      expect(imported.baseDir, isNot(source.path));
+      expect(
+        Directory(imported.baseDir).parent.resolveSymbolicLinksSync(),
+        Directory(manager.path).resolveSymbolicLinksSync(),
+      );
+      expect(File('${imported.baseDir}/1.jpg').readAsStringSync(), 'page');
+      expect(File('${source.path}/1.jpg').readAsStringSync(), 'page');
+      // Access to the picked folder is never kept beyond the copy.
+      expect(calls, isNot(contains('retainDirectoryAccessForSession')));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    } finally {
+      messenger.setMockMethodCallHandler(selector, null);
+      messenger.setMockMethodCallHandler(native, null);
+      await tester.pumpWidget(const SizedBox());
+      await tester.runAsync(() async => manager.pendingDownloadTaskWrites);
+      LocalManager.current?.dispose();
+      root.deleteSync(recursive: true);
+    }
+  });
+
   testWidgets('loading cleanup survives unmount and never adopts a new root', (
     tester,
   ) async {

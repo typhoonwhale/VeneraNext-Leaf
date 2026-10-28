@@ -34,6 +34,7 @@ import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 
 class MainActivity : FlutterFragmentActivity() {
+    private val applicationUpdateBridge by lazy { ApplicationUpdateBridge(this) }
     private val volumeSubscriptions = VolumeKeySubscriptions()
     private var volumeChannel: MethodChannel? = null
     private var downloadBridge: DownloadBridge? = null
@@ -106,6 +107,7 @@ class MainActivity : FlutterFragmentActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         GeneratedPluginRegistrant.registerWith(flutterEngine)
+        applicationUpdateBridge.attach(flutterEngine.dartExecutor.binaryMessenger)
         downloadBridge?.close()
         downloadBridge = DownloadBridge(
             this, flutterEngine.dartExecutor.binaryMessenger,
@@ -221,7 +223,14 @@ class MainActivity : FlutterFragmentActivity() {
         volumeChannel = null
     }
 
+    override fun onResume() {
+        super.onResume()
+        // A session confirmation received in the background is shown on return.
+        applicationUpdateBridge.resume()
+    }
+
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        applicationUpdateBridge.detach()
         downloadBridge?.close()
         downloadBridge = null
         clearVolumeChannel()
@@ -229,6 +238,7 @@ class MainActivity : FlutterFragmentActivity() {
     }
 
     override fun onDestroy() {
+        applicationUpdateBridge.detach()
         downloadBridge?.close()
         downloadBridge = null
         clearVolumeChannel()

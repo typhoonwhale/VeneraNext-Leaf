@@ -6,13 +6,15 @@ import 'package:venera_next/network/request_scope.dart';
 /// owns shared source checks; cancellation only retires this consumer's wait.
 class StartupUpdateCheck {
   StartupUpdateCheck({
-    required this.reserveCheck,
+    required this.reserveSourceCheck,
+    required this.reserveApplicationCheck,
     required this.checkSources,
     required this.checkApplication,
     required this.applicationCheckEnabled,
   });
 
-  final Future<bool> Function() reserveCheck;
+  final Future<bool> Function() reserveSourceCheck;
+  final Future<bool> Function() reserveApplicationCheck;
   final Future<void> Function() checkSources;
   final Future<void> Function(RequestScope) checkApplication;
   final bool Function() applicationCheckEnabled;
@@ -32,20 +34,29 @@ class StartupUpdateCheck {
     return done.future;
   }
 
-  Future<void> _run() async {
+  Future<void> _run() => Future.wait([_runSources(), _runApplication()]);
+
+  Future<void> _runSources() async {
     try {
       _scope.check();
       // Already admitted persistence must actually finish before stores close.
-      final reserved = await reserveCheck();
+      final reserved = await reserveSourceCheck();
       _scope.check();
-      if (!reserved) return;
-      await _scope.run(checkSources);
-      _scope.check();
-      if (applicationCheckEnabled()) {
-        await checkApplication(_scope);
-      }
+      if (reserved) await _scope.run(checkSources);
     } on RequestCancelled {
-      // Closing this consumer is not a failed or successful update check.
+      // The source service owns and drains the shared request on host shutdown.
+    }
+  }
+
+  Future<void> _runApplication() async {
+    try {
+      _scope.check();
+      if (!applicationCheckEnabled()) return;
+      final reserved = await reserveApplicationCheck();
+      _scope.check();
+      if (reserved) await checkApplication(_scope);
+    } on RequestCancelled {
+      // The application callback joins its accepted request before returning.
     }
   }
 

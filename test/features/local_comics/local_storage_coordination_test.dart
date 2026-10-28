@@ -26,24 +26,38 @@ void main() {
   });
 
   test(
-    'queued paused or active downloads protect migration and recovery',
+    'running downloads protect migration and recovery; paused ones move',
     () async {
       final task = _Task('queued');
       manager.restorePausedDownloads([task]);
       final oldPath = manager.path;
+      task.path = '$oldPath/queued';
+      Directory(task.path!).createSync();
+      File('${task.path}/1.jpg').writeAsStringSync('page');
       final destination = Directory('${root.path}/destination')..createSync();
       var scanned = false;
-      expect(await manager.setNewPath(destination.path), isNotNull);
+      manager.resumeDownload(task);
+      expect(task.isPaused, isFalse);
+      expect(
+        await manager.setNewPath(destination.path),
+        'Pause all downloads before changing the local library.',
+      );
       await expectLater(
         manager.runWithExclusiveStorage(() async => scanned = true),
         throwsA(isA<LocalComicStorageBusy>()),
       );
-      manager.resumeDownload(task);
-      expect(await manager.setNewPath(destination.path), isNotNull);
       expect(manager.path, oldPath);
       expect(destination.listSync(), isEmpty);
       expect(scanned, isFalse);
       expect(task.isPaused, isFalse);
+
+      await manager.pauseDownload(task, byUser: true);
+      expect(await manager.setNewPath(destination.path), isNull);
+      expect(manager.path, destination.path);
+      expect(task.path, '${destination.path}/queued');
+      expect(File('${task.path}/1.jpg').readAsStringSync(), 'page');
+      expect(Directory('$oldPath/queued').existsSync(), isFalse);
+      expect(manager.downloadState(task), DownloadTaskState.paused);
     },
   );
 

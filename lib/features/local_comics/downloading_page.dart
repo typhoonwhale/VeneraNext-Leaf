@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:venera_next/components/button.dart';
@@ -10,6 +12,7 @@ import 'package:venera_next/features/local_comics/local.dart';
 import 'package:venera_next/foundation/file_system.dart';
 import 'package:venera_next/foundation/translations.dart';
 import 'package:venera_next/foundation/widget_utils.dart';
+import 'package:venera_next/routing/app_navigation.dart';
 
 class DownloadingPage extends StatefulWidget {
   const DownloadingPage({super.key});
@@ -18,36 +21,60 @@ class DownloadingPage extends StatefulWidget {
   State<DownloadingPage> createState() => _DownloadingPageState();
 }
 
-class _DownloadingPageState extends State<DownloadingPage> {
-  DownloadTask? firstTask;
+/// Progress and speed reach the screen at most once per [interval], which
+/// keeps e-ink panels from refreshing every second. A state change refreshes
+/// at once and starts a new interval.
+class _RefreshThrottle {
+  _RefreshThrottle(this._refresh);
 
+  static const interval = Duration(seconds: 3);
+
+  final VoidCallback _refresh;
+  Timer? _cooldown;
+  bool _pending = false;
+
+  void progress() {
+    if (_cooldown != null) {
+      _pending = true;
+    } else {
+      now();
+    }
+  }
+
+  void now() {
+    _pending = false;
+    _cooldown?.cancel();
+    _cooldown = Timer(interval, () {
+      _cooldown = null;
+      if (_pending) now();
+    });
+    _refresh();
+  }
+
+  void dispose() {
+    _cooldown?.cancel();
+    _cooldown = null;
+  }
+}
+
+/// Rebuilds only for queue changes; each task's progress is handled by its
+/// own tile and the running speed by the top bar.
+class _DownloadingPageState extends State<DownloadingPage> {
   late final LocalManager manager = LocalManager();
 
   @override
   void initState() {
     super.initState();
     manager.addListener(update);
-    _syncFirstTask();
   }
 
   @override
   void dispose() {
     manager.removeListener(update);
-    firstTask?.removeListener(update);
     super.dispose();
   }
 
-  void _syncFirstTask() {
-    final currentFirstTask = manager.downloadingTasks.firstOrNull;
-    if (!identical(currentFirstTask, firstTask)) {
-      firstTask?.removeListener(update);
-      firstTask = currentFirstTask;
-      firstTask?.addListener(update);
-    }
-  }
-
   void update() {
-    _syncFirstTask();
     if (mounted) {
       setState(() {});
     }
@@ -55,33 +82,114 @@ class _DownloadingPageState extends State<DownloadingPage> {
 
   @override
   Widget build(BuildContext context) {
+    final normal = <DownloadTask>[];
+    final parked = <DownloadTask>[];
+    for (final task in manager.downloadingTasks) {
+      (manager.downloadState(task) == DownloadTaskState.normal
+              ? normal
+              : parked)
+          .add(task);
+    }
+    final items = <Widget>[
+      _DownloadTopBar(manager: manager),
+      if (normal.isNotEmpty) _buildHeader("Downloading / Queued".tl),
+      for (final task in normal) _buildTile(task, DownloadTaskState.normal),
+      if (parked.isNotEmpty) _buildHeader("Paused / Failed".tl),
+      for (final task in parked) _buildTile(task, manager.downloadState(task)),
+    ];
     return PopUpWidgetScaffold(
       title: "",
       body: ListView.builder(
-        itemCount: manager.downloadingTasks.length + 1,
-        itemBuilder: (BuildContext context, int i) {
-          if (i == 0) {
-            return buildTop();
-          }
-          i--;
-
-          return _DownloadTaskTile(
-            key: ValueKey(manager.downloadingTasks[i]),
-            task: manager.downloadingTasks[i],
-            manager: manager,
-          );
-        },
+        itemCount: items.length,
+        itemBuilder: (BuildContext context, int i) => items[i],
       ),
     );
   }
 
-  Widget buildTop() {
-    int speed = 0;
-    if (manager.downloadingTasks.isNotEmpty) {
-      speed = manager.downloadingTasks.first.speed;
+  Widget _buildHeader(String text) => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+    child: Text(text, style: ts.s14.bold),
+  );
+
+  Widget _buildTile(DownloadTask task, DownloadTaskState state) =>
+      _DownloadTaskTile(
+        key: ValueKey(task),
+        task: task,
+        state: state,
+        queued:
+            state == DownloadTaskState.normal &&
+            !identical(task, manager.activeDownloadTask),
+        manager: manager,
+      );
+}
+
+class _DownloadTopBar extends StatefulWidget {
+  const _DownloadTopBar({required this.manager});
+
+  final LocalManager manager;
+
+  @override
+  State<_DownloadTopBar> createState() => _DownloadTopBarState();
+}
+
+class _DownloadTopBarState extends State<_DownloadTopBar> {
+  LocalManager get manager => widget.manager;
+  DownloadTask? activeTask;
+  late final _throttle = _RefreshThrottle(() {
+    if (mounted) setState(() {});
+  });
+  (DownloadTask?, bool, bool)? _shown;
+
+  @override
+  void initState() {
+    super.initState();
+    manager.addListener(_onQueueChanged);
+    _syncActiveTask();
+  }
+
+  @override
+  void dispose() {
+    manager.removeListener(_onQueueChanged);
+    activeTask?.removeListener(_onTaskChanged);
+    _throttle.dispose();
+    super.dispose();
+  }
+
+  void _syncActiveTask() {
+    final current = manager.activeDownloadTask;
+    if (!identical(current, activeTask)) {
+      activeTask?.removeListener(_onTaskChanged);
+      activeTask = current;
+      activeTask?.addListener(_onTaskChanged);
     }
-    var first = manager.downloadingTasks.firstOrNull;
+  }
+
+  void _onQueueChanged() {
+    _syncActiveTask();
+    _throttle.now();
+  }
+
+  (DownloadTask?, bool, bool) _state() => (
+    activeTask,
+    activeTask?.isPaused ?? true,
+    manager.isDownloadResumePending,
+  );
+
+  /// Only the speed changes without a state change.
+  void _onTaskChanged() {
+    if (_state() != _shown) {
+      _throttle.now();
+    } else {
+      _throttle.progress();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    _shown = _state();
+    final active = manager.activeDownloadTask;
     final resumePending = manager.isDownloadResumePending;
+    final idle = active == null || (active.isPaused && !resumePending);
     return Container(
       constraints: const BoxConstraints(minHeight: 48),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -99,40 +207,48 @@ class _DownloadingPageState extends State<DownloadingPage> {
         spacing: 12,
         runSpacing: 8,
         children: [
-          if (first?.isError == true)
-            Text("Error".tl, style: ts.s18.bold)
-          else if (first?.isPaused == true && !resumePending)
+          if (idle)
             Text("Paused".tl, style: ts.s18.bold)
           else
-            Text("${bytesToReadableString(speed)}/s", style: ts.s18.bold),
-          if (!resumePending &&
-              (first?.isPaused == true || first?.isError == true))
-            OutlinedButton(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.play_arrow, size: 18),
-                  const SizedBox(width: 4),
-                  Text("Start".tl),
-                ],
-              ),
-              onPressed: () {
-                manager.resumeDownload(first!);
-              },
-            )
-          else if (first != null)
-            OutlinedButton(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.pause, size: 18),
-                  const SizedBox(width: 4),
-                  Text("Pause".tl),
-                ],
-              ),
-              onPressed: () {
-                manager.pauseDownload(first);
-              },
+            Text(
+              "${bytesToReadableString(active.speed)}/s",
+              style: ts.s18.bold,
+            ),
+          if (active != null)
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                // Normal tasks can be idle after a system pause or a
+                // startup that did not resume them.
+                if (idle)
+                  OutlinedButton(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.play_arrow, size: 18),
+                        const SizedBox(width: 4),
+                        Text("Start".tl),
+                      ],
+                    ),
+                    onPressed: () {
+                      manager.resumeDownload(active);
+                    },
+                  ),
+                OutlinedButton(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.pause, size: 18),
+                      const SizedBox(width: 4),
+                      Text("Pause all".tl),
+                    ],
+                  ),
+                  onPressed: () {
+                    manager.pauseAllDownloads();
+                  },
+                ),
+              ],
             ),
         ],
       ),
@@ -143,11 +259,17 @@ class _DownloadingPageState extends State<DownloadingPage> {
 class _DownloadTaskTile extends StatefulWidget {
   const _DownloadTaskTile({
     required this.task,
+    required this.state,
+    required this.queued,
     required this.manager,
     super.key,
   });
 
   final DownloadTask task;
+  final DownloadTaskState state;
+
+  /// A normal task waiting behind the first normal task.
+  final bool queued;
   final LocalManager manager;
 
   @override
@@ -156,6 +278,10 @@ class _DownloadTaskTile extends StatefulWidget {
 
 class _DownloadTaskTileState extends State<_DownloadTaskTile> {
   late DownloadTask task;
+  late final _throttle = _RefreshThrottle(() {
+    if (mounted) setState(() {});
+  });
+  (bool, bool, bool, String, String?)? _shown;
 
   @override
   void initState() {
@@ -167,6 +293,7 @@ class _DownloadTaskTileState extends State<_DownloadTaskTile> {
   @override
   void dispose() {
     task.removeListener(update);
+    _throttle.dispose();
     super.dispose();
   }
 
@@ -180,12 +307,29 @@ class _DownloadTaskTileState extends State<_DownloadTaskTile> {
     }
   }
 
+  (bool, bool, bool, String, String?) _state() => (
+    task.isPaused,
+    task.isError,
+    task.isWaitingToRetry,
+    task.title,
+    task.cover,
+  );
+
+  /// Progress, speed and progress messages change without a state change.
   void update() {
-    setState(() {});
+    if (_state() != _shown) {
+      _throttle.now();
+    } else {
+      _throttle.progress();
+    }
   }
 
-  void _showErrorDetails() {
-    final message = widget.task.message;
+  /// A restored failure keeps its saved message, not the task's own.
+  String? get _errorMessage => widget.task.isError
+      ? widget.task.message
+      : widget.manager.downloadErrorMessage(widget.task);
+
+  void _showErrorDetails(String message) {
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
@@ -208,6 +352,24 @@ class _DownloadTaskTileState extends State<_DownloadTaskTile> {
 
   @override
   Widget build(BuildContext context) {
+    _shown = _state();
+    final state = widget.state;
+    final errorMessage = _errorMessage;
+    final String? status;
+    if (errorMessage != null) {
+      status = errorMessage;
+    } else if (state == DownloadTaskState.error) {
+      // Snapshots from older versions keep the state without a message.
+      status = "Error".tl;
+    } else if (state == DownloadTaskState.paused) {
+      status = "Paused".tl;
+    } else if (!widget.task.isPaused) {
+      status = widget.task.message;
+    } else if (widget.queued) {
+      status = "Queued".tl;
+    } else {
+      status = null;
+    }
     return Container(
       height:
           136 *
@@ -249,18 +411,62 @@ class _DownloadTaskTileState extends State<_DownloadTaskTile> {
                       ),
                     ),
                     MenuButton(
+                      // Entries are rebuilt with every progress update; the
+                      // open menu belongs to the task in its current state.
+                      identity: (widget.task, state),
                       entries: [
-                        if (widget.task.isError)
+                        if (errorMessage != null)
                           MenuEntry(
                             icon: Icons.error_outline,
                             text: 'Error details'.tl,
-                            onClick: _showErrorDetails,
+                            onClick: () => _showErrorDetails(errorMessage),
+                          ),
+                        if (state == DownloadTaskState.normal)
+                          MenuEntry(
+                            icon: Icons.pause,
+                            text: "Pause".tl,
+                            onClick: () {
+                              widget.manager.pauseDownload(
+                                widget.task,
+                                byUser: true,
+                              );
+                            },
                           ),
                         MenuEntry(
                           icon: Icons.close,
                           text: "Cancel".tl,
-                          onClick: () {
-                            widget.manager.cancelDownload(widget.task);
+                          onClick: () async {
+                            // This tile leaves with its task; report on the
+                            // page that stays.
+                            final messages =
+                                appNavigation.rootNavigatorKey.currentContext;
+                            void report(String message) {
+                              if (messages != null && messages.mounted) {
+                                messages.showMessage(message: message);
+                              }
+                            }
+
+                            // A suspended queue would ignore the request.
+                            if (widget.manager.isDownloadQueueSuspended) {
+                              report(
+                                'Local comic storage is busy. Try again later.'
+                                    .tl,
+                              );
+                              return;
+                            }
+                            try {
+                              final kept = await widget.manager.cancelDownload(
+                                widget.task,
+                              );
+                              if (kept != null) {
+                                report(
+                                  'The download folder was kept: @path'
+                                      .tlParams({'path': kept}),
+                                );
+                              }
+                            } catch (error) {
+                              report(error.toString().tl);
+                            }
                           },
                         ),
                         MenuEntry(
@@ -275,8 +481,23 @@ class _DownloadTaskTileState extends State<_DownloadTaskTile> {
                   ],
                 ),
                 const Spacer(),
-                if (!widget.task.isPaused || widget.task.isError)
-                  Text(widget.task.message, style: ts.s12, maxLines: 3),
+                Row(
+                  children: [
+                    Expanded(
+                      child: status == null
+                          ? const SizedBox()
+                          : Text(status, style: ts.s12, maxLines: 3),
+                    ),
+                    if (state != DownloadTaskState.normal)
+                      TextButton.icon(
+                        icon: const Icon(Icons.play_arrow, size: 18),
+                        label: Text("Continue".tl),
+                        onPressed: () {
+                          widget.manager.resumeDownload(widget.task);
+                        },
+                      ),
+                  ],
+                ),
                 const SizedBox(height: 4),
                 LinearProgressIndicator(value: widget.task.progress),
                 const SizedBox(height: 8),

@@ -67,6 +67,29 @@ class ReleaseVersionTest(unittest.TestCase):
                 self.assertFalse(MODULE.sync_changelog_heading(self.config))
                 self.assertEqual([path.read_bytes() for path in paths], before)
 
+    def test_release_version_accepts_zero_and_multi_digit_components(self):
+        for version in ("0.0.0", "1.18.10", "1.2.3-rc.0"):
+            with self.subTest(version=version):
+                self.config["version"] = version
+                self.write(self.config_path, json.dumps(self.config))
+                self.assertEqual(MODULE.load_release_config(), self.config)
+
+    def test_release_version_rejects_leading_zeroes_and_other_channels(self):
+        for version in (
+            "1.18.03",
+            "01.18.3",
+            "1.2.3-rc.01",
+            "1.2.3-rc.00",
+            "1.2.3-beta.1",
+        ):
+            with self.subTest(version=version):
+                self.config["version"] = version
+                self.write(self.config_path, json.dumps(self.config))
+                with self.assertRaisesRegex(
+                    MODULE.ReleaseVersionError, "version must look like"
+                ):
+                    MODULE.load_release_config()
+
     def test_pubspec_sync_preserves_bom_and_every_line_ending(self):
         for newline, bom, ending in itertools.product(
             ("\n", "\r\n"), (False, True), ("", "\n# footer\n")

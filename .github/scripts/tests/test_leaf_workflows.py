@@ -50,6 +50,15 @@ class LeafWorkflowTests(unittest.TestCase):
             '#!/bin/bash\n'
             'if [[ "${FAKE_VERIFY_FAIL:-}" == 1 ]]; then echo "DOES NOT VERIFY" >&2; exit 1; fi\n'
             'echo "Verifies"\n'
+            'if [[ -n "${FAKE_SCHEME_FORMAT:-}" ]]; then\n'
+            '  echo "V2 Signer: certificate DN: CN=Leaf"\n'
+            '  echo "V2 Signer: certificate SHA-256 digest: $FAKE_DIGEST_1"\n'
+            '  [[ -n "${FAKE_V3_DIGEST:-}" ]] && '
+            'echo "V3 Signer: certificate SHA-256 digest: $FAKE_V3_DIGEST"\n'
+            '  [[ -n "${FAKE_DIGEST_2:-}" ]] && '
+            'echo "V2 Signer #2: certificate SHA-256 digest: $FAKE_DIGEST_2"\n'
+            '  exit 0\n'
+            'fi\n'
             'echo "Signer #1 certificate DN: CN=Leaf"\n'
             'echo "Signer #1 certificate SHA-256 digest: $FAKE_DIGEST_1"\n'
             '[[ -n "${FAKE_DIGEST_2:-}" ]] && '
@@ -60,6 +69,13 @@ class LeafWorkflowTests(unittest.TestCase):
             ('match', {}, True), ('uppercase', {'FAKE_DIGEST_1': expected.upper()}, True),
             ('mismatch', {'FAKE_DIGEST_1': '0' * 64}, False),
             ('two signers', {'FAKE_DIGEST_2': expected}, False),
+            ('scheme format', {'FAKE_SCHEME_FORMAT': '1'}, True),
+            ('scheme format v2 and v3', {'FAKE_SCHEME_FORMAT': '1', 'FAKE_V3_DIGEST': expected}, True),
+            ('scheme format mismatch', {'FAKE_SCHEME_FORMAT': '1', 'FAKE_DIGEST_1': '0' * 64}, False),
+            ('scheme format conflicting schemes',
+             {'FAKE_SCHEME_FORMAT': '1', 'FAKE_V3_DIGEST': '0' * 64}, False),
+            ('scheme format two signers',
+             {'FAKE_SCHEME_FORMAT': '1', 'FAKE_DIGEST_2': expected}, False),
             ('verify fails', {'FAKE_VERIFY_FAIL': '1'}, False),
             ('no apksigner', {'NO_APKSIGNER': '1'}, False),
         ]

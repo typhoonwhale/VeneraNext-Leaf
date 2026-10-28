@@ -52,12 +52,29 @@ class _LocalComicsPageState extends State<LocalComicsPage> {
     if (keyword.isEmpty) {
       setState(() {
         comics = LocalManager().getComics(sortType);
+        _keepSelection();
       });
     } else {
       setState(() {
         comics = LocalManager().search(keyword);
+        _keepSelection();
       });
     }
+  }
+
+  /// A reload creates new comic objects; selections follow the same comic
+  /// to its new object and drop comics that no longer exist.
+  void _keepSelection() {
+    if (selectedComics.isEmpty) return;
+    final current = {for (final c in comics) (c.id, c.comicType): c};
+    final kept = <LocalComic, bool>{};
+    for (final selected in selectedComics.keys) {
+      final key = (selected.id, selected.comicType);
+      final comic =
+          current[key] ?? LocalManager().find(selected.id, selected.comicType);
+      if (comic != null) kept[comic] = true;
+    }
+    selectedComics = kept;
   }
 
   @override
@@ -127,26 +144,16 @@ class _LocalComicsPageState extends State<LocalComicsPage> {
 
   Widget buildMultiSelectMenu() {
     final selection = selectedComics.keys.toList();
+    List<(String, ComicType)> identities(Iterable<LocalComic> comics) => [
+      for (final c in comics) (c.id, c.comicType),
+    ];
+    final selected = identities(selection);
     bool currentSelection() =>
         mounted &&
         multiSelectMode &&
-        listEquals(selectedComics.keys.toList(), selection);
+        listEquals(identities(selectedComics.keys), selected);
     return MenuButton(
       entries: [
-        MenuEntry(
-          icon: Icons.delete_outline,
-          text: "Delete".tl,
-          onClick: () {
-            deleteComics(selectedComics.keys.toList()).then((value) {
-              if (value) {
-                setState(() {
-                  multiSelectMode = false;
-                  selectedComics.clear();
-                });
-              }
-            });
-          },
-        ),
         MenuEntry(
           icon: Icons.favorite_border,
           text: "Add to favorites".tl,
@@ -210,34 +217,50 @@ class _LocalComicsPageState extends State<LocalComicsPage> {
     });
   }
 
-  void invertSelection() {
-    setState(() {
-      comics.asMap().forEach((k, v) {
-        selectedComics[v] = !selectedComics.putIfAbsent(v, () => false);
+  void deleteSelected() {
+    if (selectedComics.isEmpty) return;
+    deleteComics(selectedComics.keys.toList()).then((result) {
+      if (result == null || !mounted) return;
+      setState(() {
+        selectedComics.removeWhere(
+          (selected, _) => result.deleted.any(
+            (c) => c.id == selected.id && c.comicType == selected.comicType,
+          ),
+        );
+        if (result.skipped.isEmpty) {
+          multiSelectMode = false;
+          selectedComics.clear();
+        }
       });
-      selectedComics.removeWhere((k, v) => !v);
+      if (result.skipped.isNotEmpty) {
+        context.showMessage(message: _skippedMessage(result));
+      }
     });
   }
 
   @override
   Widget build(BuildContext context) {
     List<Widget> selectActions = [
-      IconButton(
-        icon: const Icon(Icons.select_all),
-        tooltip: "Select All".tl,
+      _LabeledActionButton(
+        icon: Icons.select_all,
+        label: "Select all".tl,
         onPressed: selectAll,
       ),
-      IconButton(
-        icon: const Icon(Icons.deselect),
-        tooltip: "Deselect".tl,
+      _LabeledActionButton(
+        icon: Icons.deselect,
+        label: "Deselect all".tl,
         onPressed: deSelect,
       ),
       IconButton(
-        icon: const Icon(Icons.flip),
-        tooltip: "Invert Selection".tl,
-        onPressed: invertSelection,
+        icon: const Icon(Icons.delete_outline),
+        tooltip: "Delete".tl,
+        constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+        onPressed: selectedComics.isEmpty ? null : deleteSelected,
       ),
-      buildMultiSelectMenu(),
+      ConstrainedBox(
+        constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+        child: buildMultiSelectMenu(),
+      ),
     ];
 
     List<Widget> normalActions = [
@@ -291,9 +314,7 @@ class _LocalComicsPageState extends State<LocalComicsPage> {
                       : const Icon(Icons.arrow_back),
                 ),
               ),
-              title: multiSelectMode
-                  ? Text(selectedComics.length.toString())
-                  : Text("Local".tl),
+              title: multiSelectMode ? Text(_selectedTitle) : Text("Local".tl),
               actions: multiSelectMode ? selectActions : normalActions,
             )
           else if (searchMode)
@@ -321,7 +342,7 @@ class _LocalComicsPageState extends State<LocalComicsPage> {
                 ),
               ),
               title: multiSelectMode
-                  ? Text(selectedComics.length.toString())
+                  ? Text(_selectedTitle)
                   : TextField(
                       autofocus: true,
                       decoration: InputDecoration(
@@ -338,6 +359,7 @@ class _LocalComicsPageState extends State<LocalComicsPage> {
           SliverGridComics(
             comics: comics,
             selections: selectedComics,
+            selectionIndicator: multiSelectMode,
             onLongPressed: (c, heroID) {
               setState(() {
                 multiSelectMode = true;
@@ -417,8 +439,8 @@ class _LocalComicsPageState extends State<LocalComicsPage> {
                   icon: Icons.delete,
                   text: "Delete".tl,
                   onClick: () {
-                    deleteComics([c]).then((value) {
-                      if (value && multiSelectMode) {
+                    deleteComics([c]).then((result) {
+                      if (result != null && multiSelectMode) {
                         setState(() {
                           multiSelectMode = false;
                           selectedComics.clear();
@@ -463,73 +485,130 @@ class _LocalComicsPageState extends State<LocalComicsPage> {
     );
   }
 
-  Future<bool> deleteComics(List<LocalComic> comics) async {
-    bool isDeleted = false;
+  String get _selectedTitle =>
+      "@c selected".tlParams({'c': selectedComics.length});
+
+  String _skippedMessage(LocalComicBatchDeleteResult result) {
+    const shown = 3;
+    final titles = result.skippedTitles;
+    var text = [
+      for (final t in titles.take(shown)) '"@t"'.tlParams({'t': t}),
+    ].join();
+    if (titles.length > shown) {
+      text = "@titles etc. @m".tlParams({'m': titles.length, 'titles': text});
+    }
+    return "Deleted @n. Skipped @m being downloaded or extracted: @titles"
+        .tlParams({
+          'n': result.deleted.length,
+          'm': titles.length,
+          'titles': text,
+        });
+  }
+
+  Future<LocalComicBatchDeleteResult?> deleteComics(
+    List<LocalComic> comics,
+  ) async {
+    LocalComicBatchDeleteResult? deleted;
     await showDialog(
       context: appNavigation.rootContext,
       builder: (context) {
-        bool removeComicFile = true;
         bool removeFavoriteAndHistory = true;
+        // Only moving the folders aside and committing the records is
+        // awaited; their files are removed in the background afterwards.
+        bool deleting = false;
+        String? failure;
         return StatefulBuilder(
           builder: (context, state) {
-            return ContentDialog(
-              title: "Delete".tl,
-              content: Column(
-                children: [
-                  CheckboxListTile(
-                    title: Text("Remove local favorite and history".tl),
-                    value: removeFavoriteAndHistory,
-                    onChanged: (v) {
-                      state(() {
-                        removeFavoriteAndHistory = !removeFavoriteAndHistory;
-                      });
-                    },
-                  ),
-                  CheckboxListTile(
-                    title: Text("Also remove files on disk".tl),
-                    value: removeComicFile,
-                    onChanged: (v) {
-                      state(() {
-                        removeComicFile = !removeComicFile;
-                      });
-                    },
+            Future<void> confirm() async {
+              state(() {
+                deleting = true;
+                failure = null;
+              });
+              try {
+                deleted = await LocalManager().batchDeleteComics(
+                  comics,
+                  removeFavoriteAndHistory,
+                );
+                if (context.mounted) context.pop();
+              } catch (error) {
+                if (context.mounted) {
+                  state(() {
+                    deleting = false;
+                    failure = error.toString().tl;
+                  });
+                  context.showMessage(message: failure!);
+                }
+              }
+            }
+
+            return PopScope(
+              canPop: !deleting,
+              child: ContentDialog(
+                title: "Delete".tl,
+                dismissible: !deleting,
+                content: Column(
+                  children: [
+                    CheckboxListTile(
+                      title: Text("Remove local favorite and history".tl),
+                      value: removeFavoriteAndHistory,
+                      onChanged: deleting
+                          ? null
+                          : (v) {
+                              state(() {
+                                removeFavoriteAndHistory =
+                                    !removeFavoriteAndHistory;
+                              });
+                            },
+                    ),
+                    if (deleting)
+                      ListTile(
+                        leading: const SizedBox.square(
+                          dimension: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                        title: Text("Deleting...".tl),
+                      )
+                    else if (failure != null)
+                      ListTile(
+                        leading: const Icon(Icons.error_outline),
+                        title: Text(failure!),
+                      ),
+                  ],
+                ),
+                actions: [
+                  if (comics.length == 1 && comics.first.hasChapters)
+                    TextButton(
+                      onPressed: deleting
+                          ? null
+                          : () {
+                              context.pop();
+                              showDeleteChaptersPopWindow(
+                                context,
+                                comics.first,
+                              );
+                            },
+                      child: Text("Delete Chapters".tl),
+                    ),
+                  FilledButton(
+                    onPressed: deleting ? null : confirm,
+                    child: Text("Confirm".tl),
                   ),
                 ],
               ),
-              actions: [
-                if (comics.length == 1 && comics.first.hasChapters)
-                  TextButton(
-                    child: Text("Delete Chapters".tl),
-                    onPressed: () {
-                      context.pop();
-                      showDeleteChaptersPopWindow(context, comics.first);
-                    },
-                  ),
-                FilledButton(
-                  onPressed: () async {
-                    try {
-                      await LocalManager().batchDeleteComics(
-                        comics,
-                        removeComicFile,
-                        removeFavoriteAndHistory,
-                      );
-                      isDeleted = true;
-                      if (context.mounted) context.pop();
-                    } catch (error) {
-                      if (context.mounted) {
-                        context.showMessage(message: error.toString().tl);
-                      }
-                    }
-                  },
-                  child: Text("Confirm".tl),
-                ),
-              ],
             );
           },
         );
       },
     );
-    return isDeleted;
+    final external = deleted?.external.length ?? 0;
+    if (external > 0 && mounted) {
+      context.showMessage(
+        message:
+            "@n referenced external folders and were only removed from the list. The original files were kept."
+                .tlParams({'n': external}),
+      );
+    }
+    return deleted;
   }
 
   Future<bool> archiveComics(List<LocalComic> comics) async {
@@ -665,6 +744,55 @@ class _LocalComicsPageState extends State<LocalComicsPage> {
         context.showMessage(message: error.toString());
       }
     }
+  }
+}
+
+/// An app bar action whose short label stays visible below the icon.
+class _LabeledActionButton extends StatelessWidget {
+  const _LabeledActionButton({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: label,
+      excludeFromSemantics: true,
+      child: Semantics(
+        button: true,
+        label: label,
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(8),
+          child: ExcludeSemantics(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minWidth: 56, minHeight: 48),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(icon, size: 22),
+                    Text(
+                      label,
+                      maxLines: 1,
+                      style: const TextStyle(fontSize: 11, height: 1.2),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

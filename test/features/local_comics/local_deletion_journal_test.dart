@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -69,6 +70,7 @@ void main() {
         directory.createSync();
         File('${directory.path}/new').writeAsStringSync('new owner');
       });
+      await journal.purgeCommitted();
       expect(File('${directory.path}/new').readAsStringSync(), 'new owner');
       expect(File('${directory.path}/page').existsSync(), isFalse);
       expect(db.select('SELECT * FROM local_deletion_journal'), isEmpty);
@@ -91,6 +93,9 @@ void main() {
       );
       expect(directory.existsSync(), isFalse);
       expect(db.select('SELECT * FROM records'), isEmpty);
+      expect(db.select('SELECT * FROM local_deletion_journal'), hasLength(1));
+      await journal.purgeCommitted();
+      expect(_quarantines(root), isEmpty);
       expect(db.select('SELECT * FROM local_deletion_journal'), isEmpty);
     },
   );
@@ -99,40 +104,128 @@ void main() {
     'cleanup interruption survives reopening and retries only quarantine',
     () async {
       final directory = content('book');
-      var interrupt = true;
+      await journal.run([directory], (mark) async {
+        runSqliteTransaction(db, () {
+          db.execute('DELETE FROM records');
+          mark();
+        });
+      });
       final interrupted = LocalDeletionJournal(
         db,
-        exists: (path) async {
-          if (interrupt &&
-              db
-                  .select(
-                    'SELECT * FROM local_deletion_journal WHERE committed = 1',
-                  )
-                  .isNotEmpty) {
-            throw const FileSystemException('cleanup unavailable');
-          }
-          return exists(path);
-        },
+        exists: exists,
+        deleteDirectory: (_) async =>
+            throw const FileSystemException('cleanup unavailable'),
       );
       await expectLater(
-        interrupted.run([directory], (mark) async {
-          runSqliteTransaction(db, () {
-            db.execute('DELETE FROM records');
-            mark();
-          });
-        }),
+        interrupted.purgeCommitted(),
         throwsA(isA<FileSystemException>()),
       );
       expect(db.select('SELECT * FROM local_deletion_journal'), hasLength(1));
       directory.createSync();
       File('${directory.path}/new').writeAsStringSync('keep');
-      interrupt = false;
       reopen();
       await journal.recover();
       expect(File('${directory.path}/new').readAsStringSync(), 'keep');
+      expect(_quarantines(root), isEmpty);
       expect(db.select('SELECT * FROM local_deletion_journal'), isEmpty);
     },
   );
+
+  test('run returns before the committed directory is removed', () async {
+    final directory = content('book');
+    for (var i = 0; i < 2000; i++) {
+      File('${directory.path}/$i.jpg').writeAsStringSync('$i');
+    }
+    final removal = Completer<void>();
+    final started = Completer<void>();
+    final removing = <String>[];
+    final gated = LocalDeletionJournal(
+      db,
+      exists: exists,
+      deleteDirectory: (path) async {
+        removing.add(path);
+        if (!started.isCompleted) started.complete();
+        await removal.future;
+        await Directory(path).delete(recursive: true);
+      },
+    );
+    await gated.run([directory], (mark) async {
+      runSqliteTransaction(db, () {
+        db.execute('DELETE FROM records');
+        mark();
+      });
+    });
+    expect(directory.existsSync(), isFalse);
+    final staged = _quarantines(root).single;
+    expect(Directory(staged).listSync(), hasLength(2001));
+    expect(
+      db
+          .select('SELECT committed FROM local_deletion_journal')
+          .single['committed'],
+      1,
+    );
+    expect(removing, isEmpty);
+
+    final purge = gated.purgeCommitted();
+    // The existence check is real file IO; wait for removal itself to begin.
+    await started.future;
+    expect(removing, [staged]);
+    // A second purge never removes the same quarantine concurrently.
+    await gated.purgeCommitted();
+    expect(removing, [staged]);
+    expect(db.select('SELECT * FROM local_deletion_journal'), hasLength(1));
+    removal.complete();
+    await purge;
+    expect(Directory(staged).existsSync(), isFalse);
+    expect(db.select('SELECT * FROM local_deletion_journal'), isEmpty);
+  });
+
+  test('startup recovery restores only uncommitted rows', () async {
+    final restored = content('restored');
+    final restoredQuarantine = '${root.path}/.venera-delete-1-1';
+    await restored.rename(restoredQuarantine);
+    final removed = content('.venera-delete-2-2');
+    db.execute(
+      'INSERT INTO local_deletion_journal(original_path,quarantine_path,committed) VALUES(?,?,0),(?,?,1)',
+      [restored.path, restoredQuarantine, '${root.path}/removed', removed.path],
+    );
+    await journal.recoverUncommitted();
+    expect(File('${restored.path}/page').readAsStringSync(), 'restored');
+    expect(removed.existsSync(), isTrue);
+    expect(
+      db
+          .select('SELECT committed FROM local_deletion_journal')
+          .single['committed'],
+      1,
+    );
+    await journal.purgeCommitted();
+    expect(removed.existsSync(), isFalse);
+    expect(db.select('SELECT * FROM local_deletion_journal'), isEmpty);
+  });
+
+  test('a stopped purge keeps the row of an interrupted removal', () async {
+    final removed = content('.venera-delete-3-3');
+    db.execute(
+      'INSERT INTO local_deletion_journal(original_path,quarantine_path,committed) VALUES(?,?,1)',
+      ['${root.path}/removed', removed.path],
+    );
+    var stopped = false;
+    final interrupted = LocalDeletionJournal(
+      db,
+      exists: exists,
+      deleteDirectory: (path) async {
+        // Exit arrives while the bytes are being removed.
+        stopped = true;
+        await File('$path/page').delete();
+      },
+    );
+    await interrupted.purgeCommitted(isStopped: () => stopped);
+    expect(db.select('SELECT * FROM local_deletion_journal'), hasLength(1));
+    reopen();
+    await journal.recover();
+    expect(removed.existsSync(), isFalse);
+    expect(db.select('SELECT * FROM local_deletion_journal'), isEmpty);
+  });
 
   test('uncommitted movement is restored after reopening', () async {
     final directory = content('book');
@@ -179,6 +272,93 @@ void main() {
       await expectLater(journal.recover(), throwsStateError);
       expect(File('${directory.path}/page').readAsStringSync(), 'book');
       expect(db.select('SELECT * FROM local_deletion_journal'), hasLength(1));
+      await expectLater(journal.purgeCommitted(), throwsStateError);
+      expect(File('${directory.path}/page').readAsStringSync(), 'book');
+      expect(root.existsSync(), isTrue);
     },
   );
+
+  test('malformed rows do not block other committed removals', () async {
+    final directory = content('book');
+    final removed = content('.venera-delete-4-4');
+    db.execute(
+      'INSERT INTO local_deletion_journal(original_path,quarantine_path,committed) VALUES(?,?,1),(?,?,1)',
+      [
+        directory.path,
+        '${root.path}/book-copy',
+        '${root.path}/x',
+        removed.path,
+      ],
+    );
+    await expectLater(journal.purgeCommitted(), throwsStateError);
+    expect(File('${directory.path}/page').readAsStringSync(), 'book');
+    expect(removed.existsSync(), isFalse);
+    expect(db.select('SELECT * FROM local_deletion_journal'), hasLength(1));
+  });
+
+  group('background cleaner', () {
+    test(
+      'runs one pass at a time and repeats a request made during it',
+      () async {
+        final gates = <Completer<void>>[];
+        var running = 0;
+        var maxRunning = 0;
+        final cleaner = LocalDeletionCleaner((_) async {
+          running++;
+          maxRunning = running > maxRunning ? running : maxRunning;
+          final gate = Completer<void>();
+          gates.add(gate);
+          await gate.future;
+          running--;
+        }, onError: (error, stack) => fail('$error'));
+        cleaner.schedule();
+        // The caller's turn never runs a pass.
+        expect(gates, isEmpty);
+        await pumpEventQueue();
+        expect(gates, hasLength(1));
+        cleaner
+          ..schedule()
+          ..schedule();
+        gates.single.complete();
+        await pumpEventQueue();
+        expect(gates, hasLength(2));
+        gates.last.complete();
+        await cleaner.idle;
+        expect(gates, hasLength(2));
+        expect(maxRunning, 1);
+      },
+    );
+
+    test('reports failures, retries on request and stops', () async {
+      final errors = <Object>[];
+      var passes = 0;
+      late bool Function() stoppedInPass;
+      final cleaner = LocalDeletionCleaner((isStopped) async {
+        passes++;
+        stoppedInPass = isStopped;
+        throw StateError('busy');
+      }, onError: (error, stack) => errors.add(error));
+      cleaner.schedule();
+      await cleaner.idle;
+      cleaner.schedule();
+      await cleaner.idle;
+      expect(passes, 2);
+      expect(errors, hasLength(2));
+      cleaner.stop();
+      expect(stoppedInPass(), isTrue);
+      cleaner.schedule();
+      await cleaner.idle;
+      expect(passes, 2);
+    });
+  });
 }
+
+List<String> _quarantines(Directory root) => [
+  for (final entry in root.listSync())
+    if (entry is Directory &&
+        entry.path
+            .split(Platform.pathSeparator)
+            .last
+            .startsWith('.venera-delete-'))
+      entry.path,
+];

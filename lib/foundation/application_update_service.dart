@@ -5,6 +5,7 @@ import 'package:venera_next/network/app_dio.dart'
     show Dio, Options, RHttpAdapter;
 import 'package:venera_next/network/request_scope.dart';
 
+import 'application_update_release.dart';
 import 'operation_failure.dart';
 import 'release_version.dart';
 
@@ -47,13 +48,28 @@ class ApplicationUpdateService {
       ? null
       : 'https://github.com/$releaseRepository/releases';
 
-  Future<String?> check({RequestScope? scope}) {
+  Future<String?> check({RequestScope? scope}) =>
+      _checkWith<String>(scope, (version, _) => version);
+
+  Future<ApplicationUpdateRelease?> checkRelease({RequestScope? scope}) =>
+      _checkWith<ApplicationUpdateRelease>(
+        scope,
+        (_, release) => ApplicationUpdateRelease.fromReleaseMetadata(
+          release,
+          repository: releaseRepository!,
+        ),
+      );
+
+  Future<T?> _checkWith<T>(
+    RequestScope? scope,
+    T Function(String version, Map release) select,
+  ) {
     if (_closed) {
       return Future.error(StateError('Application updates are closed'));
     }
     if (!isEnabled) return Future.value(null);
     final owned = RequestScope(parent: scope);
-    final completion = Completer<String?>();
+    final completion = Completer<T?>();
     final settled = completion.future
         .then<void>((_) {}, onError: (Object _, StackTrace _) {})
         .whenComplete(() {
@@ -62,11 +78,17 @@ class ApplicationUpdateService {
         });
     // Registration precedes injected callbacks, which may reenter close.
     _pending[owned] = settled;
-    _check(owned).then(completion.complete, onError: completion.completeError);
+    _check<T>(
+      owned,
+      select,
+    ).then(completion.complete, onError: completion.completeError);
     return completion.future;
   }
 
-  Future<String?> _check(RequestScope scope) async {
+  Future<T?> _check<T>(
+    RequestScope scope,
+    T Function(String version, Map release) select,
+  ) async {
     scope.check();
     final version = _currentVersion();
     scope.check();
@@ -74,7 +96,7 @@ class ApplicationUpdateService {
     final adapter = dio.httpClientAdapter;
     Object? cause;
     StackTrace? causeStack;
-    String? available;
+    T? available;
     try {
       scope.check();
       final includePrerelease = allowsPrereleaseUpdates(version);
@@ -95,6 +117,9 @@ class ApplicationUpdateService {
         cancelToken: scope.cancelToken,
         options: Options(
           headers: {'Accept': 'application/vnd.github+json'},
+          connectTimeout: const Duration(seconds: 15),
+          receiveTimeout: const Duration(seconds: 30),
+          sendTimeout: const Duration(seconds: 30),
           validateStatus: isLeafStableCheck
               ? (status) =>
                     status != null &&
@@ -110,7 +135,12 @@ class ApplicationUpdateService {
         response = await dio.getUri<Object?>(
           releasesUri,
           cancelToken: scope.cancelToken,
-          options: Options(headers: {'Accept': 'application/vnd.github+json'}),
+          options: Options(
+            headers: {'Accept': 'application/vnd.github+json'},
+            connectTimeout: const Duration(seconds: 15),
+            receiveTimeout: const Duration(seconds: 30),
+            sendTimeout: const Duration(seconds: 30),
+          ),
         );
         scope.check();
       }
@@ -129,7 +159,7 @@ class ApplicationUpdateService {
       for (final release in releases) {
         if (release is! Map ||
             release['tag_name'] is! String ||
-            (release['tag_name'] as String).trim().isEmpty) {
+            !_semanticVersionTag.hasMatch(release['tag_name'] as String)) {
           throw const FormatException('Invalid release metadata');
         }
       }
@@ -137,9 +167,17 @@ class ApplicationUpdateService {
         data,
         includePrerelease: includePrerelease,
       );
-      available = latest != null && shouldNotifyRelease(latest, version)
-          ? latest
-          : null;
+      if (latest != null && shouldNotifyRelease(latest, version)) {
+        final release = _findPublishedRelease(
+          data,
+          version: latest,
+          includePrerelease: includePrerelease,
+        );
+        if (release == null) {
+          throw const FormatException('Selected release metadata not found');
+        }
+        available = select(latest, release);
+      }
     } catch (error, stack) {
       cause = error;
       causeStack = stack;
@@ -176,6 +214,33 @@ class ApplicationUpdateService {
     }
     scope.check();
     return available;
+  }
+
+  static final _semanticVersionTag = RegExp(
+    r'^[vV]?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)'
+    r'(?:-(?:0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)'
+    r'(?:\.(?:0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*'
+    r')?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$',
+  );
+
+  Map? _findPublishedRelease(
+    Object? data, {
+    required String version,
+    required bool includePrerelease,
+  }) {
+    final releases = data is List ? data : [data];
+    for (final release in releases) {
+      if (release is! Map ||
+          release['draft'] == true ||
+          (!includePrerelease && release['prerelease'] == true)) {
+        continue;
+      }
+      final tag = release['tag_name'];
+      if (tag is String && tag.replaceFirst(RegExp(r'^[vV]'), '') == version) {
+        return release;
+      }
+    }
+    return null;
   }
 
   Future<void> closeAndWait() {

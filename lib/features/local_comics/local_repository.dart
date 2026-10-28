@@ -169,10 +169,21 @@ class LocalRepository {
   }
 
   /// Detect record/ownership changes while filesystem staging awaits I/O.
-  String deletionSnapshot() => jsonEncode(
+  String deletionSnapshot([
+    bool Function(String id, int type, String directory)? include,
+  ]) => jsonEncode(
     db
         .select(
           'SELECT id, comic_type, directory, downloadedChapters FROM comics ORDER BY id, comic_type',
+        )
+        .where(
+          (row) =>
+              include == null ||
+              include(
+                row['id'] as String,
+                row['comic_type'] as int,
+                row['directory'] as String,
+              ),
         )
         .map(
           (row) => [

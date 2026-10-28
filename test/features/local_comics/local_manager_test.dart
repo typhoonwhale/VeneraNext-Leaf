@@ -112,7 +112,7 @@ void main() {
           throwsA(isA<LocalComicStorageBusy>()),
         );
         await expectLater(
-          manager.batchDeleteComics([stale], true, false),
+          manager.batchDeleteComics([stale], false),
           throwsA(isA<LocalComicStorageBusy>()),
         );
         expect(manager.find(stale.id, stale.comicType), isNotNull);
@@ -175,17 +175,18 @@ void main() {
         "CREATE TRIGGER reject_second BEFORE DELETE ON comics WHEN OLD.id = 'second' BEGIN SELECT RAISE(ABORT, 'injected'); END;",
       );
       await expectLater(
-        manager.batchDeleteComics([first, second], true, false),
+        manager.batchDeleteComics([first, second], false),
         throwsA(isA<SqliteException>()),
       );
       expect(manager.count, 2);
       expect(file.existsSync(), isTrue);
       expect(notifications, 0);
       db.execute('DROP TRIGGER reject_second;');
-      await manager.batchDeleteComics([first, second], false, false);
+      await manager.batchDeleteComics([first, second], false);
       expect(manager.count, 0);
       expect(db.select('SELECT * FROM natural_sort_migration'), isEmpty);
-      expect(file.existsSync(), isTrue);
+      await manager.pendingDeletionCleanup;
+      expect(file.existsSync(), isFalse);
       expect(notifications, 1);
     },
   );
@@ -321,7 +322,7 @@ void main() {
       await manager.add(second);
       notifyCount = 0;
       isDeleting = true;
-      await manager.deleteComic(second, false);
+      await manager.deleteComic(second);
       isDeleting = false;
 
       expect(notifyCount, 1);
