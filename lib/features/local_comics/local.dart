@@ -86,6 +86,16 @@ String _resolveComicDirectory(String directory, String libraryPath) =>
     ? directory
     : FilePath.join(libraryPath, directory);
 
+/// Outcome of a batch deletion: `skipped` comics have an active download.
+class LocalComicBatchDeleteResult {
+  const LocalComicBatchDeleteResult(this.deleted, this.skipped);
+
+  final List<LocalComic> deleted;
+  final List<LocalComic> skipped;
+
+  List<String> get skippedTitles => [for (final c in skipped) c.title];
+}
+
 class LocalManager with ChangeNotifier implements DownloadTaskStorage {
   static LocalManager? _instance;
 
@@ -1209,31 +1219,59 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
     });
   }
 
-  Future<void> batchDeleteComics(
+  /// Comics whose download writes now are skipped and reported back; when
+  /// nothing else is left the refusal is thrown as for a single comic.
+  Future<LocalComicBatchDeleteResult> batchDeleteComics(
     List<LocalComic> comics, [
     bool removeFileOnDisk = true,
     bool removeFavoriteAndHistory = true,
   ]) async {
-    final discarded = await _runWithComicStorage(
+    final outcome = await _runWithComicStorage(
       () => _batchDeleteComics(
         comics,
         removeFileOnDisk,
         removeFavoriteAndHistory,
       ),
     );
-    await _awaitDiscardedDownloads(discarded);
+    await _awaitDiscardedDownloads(outcome.discarded);
+    return LocalComicBatchDeleteResult(outcome.deleted, outcome.skipped);
   }
 
-  Future<List<DownloadTask>> _batchDeleteComics(
+  Future<
+    ({
+      List<DownloadTask> discarded,
+      List<LocalComic> deleted,
+      List<LocalComic> skipped,
+    })
+  >
+  _batchDeleteComics(
     List<LocalComic> comics,
     bool removeFileOnDisk,
     bool removeFavoriteAndHistory,
   ) async {
     comics = [for (final comic in comics) ?find(comic.id, comic.comicType)];
     if (comics.isEmpty) {
-      return const [];
+      return (
+        discarded: const <DownloadTask>[],
+        deleted: const <LocalComic>[],
+        skipped: const <LocalComic>[],
+      );
     }
-    return _withDeletingDownloads(comics, () async {
+    final skipped = <LocalComic>[];
+    LocalComicTaskBusy? firstBusy;
+    final remaining = <LocalComic>[];
+    for (final comic in comics) {
+      final busy = _busyDownload([comic]);
+      if (busy == null) {
+        remaining.add(comic);
+      } else {
+        skipped.add(comic);
+        firstBusy ??= busy;
+      }
+    }
+    if (remaining.isEmpty) throw firstBusy!;
+    comics = remaining;
+    final discarded = await _withDeletingDownloads(comics, () async {
       final scope = [for (final comic in comics) comic.baseDir];
       final snapshot = _deletionSnapshot(comics, scope);
       var shouldRemovedDirs = <Directory>[];
@@ -1273,6 +1311,7 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
       notifyListeners();
       return discarded;
     });
+    return (discarded: discarded, deleted: comics, skipped: skipped);
   }
 
   List<DownloadTask> _downloadsOf(List<LocalComic> comics) => [
@@ -1285,17 +1324,23 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
 
   /// Only the comic whose download writes now is refused.
   void _checkDownloadsIdle(List<LocalComic> comics) {
+    final busy = _busyDownload(comics);
+    if (busy != null) throw busy;
+  }
+
+  LocalComicTaskBusy? _busyDownload(List<LocalComic> comics) {
     for (final task in _downloadsOf(comics)) {
       if (task.isExtracting) {
-        throw LocalComicTaskBusy(task.title, 'Extracting. Try again later.');
+        return LocalComicTaskBusy(task.title, 'Extracting. Try again later.');
       }
       if (_isDownloadRunning(task)) {
-        throw LocalComicTaskBusy(
+        return LocalComicTaskBusy(
           task.title,
           'Downloading. Pause or cancel it first.',
         );
       }
     }
+    return null;
   }
 
   /// Downloads of comics being deleted. They are idle and must stay so until

@@ -3,11 +3,13 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:venera_next/features/local_comics/download_task.dart';
 import 'package:venera_next/features/local_comics/local.dart';
 import 'package:venera_next/features/local_comics/local_comics_page.dart';
 import 'package:venera_next/foundation/app.dart';
 import 'package:venera_next/foundation/app_data_operations.dart';
 import 'package:venera_next/foundation/comic_type.dart';
+import 'package:venera_next/foundation/context.dart';
 import 'package:venera_next/routing/app_navigation.dart';
 
 void main() {
@@ -233,4 +235,124 @@ void main() {
       endsWith('second'),
     ]);
   });
+
+  testWidgets('batch deletion skips a comic being downloaded and says so', (
+    tester,
+  ) async {
+    final messages = <String>[];
+    registerShowMessageHandler((_, message) => messages.add(message));
+    addTearDown(() => registerShowMessageHandler((_, _) {}));
+    final task = _RunningTask('first');
+    // Real zone: its snapshot writes must not wait for the fake clock.
+    await tester.runAsync(() async => manager.addTask(task));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        navigatorKey: appNavigation.rootNavigatorKey,
+        home: const LocalComicsPage(),
+      ),
+    );
+    await tester.pump();
+    await tester.longPress(find.text('first').first);
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.text('second').first);
+    await tester.pump();
+    await tester.tap(find.byTooltip('Delete'));
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.tap(find.text('Remove local favorite and history'));
+    await tester.pump();
+    await tester.tap(find.text('Confirm'));
+    await tester.pump();
+    for (var i = 0; i < 200 && messages.isEmpty; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
+      await tester.pump();
+    }
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(manager.find('second', ComicType.local), isNull);
+    expect(manager.find('first', ComicType.local), isNotNull);
+    expect(manager.downloadingTasks, [task]);
+    expect(messages, [
+      'Deleted 1. Skipped 1 being downloaded or extracted: "first"',
+    ]);
+    // The skipped comic stays selected.
+    expect(find.text('1 selected'), findsOneWidget);
+    task.pause();
+  });
+
+  testWidgets('batch deletion of only busy comics deletes nothing', (
+    tester,
+  ) async {
+    final tasks = [_RunningTask('first'), _RunningTask('second')];
+    await tester.runAsync(() async => tasks.forEach(manager.addTask));
+    await tester.pumpWidget(
+      MaterialApp(
+        navigatorKey: appNavigation.rootNavigatorKey,
+        home: const LocalComicsPage(),
+      ),
+    );
+    await tester.pump();
+    await tester.longPress(find.text('first').first);
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.text('second').first);
+    await tester.pump();
+    await tester.tap(find.byTooltip('Delete'));
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.tap(find.text('Confirm'));
+    await tester.pump();
+    for (var i = 0; i < 50; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
+      await tester.pump();
+    }
+    expect(
+      find.textContaining('Downloading. Pause or cancel it first.'),
+      findsWidgets,
+    );
+    expect(manager.find('first', ComicType.local), isNotNull);
+    expect(manager.find('second', ComicType.local), isNotNull);
+    for (final task in tasks) {
+      task.pause();
+    }
+  });
+}
+
+class _RunningTask extends DownloadTask {
+  _RunningTask(this.id);
+  @override
+  final String id;
+  @override
+  ComicType get comicType => ComicType.local;
+  @override
+  String get title => id;
+  @override
+  String? get cover => null;
+  @override
+  String get message => '';
+  bool paused = false;
+  @override
+  bool get isPaused => paused;
+  @override
+  bool get isError => false;
+  @override
+  bool get isExtracting => false;
+  @override
+  int get speed => 0;
+  @override
+  double get progress => 0;
+  @override
+  Future<void> get pendingCleanup => Future.value();
+  @override
+  void pause() => paused = true;
+  @override
+  void resume() => paused = false;
+  @override
+  void cancel() => paused = true;
+  @override
+  Map<String, dynamic> toJson() => {'id': id};
+  @override
+  LocalComic toLocalComic() => throw UnsupportedError('page fixture');
 }

@@ -143,19 +143,29 @@ void main() {
               ),
         ),
       );
-      // A batch is refused as a whole before anything changes.
-      await expectLater(
-        manager.batchDeleteComics([other, busy], true, false),
-        throwsA(isA<LocalComicTaskBusy>()),
+      // A batch skips the busy comic and deletes the others.
+      final extra = await addComic('extra');
+      final result = await manager.batchDeleteComics(
+        [other, busy, extra],
+        true,
+        false,
       );
-      expect(manager.find(other.id, other.comicType), isNotNull);
+      expect(result.deleted.map((c) => c.id), ['other', 'extra']);
+      expect(result.skippedTitles, ['busy']);
+      expect(manager.find(other.id, other.comicType), isNull);
+      expect(manager.find(extra.id, extra.comicType), isNull);
       expect(manager.find(busy.id, busy.comicType), isNotNull);
+      expect(manager.downloadingTasks, [task]);
       expect(task.isPaused, isFalse);
       expect(task.cancels, 0);
       expect(File('${manager.path}/busy/0.jpg').existsSync(), isTrue);
 
-      await manager.deleteComic(other);
-      expect(manager.find(other.id, other.comicType), isNull);
+      // Nothing deletable is left: refused as for a single comic.
+      await expectLater(
+        manager.batchDeleteComics([busy], true, false),
+        throwsA(isA<LocalComicTaskBusy>()),
+      );
+      expect(manager.find(busy.id, busy.comicType), isNotNull);
     });
 
     test('an extracting archive is refused even after a pause', () async {

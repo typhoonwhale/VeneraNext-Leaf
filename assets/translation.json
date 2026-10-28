@@ -958,7 +958,10 @@
     "Extracting. Try again later.": "正在解压，请稍后",
     "Pause all downloads before changing the local library.": "请先全部暂停下载，再更改本地漫画库",
     "The download folder was kept: @path": "已保留下载文件夹：@path",
-    "Local library changed during deletion; retry the operation": "删除期间本地漫画库发生了变化，请重试"
+    "Local library changed during deletion; retry the operation": "删除期间本地漫画库发生了变化，请重试",
+    "Deleted @n. Skipped @m being downloaded or extracted: @titles": "已删除 @n 本；以下 @m 本正在下载或解压，已跳过：@titles",
+    "\"@t\"": "《@t》",
+    "@titles etc. @m": "@titles等 @m 本"
   },
   "zh_TW": {
     "Update cache cannot be cleaned": "更新快取無法清理",
@@ -1918,6 +1921,9 @@
     "Extracting. Try again later.": "正在解壓，請稍後",
     "Pause all downloads before changing the local library.": "請先全部暫停下載，再變更本機漫畫庫",
     "The download folder was kept: @path": "已保留下載資料夾：@path",
-    "Local library changed during deletion; retry the operation": "刪除期間本機漫畫庫發生了變化，請重試"
+    "Local library changed during deletion; retry the operation": "刪除期間本機漫畫庫發生了變化，請重試",
+    "Deleted @n. Skipped @m being downloaded or extracted: @titles": "已刪除 @n 本；以下 @m 本正在下載或解壓，已跳過：@titles",
+    "\"@t\"": "《@t》",
+    "@titles etc. @m": "@titles等 @m 本"
   }
 }

@@ -198,12 +198,21 @@ class _LocalComicsPageState extends State<LocalComicsPage> {
 
   void deleteSelected() {
     if (selectedComics.isEmpty) return;
-    deleteComics(selectedComics.keys.toList()).then((value) {
-      if (value && mounted) {
-        setState(() {
+    deleteComics(selectedComics.keys.toList()).then((result) {
+      if (result == null || !mounted) return;
+      setState(() {
+        selectedComics.removeWhere(
+          (selected, _) => result.deleted.any(
+            (c) => c.id == selected.id && c.comicType == selected.comicType,
+          ),
+        );
+        if (result.skipped.isEmpty) {
           multiSelectMode = false;
           selectedComics.clear();
-        });
+        }
+      });
+      if (result.skipped.isNotEmpty) {
+        context.showMessage(message: _skippedMessage(result));
       }
     });
   }
@@ -409,8 +418,8 @@ class _LocalComicsPageState extends State<LocalComicsPage> {
                   icon: Icons.delete,
                   text: "Delete".tl,
                   onClick: () {
-                    deleteComics([c]).then((value) {
-                      if (value && multiSelectMode) {
+                    deleteComics([c]).then((result) {
+                      if (result != null && multiSelectMode) {
                         setState(() {
                           multiSelectMode = false;
                           selectedComics.clear();
@@ -458,8 +467,27 @@ class _LocalComicsPageState extends State<LocalComicsPage> {
   String get _selectedTitle =>
       "@c selected".tlParams({'c': selectedComics.length});
 
-  Future<bool> deleteComics(List<LocalComic> comics) async {
-    bool isDeleted = false;
+  String _skippedMessage(LocalComicBatchDeleteResult result) {
+    const shown = 3;
+    final titles = result.skippedTitles;
+    var text = [
+      for (final t in titles.take(shown)) '"@t"'.tlParams({'t': t}),
+    ].join();
+    if (titles.length > shown) {
+      text = "@titles etc. @m".tlParams({'m': titles.length, 'titles': text});
+    }
+    return "Deleted @n. Skipped @m being downloaded or extracted: @titles"
+        .tlParams({
+          'n': result.deleted.length,
+          'm': titles.length,
+          'titles': text,
+        });
+  }
+
+  Future<LocalComicBatchDeleteResult?> deleteComics(
+    List<LocalComic> comics,
+  ) async {
+    LocalComicBatchDeleteResult? deleted;
     await showDialog(
       context: appNavigation.rootContext,
       builder: (context) {
@@ -477,12 +505,11 @@ class _LocalComicsPageState extends State<LocalComicsPage> {
                 failure = null;
               });
               try {
-                await LocalManager().batchDeleteComics(
+                deleted = await LocalManager().batchDeleteComics(
                   comics,
                   removeComicFile,
                   removeFavoriteAndHistory,
                 );
-                isDeleted = true;
                 if (context.mounted) context.pop();
               } catch (error) {
                 if (context.mounted) {
@@ -565,7 +592,7 @@ class _LocalComicsPageState extends State<LocalComicsPage> {
         );
       },
     );
-    return isDeleted;
+    return deleted;
   }
 
   Future<bool> archiveComics(List<LocalComic> comics) async {
