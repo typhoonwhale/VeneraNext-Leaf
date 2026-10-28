@@ -247,7 +247,7 @@
 
 | 位置 | 原因 |
 |---|---|
-| 阅读底栏 `lib/features/reader/information_footer.dart` | 它已在浅色下显式使用黑字、白底、黑分隔线，且底栏的间隔、字号、高度由用户设置，并按字体度量文字宽度。全局字重下限（w500）会经 `DefaultTextStyle` 改变这些度量，所以 `:41` 显式固定 `FontWeight.w400`，保证墨水屏下底栏与普通浅色模式逐像素一致。`test/features/reader/eink_reader_test.dart` 的 T12 固定这一点 |
+| 阅读底栏 `lib/features/reader/information_footer.dart` | 它已在浅色下显式使用黑字、白底、黑分隔线，且底栏的间隔、字号、高度由用户设置，并按字体度量文字宽度。全局字重下限（w500）会经 `DefaultTextStyle` 改变这些度量，所以 `:40` 显式固定 `FontWeight.w400`，保证墨水屏下底栏与普通浅色模式逐像素一致。`test/features/reader/eink_reader_test.dart` 的 T12 固定这一点 |
 | 漫画正文图片 | 不加滤镜、灰度化、阈值化、模糊，不改预加载和缓存；T13 检查正文图片组件树中没有 `ColorFilter`、shader 或 `BackdropFilter` |
 | 软件闪屏 `lib/features/reader/eink_refresh.dart`、`eink_refresh_controller.dart` | 只是在 Flutter 里盖一层纯色，不是面板硬件全刷；偏好默认关闭，墨水屏模式不联动它。它瞬时变色，不属于动画，与减少动画不冲突；以后接入硬件刷新时必须与它互斥 |
 | 夜间调光遮罩 `lib/features/reader/brightness.dart` 中的亮度遮罩 | 用户主动开启的功能，保留原语义 |
