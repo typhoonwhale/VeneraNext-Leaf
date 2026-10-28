@@ -311,7 +311,7 @@
 - Hero 在路由时长为 0 时按推断没有飞行帧，未实测；多帧动图在 `disableAnimations` 下按 Flutter 行为停在首帧，未实测。
 - 文石 SDK 硬件全刷未接入，见[路线图](LEAF_EINK_ROADMAP.md)阶段 4；接入后必须与软件闪屏互斥。
 - 耗电对照未做，按路线图在同条件下阅读 60 分钟对比。
-- 黑描边的观感（是否过重，可改为深灰 `#404040`）和去掉水波纹后的点击反馈感，需要用户继续在设备上确认；单色 `outlineVariant` 可调整的位置在 `lib/foundation/eink_theme.dart:215`。
+- 用户已确认：去掉水波纹后点击反馈足够；描边加粗到 2/3 后不再偏细。若以后觉得过重，可以把 `outlineVariant` 改为深灰 `#404040`（`lib/foundation/eink_theme.dart:215`），或调小 `EInkStyle.strokeWidth`。
 
 ## 9. 实机验证记录
 
