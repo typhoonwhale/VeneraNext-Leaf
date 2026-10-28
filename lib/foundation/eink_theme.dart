@@ -58,12 +58,16 @@ List<(Offset, Offset)> einkHatchSegments(Size size, double spacing) {
 class EInkHatchPainter extends CustomPainter {
   const EInkHatchPainter({
     this.shape,
+    this.paintBorder = false,
     this.spacing = EInkStyle.hatchSpacing,
     this.strokeWidth = EInkStyle.hatchStrokeWidth,
   });
 
   /// Clip shape; the plain rectangle when null.
   final ShapeBorder? shape;
+
+  /// Also strokes [shape]'s own side on top of the hatch.
+  final bool paintBorder;
   final double spacing;
   final double strokeWidth;
 
@@ -82,11 +86,13 @@ class EInkHatchPainter extends CustomPainter {
       canvas.drawLine(a, b, paint);
     }
     canvas.restore();
+    if (paintBorder && shape != null) shape!.paint(canvas, rect);
   }
 
   @override
   bool shouldRepaint(EInkHatchPainter old) =>
       old.shape != shape ||
+      old.paintBorder != paintBorder ||
       old.spacing != spacing ||
       old.strokeWidth != strokeWidth;
 }
@@ -94,14 +100,20 @@ class EInkHatchPainter extends CustomPainter {
 /// White background with black 45 degree hatch lines, clipped to [shape];
 /// marks a disabled control on E-Ink.
 class EInkHatch extends StatelessWidget {
-  const EInkHatch({super.key, this.shape, this.child});
+  const EInkHatch({
+    super.key,
+    this.shape,
+    this.paintBorder = false,
+    this.child,
+  });
 
   final ShapeBorder? shape;
+  final bool paintBorder;
   final Widget? child;
 
   @override
   Widget build(BuildContext context) => CustomPaint(
-    painter: EInkHatchPainter(shape: shape),
+    painter: EInkHatchPainter(shape: shape, paintBorder: paintBorder),
     child: child,
   );
 }
@@ -288,13 +300,14 @@ ThemeData applyEInkTheme(ThemeData base) {
   final disabledForeground = WidgetStateProperty.resolveWith<Color?>(
     (states) => states.contains(WidgetState.disabled) ? Colors.black : null,
   );
-  // The button Material clips its children to the button shape.
+  // Clip the hatch and stroke the outline here: on device the button
+  // Material did not clip a disabled FilledButton nor keep its side visible.
   Widget hatchBackground(
     BuildContext context,
     Set<WidgetState> states,
     Widget? child,
   ) => states.contains(WidgetState.disabled)
-      ? EInkHatch(child: child)
+      ? EInkHatch(shape: buttonShape, paintBorder: true, child: child)
       : child ?? const SizedBox.shrink();
   Widget hatchForeground(
     BuildContext context,

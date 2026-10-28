@@ -50,4 +50,45 @@ void main() {
     // Center is inside: painted white or black, never the backdrop.
     expect(px(50, 20), anyOf(0xFFFFFFFF, 0x000000FF));
   });
+
+  test('painter strokes the shape outline on top when asked', () async {
+    const size = Size(100, 40);
+    final recorder = PictureRecorder();
+    final canvas = Canvas(recorder);
+    const EInkHatchPainter(
+      shape: StadiumBorder(side: BorderSide(width: 2)),
+      paintBorder: true,
+      spacing: 1000,
+    ).paint(canvas, size);
+    final image = await recorder.endRecording().toImage(100, 40);
+    final data = (await image.toByteData())!;
+    int px(int x, int y) => data.getUint32((y * 100 + x) * 4);
+    // Huge spacing leaves no hatch line here, so black comes from the outline.
+    expect(px(50, 0), 0x000000FF);
+    expect(px(50, 39), 0x000000FF);
+    expect(px(50, 20), 0xFFFFFFFF);
+  });
+
+  testWidgets('disabled FilledButton hatch clips to and outlines the pill', (
+    tester,
+  ) async {
+    final theme = applyEInkTheme(ThemeData.light());
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: theme,
+        home: const Scaffold(
+          body: Row(
+            children: [
+              Expanded(
+                child: FilledButton(onPressed: null, child: Text('x')),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    final hatch = tester.widget<EInkHatch>(find.byType(EInkHatch));
+    expect(hatch.shape, isA<StadiumBorder>());
+    expect(hatch.paintBorder, isTrue);
+  });
 }
