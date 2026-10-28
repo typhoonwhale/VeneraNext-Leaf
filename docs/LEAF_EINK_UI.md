@@ -11,7 +11,7 @@
 - 黑白主题：单色 `ColorScheme`、描边代替填充色和阴影、选中态黑底白字、封面黑边直角、按钮统一胶囊形。
 - 减少动画：路由、弹层、对话框、渐显、循环动画（转圈、五点、骨架屏闪光、下载图标）和程序化滚动直接显示最终画面。
 
-不处理：漫画正文图片、阅读底栏、软件闪屏，详见第 5 节。开启时「主题模式」「主题颜色」两项禁用并提示“墨水屏模式下固定为黑白”（`lib/features/settings/appearance.dart:23-43`）。
+不处理：漫画正文图片、阅读底栏、软件闪屏，详见第 5 节。开启时「主题模式」「主题颜色」两项禁用并提示“墨水屏模式下固定为黑白”（`lib/features/settings/appearance.dart:23,35-38,49-52`）。
 
 ## 2. 整体机制
 
@@ -24,7 +24,7 @@
 | 本机字段 | `'eInkMode'` 在 `appDataLocalFields` 中：导入备份和同步既不读取也不覆盖它。原因：从手机端（模式关闭）导入备份时，Leaf 上的墨水屏模式不应被关掉 | `lib/foundation/app_data_sync_fields.dart:16` |
 | 快照 | `AppearanceConfiguration.eInkMode` | `lib/foundation/application_configuration.dart:43-48` |
 | 派生量 | `einkTheme`（黑白主题）和 `reduceMotion`（减少动画）目前都等于 `eInkMode`。两个 getter 是预留的拆分点：以后要分成两个开关，只改设置页和这两个 getter | `lib/foundation/application_configuration.dart:52,55` |
-| 开关 UI | `SwitchSetting.preference`，切换后 `appNavigation.forceRebuild()` 重建 `MaterialApp` | `lib/features/settings/appearance.dart:28-34` |
+| 开关 UI | `SwitchSetting.preference`，切换后 `appNavigation.forceRebuild()` 重建 `MaterialApp` | `lib/features/settings/appearance.dart:27-34` |
 | 文案 | 三条英文 key，`zh_CN` / `zh_TW` 各一份；`test/foundation/translations_test.dart` 会检查 `.tl` 字面量在两个 map 中都有翻译 | `assets/translation.json:182-184,1091-1093` |
 
 ### 2.2 主题切换路径
@@ -32,7 +32,7 @@
 1. `lib/main.dart:345-346` 读取 `appearance`，得到 `eink`。
 2. `getTheme(..., eink:)`（`lib/main.dart:522`）：`eink` 为 true 时 `colorScheme` 用 `einkColorScheme()`（不再用 seed 色），最后 `applyEInkTheme(theme)`（`lib/main.dart:578`）叠加组件主题。
 3. `MaterialApp` 的 `theme` 和 `darkTheme` 都传 `eink`；`themeMode` 固定 `ThemeMode.light`（`lib/main.dart:369`）；`themeAnimationDuration` 为 `Duration.zero`（`lib/main.dart:366`），切换主题时不做渐变。
-4. `applyEInkTheme` 末尾注册 `EInkStyle(enabled: true)` 扩展（`lib/foundation/eink_theme.dart:410`），`context.isEInk` 由它读出。
+4. `applyEInkTheme` 末尾注册 `EInkStyle(enabled: true)` 扩展（`lib/foundation/eink_theme.dart:469`），`context.isEInk` 由它读出。
 
 `getTheme` 是 `main.dart` 的顶层函数，测试用 `getTheme(..., eink: true/false)` 直接构造主题。
 
@@ -40,10 +40,10 @@
 
 | 场景 | 用法 | 说明 |
 |---|---|---|
-| 有 `BuildContext`，判断是否黑白 | `context.isEInk`（`lib/foundation/eink_theme.dart:162`） | 读主题扩展，主题变化时自动重建；绝大多数组件用这个 |
+| 有 `BuildContext`，判断是否黑白 | `context.isEInk`（`lib/foundation/eink_theme.dart:220`） | 读主题扩展，主题变化时自动重建；绝大多数组件用这个 |
 | 有 `BuildContext`，判断是否停动画 | `MediaQuery.disableAnimationsOf(context)` | 读 builder 覆盖后的标志，同时兼容系统层设置 |
 | 无 `BuildContext`（getter、`PopupRoute.barrierColor`、`transitionDuration`） | `EInkPreferences.einkTheme` / `EInkPreferences.reduceMotion`（`lib/foundation/eink_theme.dart:9,12`） | 直接读 `appdata.settings`，不随主题重建；只用于路由层的时长和遮罩 |
-| 取选中态颜色 | `context.einkStyle.selectedBackground` / `selectedForeground`（`lib/foundation/eink_theme.dart:182`） | 仅 `isEInk` 为 true 时有意义 |
+| 取选中态颜色 | `context.einkStyle.selectedBackground` / `selectedForeground`（`lib/foundation/eink_theme.dart:240`） | 仅 `isEInk` 为 true 时有意义 |
 
 ### 2.4 减少动画的机制
 
@@ -59,37 +59,37 @@
 
 | 想改什么 | 改哪里 | 位置 | 当前值 |
 |---|---|---|---|
-| 普通描边宽度（标签、徽标、卡片、输入框、chip、按钮、封面） | `EInkStyle.strokeWidth` | `:122` | 2.0 |
-| 强调描边宽度（对话框、弹层、FAB、Toast、flyout） | `EInkStyle.strongStrokeWidth` | `:125` | 3.0 |
-| 禁用控件斜线遮罩（线间距、线宽） | `EInkStyle.hatchSpacing`、`EInkStyle.hatchStrokeWidth` | `:131`、`:128` | 10.0（线中心垂直距离）、`strokeWidth`；斜线由 `EInkHatch` / `EInkHatchPainter`（`:58`、`:96`）绘制，标签文字描白边 `einkHaloLabel` |
-| 禁用控件文字白边宽度 | `EInkStyle.hatchHaloWidth` | `HALO_LINE` | 3.0（文字向外扩展的白边，逻辑像素）；文字用白色描边层叠黑字实现，图标用 16 方向白色硬阴影 |
-| 单色配色 | `einkColorScheme()` | `:186-222` | 见下表 |
-| 全局字重 | `_einkTextTheme`：所有样式不低于 w500，字号 ≤ 12 的不低于 w600，字号不变 | `:240-269`；`textTheme`、`primaryTextTheme` 在 `:307-308` 应用 | w500 / w600 |
-| 硬编码小字的字重 | `context.einkSmallText(style)`，不继承主题字重的 `TextStyle` 用它包一层 | `:174` | w600 |
-| 封面圆角 | `context.einkCoverRadius(normal)` | `:178` | `BorderRadius.zero` |
-| 封面和标签的黑边 | `context.einkBorder({width})` | `:169` | `strokeWidth` 黑色 |
-| 角标实心填充色 | `context.einkBadgeColor(color)` | `:165` | `Colors.black` |
-| 按钮形状 | `buttonShape = StadiumBorder(side: border)`，用于 text/outlined/filled 三种按钮 | `:286`；自绘 `Button` 的圆角在 `lib/components/button.dart:219` | 胶囊形（自绘 `Button` 为 999） |
-| 按钮描边（含禁用态） | `buttonSide` | `:287` | 启用、禁用都是黑色 `strokeWidth` |
-| 按钮禁用态 | `hatchBackground` / `hatchForeground`（`backgroundBuilder` / `foregroundBuilder`，禁用时画斜线、文字描 3px 白边），`disabledForeground`（文字黑色） | `:288-306` | 黑框 + 45° 斜线 + 黑字 |
-| 选中态颜色 | `EInkStyle.selectedBackground` / `selectedForeground` | `:133-141` | 黑 / 白 |
-| 选中态之外的黑白分档 | `segmentedButtonTheme` 的 selected 判断 | `:390-408` | 选中黑底白字，未选中白底黑字；禁用时一律白底黑字，斜线由 segment 内部的 `textButtonTheme` 提供 |
-| 卡片 | `cardTheme`：elevation 0，`shape`（圆角 12，`strokeWidth` 描边） | `:374`，`shape` 在 `:278` | |
-| 对话框 | `dialogTheme`：透明遮罩，elevation 0，`strongShape`（圆角 12，`strongStrokeWidth`） | `:369-373`，`strongShape` 在 `:282` | |
-| FAB | `floatingActionButtonTheme`：白底黑字，全部 elevation 0，圆角 16，`strongBorder` | `:377-389` | |
-| SegmentedButton | `segmentedButtonTheme` | `:390-408` | |
-| Chip | `chipTheme.side` | `:343` | `border` |
-| Switch | `switchTheme`：轨道黑色描边；禁用时白轨道 + 黑框 + 空心圆环 thumb（轨道太窄画不出斜线） | `:344-360` | `strokeWidth` |
-| text 按钮 | `textButtonTheme`（另有 padding 16×8） | `:309-320` | 胶囊 + 描边；禁用斜线 |
-| outlined 按钮 | `outlinedButtonTheme` | `:321-329` | 胶囊 + 描边；禁用斜线 |
-| filled 按钮 | `filledButtonTheme`：背景走 `primary`（黑），禁用时白底黑框黑字加斜线 | `:330-342` | 胶囊 |
-| 弹出菜单 | `popupMenuTheme`：elevation 0，`shape` | `:375` | |
-| SnackBar | `snackBarTheme`：elevation 0，`shape` | `:376` | |
-| 路由转场（`MaterialPageRoute`、`PageRouteBuilder` 默认） | `pageTransitionsTheme`：所有平台用 `_NoTransitionsBuilder` | `:363-368`，builder 在 `:225-236` | 直接返回 child |
-| 点击反馈 | `splashFactory: NoSplash.splashFactory`，`highlightColor` 透明 | `:361-362` | 无水波纹 |
+| 普通描边宽度（标签、徽标、卡片、输入框、chip、按钮、封面） | `EInkStyle.strokeWidth` | `:177` | 2.0 |
+| 强调描边宽度（对话框、弹层、FAB、Toast、flyout） | `EInkStyle.strongStrokeWidth` | `:180` | 3.0 |
+| 禁用控件斜线遮罩（线间距、线宽） | `EInkStyle.hatchSpacing`、`EInkStyle.hatchStrokeWidth` | `:189`、`:183` | 10.0（线中心垂直距离）、`strokeWidth`；斜线由 `EInkHatch` / `EInkHatchPainter`（`:58`、`:102`）绘制，标签文字描白边 `einkHaloLabel` |
+| 禁用控件文字白边宽度 | `EInkStyle.hatchHaloWidth` | `:186` | 3.0（文字向外扩展的白边，逻辑像素）；文字用白色描边层叠黑字实现，图标用 16 方向白色硬阴影 |
+| 单色配色 | `einkColorScheme()` | `:244-280` | 见下表 |
+| 全局字重 | `_einkTextTheme`：所有样式不低于 w500，字号 ≤ 12 的不低于 w600，字号不变 | `:298-327`；`textTheme`、`primaryTextTheme` 在 `:366-367` 应用 | w500 / w600 |
+| 硬编码小字的字重 | `context.einkSmallText(style)`，不继承主题字重的 `TextStyle` 用它包一层 | `:232` | w600 |
+| 封面圆角 | `context.einkCoverRadius(normal)` | `:236` | `BorderRadius.zero` |
+| 封面和标签的黑边 | `context.einkBorder({width})` | `:227` | `strokeWidth` 黑色 |
+| 角标实心填充色 | `context.einkBadgeColor(color)` | `:223` | `Colors.black` |
+| 按钮形状 | `buttonShape = StadiumBorder(side: border)`，用于 text/outlined/filled 三种按钮 | `:344`；自绘 `Button` 的圆角在 `lib/components/button.dart:219` | 胶囊形（自绘 `Button` 为 999） |
+| 按钮描边（含禁用态） | `buttonSide` | `:345` | 启用、禁用都是黑色 `strokeWidth` |
+| 按钮禁用态 | `hatchBackground` / `hatchForeground`（`backgroundBuilder` / `foregroundBuilder`，禁用时画斜线、文字描 3px 白边），`disabledForeground`（文字黑色） | `:346-364` | 黑框 + 45° 斜线 + 黑字 |
+| 选中态颜色 | `EInkStyle.selectedBackground` / `selectedForeground` | `:191-199` | 黑 / 白 |
+| 选中态之外的黑白分档 | `segmentedButtonTheme` 的 selected 判断 | `:449-468` | 选中黑底白字，未选中白底黑字；禁用时一律白底黑字，斜线由 segment 内部的 `textButtonTheme` 提供 |
+| 卡片 | `cardTheme`：elevation 0，`shape`（圆角 12，`strokeWidth` 描边） | `:433`，`shape` 在 `:336` | |
+| 对话框 | `dialogTheme`：透明遮罩，elevation 0，`strongShape`（圆角 12，`strongStrokeWidth`） | `:428-432`，`strongShape` 在 `:340` | |
+| FAB | `floatingActionButtonTheme`：白底黑字，全部 elevation 0，圆角 16，`strongBorder` | `:436-448` | |
+| SegmentedButton | `segmentedButtonTheme` | `:449-468` | |
+| Chip | `chipTheme.side` | `:402` | `border` |
+| Switch | `switchTheme`：轨道黑色描边；禁用时白轨道 + 黑框 + 空心圆环 thumb（轨道太窄画不出斜线） | `:403-419` | `strokeWidth` |
+| text 按钮 | `textButtonTheme`（另有 padding 16×8） | `:368-379` | 胶囊 + 描边；禁用斜线 |
+| outlined 按钮 | `outlinedButtonTheme` | `:380-388` | 胶囊 + 描边；禁用斜线 |
+| filled 按钮 | `filledButtonTheme`：背景走 `primary`（黑），禁用时白底黑框黑字加斜线 | `:389-401` | 胶囊 |
+| 弹出菜单 | `popupMenuTheme`：elevation 0，`shape` | `:434` | |
+| SnackBar | `snackBarTheme`：elevation 0，`shape` | `:435` | |
+| 路由转场（`MaterialPageRoute`、`PageRouteBuilder` 默认） | `pageTransitionsTheme`：所有平台用 `_NoTransitionsBuilder` | `:422-427`，builder 在 `:283-294` | 直接返回 child |
+| 点击反馈 | `splashFactory: NoSplash.splashFactory`，`highlightColor` 透明 | `:420-421` | 无水波纹 |
 | 应用自有路由转场 | `AppRoute` 的 `transitionDuration`、`reverseTransitionDuration`、`buildTransitions` | `lib/foundation/app_page_route.dart:62,67,132` | `reduceMotion` 时 0 / 直接返回 child |
 | 弹层遮罩 | 对话框走 `dialogTheme.barrierColor`；`PopUpWidget`、`SideBarRoute`、收藏夹侧栏各自判断 `EInkPreferences.einkTheme` | `lib/components/pop_up_widget.dart:28`，`lib/components/side_bar.dart:55`，`lib/features/favorites/favorites_page.dart:128` | 透明 |
-| `useTextColor` / `useBackgroundColor`（详情页彩色图标、标签色板、点赞/踩的集中入口） | `lib/foundation/context.dart` | `:77-84` | `onSurface` / `surface` |
+| `useTextColor` / `useBackgroundColor`（详情页彩色图标、标签色板、点赞/踩的集中入口） | `lib/foundation/context.dart` | `:77-85` | `onSurface` / `surface` |
 | 毛玻璃 | `BlurEffect` | `lib/components/effects.dart:22` | `isEInk` 时直接返回 child |
 | 静态进度圈 | `EInkProgressIndicator`：`disableAnimations` 且 `value` 为 null 时显示半圈 | `:19-39` | `value: 0.5` |
 
@@ -114,16 +114,16 @@
 
 | 组件/位置 | 墨水屏样式或行为 | 实现 | 文件:行 |
 |---|---|---|---|
-| 配色 | 单色 `ColorScheme`，固定浅色 | 主题 | `lib/foundation/eink_theme.dart:186`，`lib/main.dart:369` |
-| 文字 | 字重下限 w500，小字 w600 | 主题 | `lib/foundation/eink_theme.dart:240` |
-| 按钮（text / outlined / filled / tonal） | 胶囊形，2 描边；禁用黑框黑字，内部 45° 斜线，文字描 3px 白边 | 主题 | `lib/foundation/eink_theme.dart:288-342` |
-| 卡片、弹出菜单、SnackBar | elevation 0 + 描边圆角 12 | 主题 | `lib/foundation/eink_theme.dart:374-376` |
-| 对话框（`showDialog`） | 透明遮罩，3 描边，elevation 0 | 主题 | `lib/foundation/eink_theme.dart:369` |
-| FAB | 白底黑字，3 描边，无阴影 | 主题 | `lib/foundation/eink_theme.dart:377` |
-| SegmentedButton、Chip、Switch | 选中黑底白字、黑描边；Switch 禁用为白轨道 + 空心圆环 | 主题 | `lib/foundation/eink_theme.dart:343-360,390` |
-| 路由转场、水波纹 | 无转场、无水波纹 | 主题 | `lib/foundation/eink_theme.dart:361-368` |
+| 配色 | 单色 `ColorScheme`，固定浅色 | 主题 | `lib/foundation/eink_theme.dart:244`，`lib/main.dart:369` |
+| 文字 | 字重下限 w500，小字 w600 | 主题 | `lib/foundation/eink_theme.dart:298` |
+| 按钮（text / outlined / filled / tonal） | 胶囊形，2 描边；禁用黑框黑字，内部 45° 斜线，文字描 3px 白边 | 主题 | `lib/foundation/eink_theme.dart:344-401` |
+| 卡片、弹出菜单、SnackBar | elevation 0 + 描边圆角 12 | 主题 | `lib/foundation/eink_theme.dart:433-435` |
+| 对话框（`showDialog`） | 透明遮罩，3 描边，elevation 0 | 主题 | `lib/foundation/eink_theme.dart:428` |
+| FAB | 白底黑字，3 描边，无阴影 | 主题 | `lib/foundation/eink_theme.dart:436` |
+| SegmentedButton、Chip、Switch | 选中黑底白字、黑描边；Switch 禁用为白轨道 + 空心圆环 | 主题 | `lib/foundation/eink_theme.dart:402-419,449` |
+| 路由转场、水波纹 | 无转场、无水波纹 | 主题 | `lib/foundation/eink_theme.dart:420-427` |
 | 主题切换渐变 | 关闭 | 分支 | `lib/main.dart:366` |
-| `useTextColor` / `useBackgroundColor` | 返回 `onSurface` / `surface`，详情页图标、标签色板、评论点赞/踩、稍后阅读变黑白 | 分支 | `lib/foundation/context.dart:77-84` |
+| `useTextColor` / `useBackgroundColor` | 返回 `onSurface` / `surface`，详情页图标、标签色板、评论点赞/踩、稍后阅读变黑白 | 分支 | `lib/foundation/context.dart:77-85` |
 
 ### 4.2 公共组件（`lib/components`）
 
@@ -131,20 +131,20 @@
 |---|---|---|---|
 | `Button`（自绘） | 胶囊（圆角 999）、左右 padding 18、`strokeWidth` 描边；`filled` 类型保持黑底无额外描边，其余类型黑描边 | 分支 | `lib/components/button.dart:172,219,239-242` |
 | `BlurEffect` | 不做毛玻璃 | 分支 | `lib/components/effects.dart:22` |
-| `Select` 禁用态（`enabled: false`） | 黑 2 描边 + 斜线，文字和箭头描 3px 白边；`SelectSetting` 禁用时传入 | 分支 | `lib/components/select.dart:35,98-135`，`lib/features/settings/setting_components.dart:552` |
-| `Select` 下拉菜单 | `surface` 底、2 描边、圆角 4、无阴影 | 分支 | `lib/components/select.dart:44-58` |
-| `FilterChipFixedWidth` | 选中黑底白字，2 描边 | 分支 | `lib/components/select.dart:184-199` |
-| `AnimatedCheckWidget` 勾选图标 | 选中态前景色白 | 分支 | `lib/components/select.dart:272` |
-| `OptionChip` | 选中黑底白字；描边始终 2 | 分支 | `lib/components/select.dart:339-357` |
-| 底部导航选中指示器 | 黑底白图标；`controller.duration` 在无动画时为 0 | 分支 | `lib/components/navigation_bar.dart:586-607,543` |
-| 侧边导航选中项 | 黑底白图标白字 | 分支 | `lib/components/navigation_bar.dart:434-450` |
+| `Select` 禁用态（`enabled: false`） | 黑 2 描边 + 斜线，文字和箭头描 3px 白边；`SelectSetting` 禁用时传入 | 分支 | `lib/components/select.dart:33-56,60,125-145`，`lib/features/settings/setting_components.dart:552` |
+| `Select` 下拉菜单 | `surface` 底、2 描边、圆角 4、无阴影 | 分支 | `lib/components/select.dart:67-83` |
+| `FilterChipFixedWidth` | 选中黑底白字，2 描边 | 分支 | `lib/components/select.dart:192-215` |
+| `AnimatedCheckWidget` 勾选图标 | 选中态前景色白 | 分支 | `lib/components/select.dart:280-282` |
+| `OptionChip` | 选中黑底白字；描边始终 2 | 分支 | `lib/components/select.dart:347-364,376-378` |
+| 底部导航选中指示器 | 黑底白图标；`controller.duration` 在无动画时为 0 | 分支 | `lib/components/navigation_bar.dart:586-609,543` |
+| 侧边导航选中项 | 黑底白图标白字 | 分支 | `lib/components/navigation_bar.dart:434-457` |
 | 主内容切换 `AnimatedSwitcher` | 无动画时时长 0 | 分支 | `lib/components/navigation_bar.dart:805` |
-| `SideBarRoute` 侧边面板 | 直角、仅左侧 2 描边（全宽时无边）、透明遮罩、时长 0 | 分支 | `lib/components/side_bar.dart:55,134-143,258` |
+| `SideBarRoute` 侧边面板 | 直角、仅左侧 2 描边（全宽时无边）、透明遮罩、时长 0 | 分支 | `lib/components/side_bar.dart:55,134-147,258` |
 | `PopUpWidget` | 透明遮罩、3 描边、时长 0 | 分支 | `lib/components/pop_up_widget.dart:28,56,99` |
-| `Flyout` | 时长 0、透明遮罩、`surface` 不透明底、3 描边 | 分支 | `lib/components/flyout.dart:114,164,217-228` |
+| `Flyout` | 时长 0、透明遮罩、`surface` 不透明底、3 描边 | 分支 | `lib/components/flyout.dart:114,164,217-232` |
 | `ContentDialog` | 3 描边、elevation 0 | 分支 | `lib/components/message.dart:534,546` |
 | Toast | elevation 0 | 分支 | `lib/components/message.dart:92` |
-| `showDialogMessage` / `showConfirmDialog` / `showInfoDialog` | 无动画时传 `AnimationStyle.noAnimation` | 分支 | `lib/components/message.dart:222-228,247,579` |
+| `showDialogMessage` / `showConfirmDialog` / `showInfoDialog` | 无动画时传 `AnimationStyle.noAnimation` | 分支 | `lib/components/message.dart:222-223,228,247,579` |
 | `SummaryHeader` 计数徽标 | 白底 + 黑描边 | 分支 | `lib/components/summary_header.dart:38` |
 | `SmoothScrollProvider` 滚动条/滚轮 | 无动画时 `jumpTo` | 分支 | `lib/components/scroll.dart:172` |
 | `AnimatedImage` 封面/缩略图渐显 | 无动画时时长 0 | 分支 | `lib/components/image.dart:331` |
@@ -160,7 +160,7 @@
 |---|---|---|---|
 | `LocalComicsSummary` 等四张主页摘要卡 | 计数徽标白底黑描边 | 分支 | `lib/features/local_comics/local_comics_summary.dart:95`，`lib/features/comic_source/comic_source_summary.dart:79`，`lib/features/image_favorites/image_favorites_summary.dart:111`，`lib/components/summary_header.dart:38` |
 | 下载中图标 | 无动画时停在静态图标 | 分支 | `lib/features/local_comics/local_comics_summary.dart:403` |
-| 图片收藏统计条 | 去渐变，白底 + 黑描边 | 分支 | `lib/features/image_favorites/image_favorites_summary.dart:300-304` |
+| 图片收藏统计条 | 去渐变，白底 + 黑描边 | 分支 | `lib/features/image_favorites/image_favorites_summary.dart:300-305` |
 | 同步状态错误图标 | `onSurface` 代替红色 | 分支 | `lib/features/sync/sync_status_summary.dart:88` |
 | 收藏夹侧栏 | 选中黑底白字；数量徽标加 2 描边 | 分支 | `lib/features/favorites/side_bar.dart:270,289,299,334,350` |
 | 收藏夹弹出面板 | 时长 0、透明遮罩 | 分支 | `lib/features/favorites/favorites_page.dart:117,128` |
@@ -182,9 +182,9 @@
 |---|---|---|---|
 | 详情页封面 | 直角、2 黑边、无阴影；骨架屏封面同样 | 分支 | `lib/features/comic_details/comic_page.dart:365-369,1042-1044` |
 | 来源名文字 | `einkSmallText` | 分支 | `lib/features/comic_details/comic_page.dart:409` |
-| 信息区标签（可点击） | 白底（`useBackgroundColor`）+ 2 描边 | 分支 | `lib/features/comic_details/comic_page.dart:637,651-657` |
+| 信息区标签（可点击） | 白底（`useBackgroundColor`）+ 2 描边 | 分支 | `lib/features/comic_details/comic_page.dart:637,651-660` |
 | 信息区键名（不可点击） | 2 描边 | 分支 | `lib/features/comic_details/comic_page.dart:699` |
-| “下载”/“阅读”/“继续”按钮 | 走 `filledButtonTheme`：“下载”（tonal）白底黑描边；“阅读/继续”（filled）黑底白字 | 主题 | `lib/features/comic_details/comic_page.dart:492-515` |
+| “下载”/“阅读”/“继续”按钮 | 走 `filledButtonTheme`：“下载”（tonal）白底黑描边；“阅读/继续”（filled）黑底白字 | 主题 | `lib/features/comic_details/comic_page.dart:492-516` |
 | 操作按钮行（收藏、评论等） | 2 黑描边代替 0.6 浅灰描边 | 分支 | `lib/features/comic_details/action_button.dart:59` |
 | 评论头像框 | 2 描边 | 分支 | `lib/features/comic_details/comments_page.dart:389` |
 | 章节格子（普通和分组两种） | 直角 4、2 描边；未读白底黑字，已读黑底白字（代替原来的灰字）；文字 w600 | 分支 | `lib/features/comic_details/chapters.dart:19-30,217-235,440-458` |
@@ -214,8 +214,8 @@
 
 | 组件 | 墨水屏样式或行为 | 实现 | 文件:行 |
 |---|---|---|---|
-| 顶栏 | 不透明 `surface`，底边 2 黑线 | 分支 | `lib/features/reader/top_bar.dart:25-34` |
-| 底部操作栏（页码滑条所在条） | 不透明 `surface`，顶边 2 黑线（仅菜单打开时） | 分支 | `lib/features/reader/progress_bar.dart:124-137` |
+| 顶栏 | 不透明 `surface`，底边 2 黑线 | 分支 | `lib/features/reader/top_bar.dart:25-35` |
+| 底部操作栏（页码滑条所在条） | 不透明 `surface`，顶边 2 黑线（仅菜单打开时） | 分支 | `lib/features/reader/progress_bar.dart:124-139` |
 | 图片加载失败的“重试” | 主色加下划线，不用蓝色 | 分支 | `lib/features/reader/comic_image.dart:383` |
 | 低电量图标 | 保持黑色，不用红色 | 分支 | `lib/features/reader/status_info.dart:137` |
 | 画廊页加载圈 | `EInkProgressIndicator` | 分支 | `lib/features/reader/gallery_view.dart:424` |
@@ -232,19 +232,19 @@
 | 动画 | 处理 | 文件:行 |
 |---|---|---|
 | 主路由 300ms | `transitionDuration` / `reverseTransitionDuration` 为 0，`buildTransitions` 直接返回 child | `lib/foundation/app_page_route.dart:62,67,132` |
-| `MaterialPageRoute` 等 | 主题 `_NoTransitionsBuilder` | `lib/foundation/eink_theme.dart:225,363` |
+| `MaterialPageRoute` 等 | 主题 `_NoTransitionsBuilder` | `lib/foundation/eink_theme.dart:283,422` |
 | `PopUpWidget`、`SideBarRoute`、`Flyout`、收藏夹面板 | 时长 0 | `lib/components/pop_up_widget.dart:99`，`lib/components/side_bar.dart:258`，`lib/components/flyout.dart:120-124`，`lib/features/favorites/favorites_page.dart:117-126` |
-| 封装对话框（message.dart 三个入口） | `AnimationStyle.noAnimation` | `lib/components/message.dart:222-228,247,579` |
+| 封装对话框（message.dart 三个入口） | `AnimationStyle.noAnimation` | `lib/components/message.dart:222-223,228,247,579` |
 | 封面/缩略图渐显 200ms | 时长 0 | `lib/components/image.dart:331` |
 | 导航切换和底栏选中 | 时长 0 | `lib/components/navigation_bar.dart:543,805` |
 | 亮度面板 `AnimatedSize` | 时长 0 | `lib/features/reader/brightness.dart:110` |
 | 转圈（`CircularProgressIndicator` 无限旋转） | `EInkProgressIndicator`：半圈静态；有 `value` 时原样 | `lib/foundation/eink_theme.dart:19` |
 | 五点加载（`repeat`） | `didChangeDependencies` 中停止并归零，黑点 | `lib/components/loading.dart:410-420` |
-| 下载中图标（`repeat`） | 同上 | `lib/features/local_comics/local_comics_summary.dart:403-410` |
+| 下载中图标（`repeat`） | 同上 | `lib/features/local_comics/local_comics_summary.dart:403-409` |
 | 骨架屏 `Shimmer` | `enabled: false`（3 处） | `lib/features/comic_details/comic_page.dart:976`，`lib/features/comic_details/favorite.dart:308`，`lib/features/search/aggregated_search_page.dart:198` |
 | 回到顶部、滚轮/滚动条、连续模式定位和翻页键 | `jumpTo` | `lib/features/comic_details/comic_page.dart:233`，`lib/components/scroll.dart:172`，`lib/features/reader/continuous_view.dart:1154,1292` |
 | 主题切换渐变 | `themeAnimationDuration` 为 0 | `lib/main.dart:366` |
-| 水波纹 | `NoSplash` | `lib/foundation/eink_theme.dart:361` |
+| 水波纹 | `NoSplash` | `lib/foundation/eink_theme.dart:420` |
 
 ## 5. 明确不改的地方
 
@@ -278,9 +278,9 @@
 
 ## 7. 修改指南
 
-**加粗所有描边**：改 `EInkStyle.strokeWidth` / `strongStrokeWidth`（`lib/foundation/eink_theme.dart:122,125`）。主题、封面、标签、按钮、选中态都引用这两个常量，不需要逐处改。改完运行 `eink_theme_test.dart`；若需要不同于 2/3 的新档位，新增常量，不要在组件里写字面量。
+**加粗所有描边**：改 `EInkStyle.strokeWidth` / `strongStrokeWidth`（`lib/foundation/eink_theme.dart:177,180`）。主题、封面、标签、按钮、选中态都引用这两个常量，不需要逐处改。改完运行 `eink_theme_test.dart`；若需要不同于 2/3 的新档位，新增常量，不要在组件里写字面量。
 
-**调整文字粗细**：全局改 `_einkTextTheme` 的 `floor`（`:158-163`）；个别硬编码 `TextStyle` 用 `context.einkSmallText` 包一层。改字重可能影响依赖字体度量的布局（如阅读底栏，已固定 w400）。
+**调整文字粗细**：全局改 `_einkTextTheme` 的 `floor`（`:301-302`）；个别硬编码 `TextStyle` 用 `context.einkSmallText` 包一层。改字重可能影响依赖字体度量的布局（如阅读底栏，已固定 w400）。
 
 **新增组件需要墨水屏样式**：
 
@@ -312,7 +312,7 @@
 - Hero 在路由时长为 0 时按推断没有飞行帧，未实测；多帧动图在 `disableAnimations` 下按 Flutter 行为停在首帧，未实测。
 - 文石 SDK 硬件全刷未接入，见[路线图](LEAF_EINK_ROADMAP.md)阶段 4；接入后必须与软件闪屏互斥。
 - 耗电对照未做，按路线图在同条件下阅读 60 分钟对比。
-- 用户已确认：去掉水波纹后点击反馈足够；描边加粗到 2/3 后不再偏细。若以后觉得过重，可以把 `outlineVariant` 改为深灰 `#404040`（`lib/foundation/eink_theme.dart:215`），或调小 `EInkStyle.strokeWidth`。
+- 用户已确认：去掉水波纹后点击反馈足够；描边加粗到 2/3 后不再偏细。若以后觉得过重，可以把 `outlineVariant` 改为深灰 `#404040`（`lib/foundation/eink_theme.dart:273`），或调小 `EInkStyle.strokeWidth`。
 
 ## 9. 实机验证记录
 
