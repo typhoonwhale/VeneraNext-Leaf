@@ -61,7 +61,8 @@
 |---|---|---|---|
 | 普通描边宽度（标签、徽标、卡片、输入框、chip、按钮、封面） | `EInkStyle.strokeWidth` | `:122` | 2.0 |
 | 强调描边宽度（对话框、弹层、FAB、Toast、flyout） | `EInkStyle.strongStrokeWidth` | `:125` | 3.0 |
-| 禁用控件斜线遮罩（线间距、线宽） | `EInkStyle.hatchSpacing`、`EInkStyle.hatchStrokeWidth` | `:131`、`:128` | 10.0（线中心垂直距离）、`strokeWidth`；斜线由 `EInkHatch` / `EInkHatchPainter`（`:58`、`:96`）绘制，标签白底衬块 `einkHatchLabel`（`:110`） |
+| 禁用控件斜线遮罩（线间距、线宽） | `EInkStyle.hatchSpacing`、`EInkStyle.hatchStrokeWidth` | `:131`、`:128` | 10.0（线中心垂直距离）、`strokeWidth`；斜线由 `EInkHatch` / `EInkHatchPainter`（`:58`、`:96`）绘制，标签文字描白边 `einkHaloLabel` |
+| 禁用控件文字白边宽度 | `EInkStyle.hatchHaloWidth` | `HALO_LINE` | 3.0（文字向外扩展的白边，逻辑像素）；文字用白色描边层叠黑字实现，图标用 16 方向白色硬阴影 |
 | 单色配色 | `einkColorScheme()` | `:186-222` | 见下表 |
 | 全局字重 | `_einkTextTheme`：所有样式不低于 w500，字号 ≤ 12 的不低于 w600，字号不变 | `:240-269`；`textTheme`、`primaryTextTheme` 在 `:307-308` 应用 | w500 / w600 |
 | 硬编码小字的字重 | `context.einkSmallText(style)`，不继承主题字重的 `TextStyle` 用它包一层 | `:174` | w600 |
@@ -70,7 +71,7 @@
 | 角标实心填充色 | `context.einkBadgeColor(color)` | `:165` | `Colors.black` |
 | 按钮形状 | `buttonShape = StadiumBorder(side: border)`，用于 text/outlined/filled 三种按钮 | `:286`；自绘 `Button` 的圆角在 `lib/components/button.dart:219` | 胶囊形（自绘 `Button` 为 999） |
 | 按钮描边（含禁用态） | `buttonSide` | `:287` | 启用、禁用都是黑色 `strokeWidth` |
-| 按钮禁用态 | `hatchBackground` / `hatchForeground`（`backgroundBuilder` / `foregroundBuilder`，禁用时画斜线、文字衬白底），`disabledForeground`（文字黑色） | `:288-306` | 黑框 + 45° 斜线 + 黑字 |
+| 按钮禁用态 | `hatchBackground` / `hatchForeground`（`backgroundBuilder` / `foregroundBuilder`，禁用时画斜线、文字描 3px 白边），`disabledForeground`（文字黑色） | `:288-306` | 黑框 + 45° 斜线 + 黑字 |
 | 选中态颜色 | `EInkStyle.selectedBackground` / `selectedForeground` | `:133-141` | 黑 / 白 |
 | 选中态之外的黑白分档 | `segmentedButtonTheme` 的 selected 判断 | `:390-408` | 选中黑底白字，未选中白底黑字；禁用时一律白底黑字，斜线由 segment 内部的 `textButtonTheme` 提供 |
 | 卡片 | `cardTheme`：elevation 0，`shape`（圆角 12，`strokeWidth` 描边） | `:374`，`shape` 在 `:278` | |
@@ -115,7 +116,7 @@
 |---|---|---|---|
 | 配色 | 单色 `ColorScheme`，固定浅色 | 主题 | `lib/foundation/eink_theme.dart:186`，`lib/main.dart:369` |
 | 文字 | 字重下限 w500，小字 w600 | 主题 | `lib/foundation/eink_theme.dart:240` |
-| 按钮（text / outlined / filled / tonal） | 胶囊形，2 描边；禁用黑框黑字，内部 45° 斜线，文字衬白底 | 主题 | `lib/foundation/eink_theme.dart:288-342` |
+| 按钮（text / outlined / filled / tonal） | 胶囊形，2 描边；禁用黑框黑字，内部 45° 斜线，文字描 3px 白边 | 主题 | `lib/foundation/eink_theme.dart:288-342` |
 | 卡片、弹出菜单、SnackBar | elevation 0 + 描边圆角 12 | 主题 | `lib/foundation/eink_theme.dart:374-376` |
 | 对话框（`showDialog`） | 透明遮罩，3 描边，elevation 0 | 主题 | `lib/foundation/eink_theme.dart:369` |
 | FAB | 白底黑字，3 描边，无阴影 | 主题 | `lib/foundation/eink_theme.dart:377` |
@@ -130,7 +131,7 @@
 |---|---|---|---|
 | `Button`（自绘） | 胶囊（圆角 999）、左右 padding 18、`strokeWidth` 描边；`filled` 类型保持黑底无额外描边，其余类型黑描边 | 分支 | `lib/components/button.dart:172,219,239-242` |
 | `BlurEffect` | 不做毛玻璃 | 分支 | `lib/components/effects.dart:22` |
-| `Select` 禁用态（`enabled: false`） | 黑 2 描边 + 斜线，文字和箭头衬白底；`SelectSetting` 禁用时传入 | 分支 | `lib/components/select.dart:35,98-135`，`lib/features/settings/setting_components.dart:552` |
+| `Select` 禁用态（`enabled: false`） | 黑 2 描边 + 斜线，文字和箭头描 3px 白边；`SelectSetting` 禁用时传入 | 分支 | `lib/components/select.dart:35,98-135`，`lib/features/settings/setting_components.dart:552` |
 | `Select` 下拉菜单 | `surface` 底、2 描边、圆角 4、无阴影 | 分支 | `lib/components/select.dart:44-58` |
 | `FilterChipFixedWidth` | 选中黑底白字，2 描边 | 分支 | `lib/components/select.dart:184-199` |
 | `AnimatedCheckWidget` 勾选图标 | 选中态前景色白 | 分支 | `lib/components/select.dart:272` |
@@ -322,6 +323,6 @@
 - 设备系统 `transition_animation_scale` 为 0，关闭墨水屏模式时页面跳转同样只有 2–3 帧。墨水屏模式的价值在于不再依赖系统设置，并停掉系统管不到的循环动画。
 - 关闭开关后原彩色主题完整恢复；重新打开、强制重启后状态保持；覆盖升级后数据保留。
 - 用户实机反馈驱动的调整：标签、刷新按钮、升序/降序选中态的遗漏补齐；加粗描边和字重；封面改直角加黑边；章节格子改黑白（已读黑底）；按钮描边和胶囊形统一；侧边面板改直角。
-- 禁用控件样式：先后试过灰框灰字，改为黑框 + 45° 斜线 + 黑字白底衬块；设备上禁用的“主题模式/主题颜色”下拉框和“下载选中”按钮待实机确认斜线观感（未实机验证）。
+- 禁用控件样式：先后试过灰框灰字，改为黑框 + 45° 斜线 + 黑字描白边（用户在 2/3/4/5/6px 预览中选定 3px）；设备上禁用的“主题模式/主题颜色”下拉框和“下载选中”按钮待实机确认斜线观感（未实机验证）。
 - “阅读/继续”主操作保持黑底白字（`filledButtonTheme`），“下载”等次要按钮为白底描边。
 - 设备上系统的应用冻结机制会定时禁用并结束后台应用进程，可能打断后台下载；需在系统设置中把 Leaf 加入后台白名单（菜单位置未验证）。

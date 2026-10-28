@@ -3,6 +3,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:venera_next/components/select.dart';
 import 'package:venera_next/foundation/eink_theme.dart';
 
 void main() {
@@ -90,5 +91,122 @@ void main() {
     final hatch = tester.widget<EInkHatch>(find.byType(EInkHatch));
     expect(hatch.shape, isA<StadiumBorder>());
     expect(hatch.paintBorder, isTrue);
+  });
+
+  group('halo label', () {
+    Future<void> pump(
+      WidgetTester tester, {
+      required bool eink,
+      required bool enabled,
+    }) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: eink ? applyEInkTheme(ThemeData.light()) : ThemeData.light(),
+          home: Scaffold(
+            body: Column(
+              children: [
+                FilledButton.icon(
+                  onPressed: enabled ? () {} : null,
+                  icon: const Icon(Icons.download),
+                  label: const Text('x'),
+                ),
+                Select(
+                  current: 'a',
+                  values: const ['a'],
+                  enabled: enabled,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    Finder inButton(Finder f) =>
+        find.descendant(of: find.byType(FilledButton), matching: f);
+    Finder inSelect(Finder f) =>
+        find.descendant(of: find.byType(Select), matching: f);
+
+    TextStyle effective(WidgetTester tester, Element e) {
+      final text = e.widget as Text;
+      return DefaultTextStyle.of(e).style.merge(text.style);
+    }
+
+    void expectHalo(WidgetTester tester, Finder texts) {
+      expect(texts, findsNWidgets(2));
+      final halo = effective(tester, texts.evaluate().first);
+      expect(halo.foreground!.style, PaintingStyle.stroke);
+      expect(halo.foreground!.strokeWidth, 2 * EInkStyle.hatchHaloWidth);
+      expect(halo.foreground!.color, Colors.white);
+      final top = effective(tester, texts.evaluate().last);
+      expect(top.color, Colors.black);
+      expect(top.foreground, isNull);
+    }
+
+    testWidgets('disabled button label is a black glyph over a white stroke', (
+      tester,
+    ) async {
+      await pump(tester, eink: true, enabled: false);
+      expectHalo(tester, inButton(find.text('x')));
+      expect(
+        inButton(find.byType(ColoredBox)).evaluate().where(
+          (e) => (e.widget as ColoredBox).color == Colors.white,
+        ),
+        isEmpty,
+      );
+      final icons = inButton(find.byIcon(Icons.download));
+      expect(icons, findsNWidgets(2));
+      final shadows = [
+        for (final e in icons.evaluate()) IconTheme.of(e).shadows,
+      ];
+      expect(shadows.first, hasLength(16));
+      expect(shadows.first!.every((s) => s.color == Colors.white), isTrue);
+      expect(shadows.first!.every((s) => s.blurRadius == 0), isTrue);
+      expect(
+        shadows.first!.every(
+          (s) => (s.offset.distance - EInkStyle.hatchHaloWidth).abs() < 1e-9,
+        ),
+        isTrue,
+      );
+      expect(shadows.last, anyOf(isNull, isEmpty));
+    });
+
+    testWidgets('disabled Select text and arrow have a halo', (tester) async {
+      await pump(tester, eink: true, enabled: false);
+      expectHalo(tester, inSelect(find.text('a')));
+      final arrows = inSelect(find.byIcon(Icons.arrow_drop_down));
+      expect(arrows, findsNWidgets(2));
+      expect(
+        IconTheme.of(tester.element(arrows.first)).shadows,
+        hasLength(16),
+      );
+      expect(IconTheme.of(tester.element(arrows.last)).shadows, isNull);
+    });
+
+    testWidgets('enabled and non-E-Ink controls have no halo', (tester) async {
+      await pump(tester, eink: true, enabled: true);
+      expect(find.text('x'), findsOneWidget);
+      expect(find.text('a'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+      await pump(tester, eink: false, enabled: false);
+      expect(find.text('x'), findsOneWidget);
+      expect(find.text('a'), findsOneWidget);
+      expect(find.byType(EInkHatch), findsNothing);
+    });
+
+    testWidgets('halo does not change the disabled button size', (
+      tester,
+    ) async {
+      await pump(tester, eink: true, enabled: true);
+      final enabledSize = tester.getSize(find.byType(FilledButton));
+      await tester.pumpWidget(const SizedBox());
+      await pump(tester, eink: true, enabled: false);
+      expect(tester.getSize(find.byType(FilledButton)), enabledSize);
+      final texts = inButton(find.text('x'));
+      expect(tester.getRect(texts.first), tester.getRect(texts.last));
+      final icons = inButton(find.byIcon(Icons.download));
+      expect(tester.getRect(icons.first), tester.getRect(icons.last));
+    });
   });
 }

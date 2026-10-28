@@ -118,13 +118,56 @@ class EInkHatch extends StatelessWidget {
   );
 }
 
-/// Keeps a disabled control's label readable on top of the hatch.
-Widget einkHatchLabel(Widget child) => ColoredBox(
-  color: Colors.white,
-  child: Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 4),
-    child: child,
-  ),
+/// White outline of [EInkStyle.hatchHaloWidth] around text; the stroke is
+/// drawn under the black glyphs, so it takes twice the halo width.
+Paint einkHaloPaint() => Paint()
+  ..style = PaintingStyle.stroke
+  ..strokeWidth = 2 * EInkStyle.hatchHaloWidth
+  ..strokeJoin = StrokeJoin.round
+  ..color = Colors.white;
+
+/// White ring around icon glyphs, made of hard shadows in 16 directions.
+IconThemeData einkHaloIconTheme() => IconThemeData(
+  shadows: [
+    for (var i = 0; i < 16; i++)
+      Shadow(
+        color: Colors.white,
+        offset: Offset.fromDirection(
+          i * math.pi / 8,
+          EInkStyle.hatchHaloWidth,
+        ),
+      ),
+  ],
+);
+
+/// Overlays [top] on [halo], which must lay out identically to it.
+Widget einkHaloStack(Widget halo, Widget top) => Stack(
+  clipBehavior: Clip.none,
+  children: [
+    ExcludeSemantics(child: IgnorePointer(child: halo)),
+    top,
+  ],
+);
+
+/// Keeps a disabled control's label readable on top of the hatch: text and
+/// icons get a white halo, so the hatch lines stop at the glyph edges.
+Widget einkHaloLabel(Widget child) => Builder(
+  builder: (context) {
+    final base = DefaultTextStyle.of(context);
+    return einkHaloStack(
+      DefaultTextStyle(
+        style: base.style.copyWith(foreground: einkHaloPaint()),
+        textAlign: base.textAlign,
+        softWrap: base.softWrap,
+        overflow: base.overflow,
+        maxLines: base.maxLines,
+        textWidthBasis: base.textWidthBasis,
+        textHeightBehavior: base.textHeightBehavior,
+        child: IconTheme.merge(data: einkHaloIconTheme(), child: child),
+      ),
+      child,
+    );
+  },
 );
 
 /// Theme-carried E-Ink flag and the shared selected-state colors.
@@ -138,6 +181,9 @@ class EInkStyle extends ThemeExtension<EInkStyle> {
 
   /// Stroke width of the hatch lines on disabled controls.
   static const double hatchStrokeWidth = strokeWidth;
+
+  /// Width of the white halo around the label of a disabled hatched control.
+  static const double hatchHaloWidth = 3.0;
 
   /// Perpendicular distance between hatch line centers on disabled controls.
   static const double hatchSpacing = 10.0;
@@ -314,7 +360,7 @@ ThemeData applyEInkTheme(ThemeData base) {
     Set<WidgetState> states,
     Widget? child,
   ) => states.contains(WidgetState.disabled) && child != null
-      ? einkHatchLabel(child)
+      ? einkHaloLabel(child)
       : child ?? const SizedBox.shrink();
   return base.copyWith(
     textTheme: _einkTextTheme(base.textTheme),

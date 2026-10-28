@@ -30,6 +30,31 @@ class Select extends StatelessWidget {
 
   final bool enabled;
 
+  /// Black label with a white halo, for the disabled E-Ink state. The text
+  /// sets its own color, so the halo layer is built here, not inherited.
+  Widget _haloLabel() {
+    Widget layer(TextStyle style) => Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        ConstrainedBox(
+          constraints: BoxConstraints(
+            minWidth: minWidth != null ? (minWidth! - 32) : 0,
+          ),
+          child: Text(current ?? ' ', style: style),
+        ),
+        const SizedBox(width: 8),
+        const Icon(Icons.arrow_drop_down, color: Colors.black),
+      ],
+    );
+    return einkHaloStack(
+      IconTheme.merge(
+        data: einkHaloIconTheme(),
+        child: layer(ts.s14.copyWith(foreground: einkHaloPaint())),
+      ),
+      layer(ts.s14.copyWith(color: Colors.black)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final hatched = context.isEInk && !enabled;
@@ -112,24 +137,7 @@ class Select extends StatelessWidget {
                 shape: RoundedRectangleBorder(borderRadius: radius),
                 child: Padding(
                   padding: const EdgeInsets.all(6),
-                  child: einkHatchLabel(
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        ConstrainedBox(
-                          constraints: BoxConstraints(
-                            minWidth: minWidth != null ? (minWidth! - 32) : 0,
-                          ),
-                          child: Text(
-                            current ?? ' ',
-                            style: ts.s14.copyWith(color: Colors.black),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        const Icon(Icons.arrow_drop_down, color: Colors.black),
-                      ],
-                    ),
-                  ),
+                  child: _haloLabel(),
                 ),
               ),
             )

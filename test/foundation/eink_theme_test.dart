@@ -456,6 +456,17 @@ void main() {
             .first,
       );
       expect(text.style.color, Colors.black);
+      // The label is outlined by a halo; there is no white block behind it.
+      expect(
+        find
+            .descendant(
+              of: find.byType(FilledButton),
+              matching: find.byType(ColoredBox),
+            )
+            .evaluate()
+            .where((e) => (e.widget as ColoredBox).color == Colors.white),
+        isEmpty,
+      );
     });
 
     testWidgets('enabled and regular-theme disabled buttons have no hatch', (
@@ -498,10 +509,12 @@ void main() {
       await pump(true);
       await tester.pumpAndSettle();
       expect(find.byType(EInkHatch), findsOneWidget);
+      expect(find.text('a'), findsNWidgets(2));
       await tester.pumpWidget(const SizedBox());
       await pump(false);
       await tester.pumpAndSettle();
       expect(find.byType(EInkHatch), findsNothing);
+      expect(find.text('a'), findsOneWidget);
     });
 
     test('disabled switch is white with black outline and ring thumb', () {
