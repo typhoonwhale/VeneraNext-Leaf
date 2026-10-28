@@ -192,6 +192,7 @@ class _FilterChipFixedWidthState extends State<FilterChipFixedWidth> {
     final eink = context.isEInk;
     final style = context.einkStyle;
     final filled = eink && selected;
+    final duration = tweenDuration(context);
     return Material(
       textStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
         color: filled ? style.selectedForeground : null,
@@ -200,7 +201,7 @@ class _FilterChipFixedWidthState extends State<FilterChipFixedWidth> {
         onTap: () => widget.onSelected(true),
         borderRadius: const BorderRadius.all(Radius.circular(8)),
         child: AnimatedContainer(
-          duration: fastAnimationDuration,
+          duration: duration,
           decoration: BoxDecoration(
             border: Border.all(
               color: Theme.of(context).colorScheme.outline,
@@ -235,7 +236,7 @@ class _FilterChipFixedWidthState extends State<FilterChipFixedWidth> {
       child: Stack(
         children: [
           AnimatedPositioned(
-            duration: fastAnimationDuration,
+            duration: tweenDuration(context),
             left: selected ? (iconSize + gap) : (iconSize + gap) / 2,
             child: widget.label,
           ),
@@ -312,8 +313,16 @@ class _AnimatedCheckIconState extends State<AnimatedCheckIcon>
       ..addListener(() {
         setState(() {});
       });
-    controller.forward();
     super.initState();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (controller.isAnimating || controller.isCompleted) return;
+    // Jump to the end when animations are disabled.
+    controller.duration = tweenDuration(context);
+    controller.forward();
   }
 
   @override
@@ -347,7 +356,7 @@ class OptionChip extends StatelessWidget {
     final eink = context.isEInk;
     final style = context.einkStyle;
     return AnimatedContainer(
-      duration: fastAnimationDuration,
+      duration: tweenDuration(context),
       decoration: BoxDecoration(
         color: eink && isSelected
             ? style.selectedBackground

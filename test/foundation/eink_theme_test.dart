@@ -125,6 +125,46 @@ void main() {
     expect(transform, findsNothing);
   });
 
+  testWidgets('T2 pop removes the old page within one frame and stops', (
+    tester,
+  ) async {
+    final navigator = GlobalKey<NavigatorState>();
+    await tester.pumpWidget(
+      MaterialApp(
+        navigatorKey: navigator,
+        theme: _theme(eink: true),
+        home: const Text('first'),
+      ),
+    );
+    final route = MaterialPageRoute<void>(builder: (_) => const Text('second'));
+    navigator.currentState!.push(route);
+    await tester.pump();
+    expect(route.transitionDuration, Duration.zero);
+    expect(route.reverseTransitionDuration, Duration.zero);
+    navigator.currentState!.pop();
+    await tester.pump();
+    expect(find.text('second'), findsNothing);
+    await tester.pump();
+    expect(tester.binding.hasScheduledFrame, isFalse);
+    // The regular theme keeps the 300 ms transition.
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(
+      MaterialApp(
+        navigatorKey: navigator,
+        theme: _theme(eink: false),
+        home: const Text('first'),
+      ),
+    );
+    final regular = MaterialPageRoute<void>(
+      builder: (_) => const Text('second'),
+    );
+    navigator.currentState!.push(regular);
+    await tester.pump();
+    expect(regular.transitionDuration.inMilliseconds, greaterThan(0));
+    expect(regular.reverseTransitionDuration.inMilliseconds, greaterThan(0));
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('T3 colored helpers collapse to black and white in E-Ink', (
     tester,
   ) async {

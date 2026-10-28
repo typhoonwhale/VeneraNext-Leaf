@@ -15,12 +15,8 @@ import 'package:venera_next/network/request_scope.dart';
 /// Mirrors the structure `MaterialApp.builder` in main.dart uses for
 /// `reduceMotion`.
 Widget _app(Widget home) => MaterialApp(
-  builder: (context, child) => EInkPreferences.reduceMotion
-      ? MediaQuery(
-          data: MediaQuery.of(context).copyWith(disableAnimations: true),
-          child: child!,
-        )
-      : child!,
+  builder: (context, child) =>
+      EInkReduceMotion(enabled: EInkPreferences.reduceMotion, child: child!),
   home: home,
 );
 
@@ -35,6 +31,19 @@ void _setMode(bool on) {
   final previous = appdata.settings['eInkMode'];
   appdata.settings['eInkMode'] = on;
   addTearDown(() => appdata.settings['eInkMode'] = previous);
+}
+
+class _StateProbe extends StatefulWidget {
+  const _StateProbe();
+
+  @override
+  State<_StateProbe> createState() => _StateProbeState();
+}
+
+class _StateProbeState extends State<_StateProbe> {
+  @override
+  Widget build(BuildContext context) =>
+      Text(MediaQuery.disableAnimationsOf(context) ? 'off' : 'on');
 }
 
 class _Loading extends StatefulWidget {
@@ -57,6 +66,23 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('T9 reduce motion without the platform flag', () {
+    testWidgets('flipping the switch keeps the state below it', (tester) async {
+      Widget tree(bool enabled) => MaterialApp(
+        builder: (context, child) =>
+            EInkReduceMotion(enabled: enabled, child: child!),
+        home: const _StateProbe(),
+      );
+      await tester.pumpWidget(tree(false));
+      final state = tester.state(find.byType(_StateProbe));
+      expect(find.text('on'), findsOneWidget);
+      await tester.pumpWidget(tree(true));
+      expect(tester.state(find.byType(_StateProbe)), same(state));
+      expect(find.text('off'), findsOneWidget);
+      await tester.pumpWidget(tree(false));
+      expect(tester.state(find.byType(_StateProbe)), same(state));
+      expect(find.text('on'), findsOneWidget);
+    });
+
     testWidgets('the platform flag is off and the app switch still wins', (
       tester,
     ) async {

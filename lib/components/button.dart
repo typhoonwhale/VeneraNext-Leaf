@@ -6,6 +6,7 @@ import 'package:venera_next/foundation/eink_theme.dart';
 import 'package:venera_next/foundation/translations.dart';
 import 'package:venera_next/foundation/widget_utils.dart';
 
+import 'consts.dart';
 import 'menu.dart';
 
 class HoverBox extends StatefulWidget {
@@ -217,7 +218,7 @@ class _ButtonState extends State<Button> {
           }
         },
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
+          duration: tweenDuration(context),
           padding: padding,
           constraints: const BoxConstraints(minWidth: 76, minHeight: 32),
           decoration: BoxDecoration(
@@ -248,7 +249,7 @@ class _ButtonState extends State<Button> {
                 : null,
           ),
           child: AnimatedSize(
-            duration: const Duration(milliseconds: 160),
+            duration: tweenDuration(context),
             child: SizedBox(
               width: width,
               height: height,

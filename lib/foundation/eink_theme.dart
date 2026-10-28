@@ -38,6 +38,29 @@ class EInkProgressIndicator extends StatelessWidget {
   }
 }
 
+/// Sets [MediaQueryData.disableAnimations] below it while [enabled]. The
+/// wrapper is always in the tree, so flipping [enabled] keeps the state of
+/// everything underneath; only this widget depends on the MediaQuery.
+class EInkReduceMotion extends StatelessWidget {
+  const EInkReduceMotion({
+    super.key,
+    required this.enabled,
+    required this.child,
+  });
+
+  final bool enabled;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final data = MediaQuery.of(context);
+    return MediaQuery(
+      data: enabled ? data.copyWith(disableAnimations: true) : data,
+      child: child,
+    );
+  }
+}
+
 /// Hatch segments (bottom-left to top-right, 45 degrees) covering [size],
 /// each clipped to the rectangle. [spacing] is the perpendicular distance
 /// between neighbouring lines.
@@ -279,6 +302,14 @@ ColorScheme einkColorScheme() => const ColorScheme(
 /// Route builder that shows the destination immediately.
 class _NoTransitionsBuilder extends PageTransitionsBuilder {
   const _NoTransitionsBuilder();
+
+  // MaterialPageRoute reads both durations from the builder; the default of
+  // 300 ms would keep the old page on screen after a pop.
+  @override
+  Duration get transitionDuration => Duration.zero;
+
+  @override
+  Duration get reverseTransitionDuration => Duration.zero;
 
   @override
   Widget buildTransitions<T>(

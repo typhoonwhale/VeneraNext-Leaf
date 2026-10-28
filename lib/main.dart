@@ -467,14 +467,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                   child: widget,
                 );
               }
-              if (appearance.reduceMotion) {
-                widget = MediaQuery(
-                  data: MediaQuery.of(
-                    context,
-                  ).copyWith(disableAnimations: true),
-                  child: widget,
-                );
-              }
+              widget = EInkReduceMotion(
+                enabled: appearance.reduceMotion,
+                child: widget,
+              );
               return _SystemUiProvider(
                 Material(
                   color: App.isLinux ? Colors.transparent : null,
