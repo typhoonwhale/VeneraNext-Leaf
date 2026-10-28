@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:venera_next/features/local_comics/download_task.dart';
@@ -162,6 +163,10 @@ void main() {
     await tester.tap(find.byTooltip('Delete'));
     await tester.pumpAndSettle();
     expect(find.text('Deleting...'), findsNothing);
+    // Deletion always removes the files; only favorites and history are
+    // optional.
+    expect(find.text('Also remove files on disk'), findsNothing);
+    expect(find.byType(CheckboxListTile), findsOneWidget);
 
     // Keep the deletion waiting for data access while the dialog is open.
     final gate = Completer<void>();
@@ -280,6 +285,151 @@ void main() {
     // The skipped comic stays selected.
     expect(find.text('1 selected'), findsOneWidget);
     task.pause();
+  });
+
+  testWidgets('mixed batch deletion keeps external folders and says so', (
+    tester,
+  ) async {
+    final messages = <String>[];
+    registerShowMessageHandler((_, message) => messages.add(message));
+    addTearDown(() => registerShowMessageHandler((_, _) {}));
+    final outside = Directory('${root.path}/original')..createSync();
+    final sentinel = File('${outside.path}/1.jpg')..writeAsStringSync('keep');
+    File('${manager.path}/second/1.jpg').writeAsStringSync('page');
+    final task = _RunningTask('first');
+    await tester.runAsync(() async {
+      await manager.add(
+        LocalComic(
+          id: 'outside',
+          title: 'outside',
+          subtitle: '',
+          tags: [],
+          directory: outside.path,
+          chapters: null,
+          cover: 'cover.jpg',
+          comicType: ComicType.local,
+          downloadedChapters: const [],
+          createdAt: DateTime(2024),
+        ),
+      );
+      manager.addTask(task);
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        navigatorKey: appNavigation.rootNavigatorKey,
+        home: const LocalComicsPage(),
+      ),
+    );
+    await tester.pump();
+    await tester.longPress(find.text('first').first);
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.text('second').first);
+    await tester.pump();
+    await tester.tap(find.text('outside').first);
+    await tester.pump();
+    await tester.tap(find.byTooltip('Delete'));
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.tap(find.text('Remove local favorite and history'));
+    await tester.pump();
+    await tester.tap(find.text('Confirm'));
+    await tester.pump();
+    for (var i = 0; i < 200 && messages.length < 2; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
+      await tester.pump();
+    }
+    await tester.pump(const Duration(milliseconds: 500));
+    // The background removal was scheduled from the widget zone.
+    var removed = false;
+    manager.pendingDeletionCleanup.then((_) => removed = true);
+    for (var i = 0; i < 200 && !removed; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
+      await tester.pump(const Duration(milliseconds: 1));
+    }
+    expect(removed, isTrue);
+
+    expect(messages, [
+      '1 referenced external folders and were only removed from the list. '
+          'The original files were kept.',
+      'Deleted 2. Skipped 1 being downloaded or extracted: "first"',
+    ]);
+    expect(manager.find('outside', ComicType.local), isNull);
+    expect(manager.find('second', ComicType.local), isNull);
+    expect(manager.find('first', ComicType.local), isNotNull);
+    expect(sentinel.readAsStringSync(), 'keep');
+    expect(Directory('${manager.path}/second').existsSync(), isFalse);
+    expect(Directory('${manager.path}/first').existsSync(), isTrue);
+    task.pause();
+  });
+
+  testWidgets('single deletion of an external comic keeps its folder', (
+    tester,
+  ) async {
+    final messages = <String>[];
+    registerShowMessageHandler((_, message) => messages.add(message));
+    addTearDown(() => registerShowMessageHandler((_, _) {}));
+    final outside = Directory('${root.path}/original')..createSync();
+    final sentinel = File('${outside.path}/1.jpg')..writeAsStringSync('keep');
+    await tester.runAsync(
+      () => manager.add(
+        LocalComic(
+          id: 'outside',
+          title: 'outside',
+          subtitle: '',
+          tags: [],
+          directory: outside.path,
+          chapters: null,
+          cover: 'cover.jpg',
+          comicType: ComicType.local,
+          downloadedChapters: const [],
+          createdAt: DateTime(2024),
+        ),
+      ),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        navigatorKey: appNavigation.rootNavigatorKey,
+        home: const LocalComicsPage(),
+      ),
+    );
+    await tester.pump();
+    // The tile menu deletes one comic.
+    await tester.tap(find.text('outside').first, buttons: kSecondaryButton);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete').last);
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('Also remove files on disk'), findsNothing);
+    await tester.tap(find.text('Remove local favorite and history'));
+    await tester.pump();
+    await tester.tap(find.text('Confirm'));
+    await tester.pump();
+    for (var i = 0; i < 200 && messages.isEmpty; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
+      await tester.pump();
+    }
+    await tester.pump(const Duration(milliseconds: 500));
+    // The background removal was scheduled from the widget zone.
+    var removed = false;
+    manager.pendingDeletionCleanup.then((_) => removed = true);
+    for (var i = 0; i < 200 && !removed; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
+      await tester.pump(const Duration(milliseconds: 1));
+    }
+    expect(removed, isTrue);
+    expect(messages, [
+      '1 referenced external folders and were only removed from the list. '
+          'The original files were kept.',
+    ]);
+    expect(manager.find('outside', ComicType.local), isNull);
+    expect(sentinel.readAsStringSync(), 'keep');
   });
 
   testWidgets('batch deletion of only busy comics deletes nothing', (

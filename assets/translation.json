@@ -459,8 +459,6 @@
     "Ch. @ep": "@ep 章",
     "P. @page": "@page 页",
     "Remove local favorite and history": "删除本地收藏和历史记录",
-    "Also remove files on disk": "同时删除磁盘上的文件",
-    "Copy to app local path": "将漫画复制到本地存储目录中",
     "Delete all unavailable local favorite items": "删除所有无效的本地收藏",
     "Deleted @a favorite items.": "已删除 @a 条无效收藏",
     "New version available": "有新版本可用",
@@ -961,7 +959,8 @@
     "Local library changed during deletion; retry the operation": "删除期间本地漫画库发生了变化，请重试",
     "Deleted @n. Skipped @m being downloaded or extracted: @titles": "已删除 @n 本；以下 @m 本正在下载或解压，已跳过：@titles",
     "\"@t\"": "《@t》",
-    "@titles etc. @m": "@titles等 @m 本"
+    "@titles etc. @m": "@titles等 @m 本",
+    "@n referenced external folders and were only removed from the list. The original files were kept.": "@n 本引用外部文件夹，仅从列表移除，原文件已保留"
   },
   "zh_TW": {
     "Update cache cannot be cleaned": "更新快取無法清理",
@@ -1422,8 +1421,6 @@
     "Ch. @ep": "@ep 章",
     "P. @page": "@page 頁",
     "Remove local favorite and history": "刪除本機收藏和歷史記錄",
-    "Also remove files on disk": "同時刪除磁碟上的文件",
-    "Copy to app local path": "將漫畫複製到本機儲存目錄中",
     "Delete all unavailable local favorite items": "刪除所有無效的本機收藏",
     "Deleted @a favorite items.": "已刪除 @a 條無效收藏",
     "New version available": "有新版本可用",
@@ -1924,6 +1921,7 @@
     "Local library changed during deletion; retry the operation": "刪除期間本機漫畫庫發生了變化，請重試",
     "Deleted @n. Skipped @m being downloaded or extracted: @titles": "已刪除 @n 本；以下 @m 本正在下載或解壓，已跳過：@titles",
     "\"@t\"": "《@t》",
-    "@titles etc. @m": "@titles等 @m 本"
+    "@titles etc. @m": "@titles等 @m 本",
+    "@n referenced external folders and were only removed from the list. The original files were kept.": "@n 本引用外部資料夾，僅從列表移除，原檔案已保留"
   }
 }

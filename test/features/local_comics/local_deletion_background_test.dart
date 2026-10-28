@@ -87,7 +87,7 @@ void main() {
         await Directory(path).delete(recursive: true);
       };
 
-      await manager.batchDeleteComics([big], true, false);
+      await manager.batchDeleteComics([big], false);
       expect(manager.find(big.id, big.comicType), isNull);
       expect(Directory('${manager.path}/big').existsSync(), isFalse);
       final staged = quarantines(manager.path).single;

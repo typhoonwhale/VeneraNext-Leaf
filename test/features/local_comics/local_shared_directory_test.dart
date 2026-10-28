@@ -74,7 +74,7 @@ void main() {
       await manager.deleteComic(first);
       expect(page.readAsStringSync(), 'shared');
       expect(manager.find(second.id, second.comicType), isNotNull);
-      await manager.batchDeleteComics([second], true, false);
+      await manager.batchDeleteComics([second], false);
       expect(directory.existsSync(), isFalse);
     },
   );
@@ -95,7 +95,9 @@ void main() {
         'b',
       ]);
       expect(page.readAsStringSync(), 'shared chapter');
-      await manager.batchDeleteComics([child], false, false);
+      // The parent's folder still protects the chapter it contains.
+      await manager.batchDeleteComics([child], false);
+      expect(page.readAsStringSync(), 'shared chapter');
       await manager.deleteComicChapters(parent, ['a']);
       expect(directory.existsSync(), isFalse);
     },
@@ -113,7 +115,7 @@ void main() {
       for (final entry in [parent, child, library]) {
         await manager.add(entry);
       }
-      await manager.batchDeleteComics([parent, library], true, false);
+      await manager.batchDeleteComics([parent, library], false);
       expect(page.readAsStringSync(), 'keep');
       expect(manager.directory.existsSync(), isTrue);
       expect(manager.count, 1);
@@ -170,9 +172,27 @@ void main() {
     final parent = comic('target', 'target');
     await manager.add(parent);
     await manager.add(comic('child', '${manager.path}/alias/child'));
-    await manager.batchDeleteComics([parent], true, false);
+    await manager.batchDeleteComics([parent], false);
     expect(page.readAsStringSync(), 'keep');
   });
+
+  test(
+    'a comic aliased to a folder outside the library keeps its files',
+    () async {
+      final outside = Directory('${root.path}/original')..createSync();
+      final page = File('${outside.path}/1.jpg')..writeAsStringSync('keep');
+      final link = '${manager.path}/linked';
+      alias(link, outside.path);
+      final book = comic('linked', link);
+      await manager.add(book);
+      final result = await manager.batchDeleteComics([book], false);
+      await manager.pendingDeletionCleanup;
+      expect(result.external.map((c) => c.id), ['linked']);
+      expect(manager.find(book.id, book.comicType), isNull);
+      expect(page.readAsStringSync(), 'keep');
+      expect(Directory(link).existsSync(), isTrue);
+    },
+  );
 
   test('deletion never traverses an alias of the library root', () async {
     final link = '${root.path}/library-alias';
@@ -202,7 +222,7 @@ void main() {
         await manager.add(broken);
         Future<void> removeBook() => switch (operation) {
           'single' => manager.deleteComic(book),
-          'batch' => manager.batchDeleteComics([book], true, false),
+          'batch' => manager.batchDeleteComics([book], false),
           _ => manager.deleteComicChapters(book, ['a']),
         };
         var notifications = 0;
@@ -214,9 +234,10 @@ void main() {
         ]);
         expect(page.readAsStringSync(), 'keep');
         expect(notifications, 0);
-        // Unregistering a reference without disk cleanup remains available even
-        // when its native identity is broken. Then retry the original operation.
-        await manager.deleteComic(broken, false);
+        // A reference whose native identity is broken counts as external, so
+        // it is only unregistered. Then retry the original operation.
+        await manager.deleteComic(broken);
+        expect(Link(link).existsSync(), isTrue);
         await removeBook();
         expect(page.existsSync(), isFalse);
         if (operation == 'chapter') {

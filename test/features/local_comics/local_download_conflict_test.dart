@@ -83,7 +83,7 @@ void main() {
       manager.addTask(running);
       expect(running.isPaused, isFalse);
 
-      await manager.batchDeleteComics([other], true, false);
+      await manager.batchDeleteComics([other], false);
       expect(manager.find(other.id, other.comicType), isNull);
       expect(Directory('${manager.path}/other').existsSync(), isFalse);
       expect(running.isPaused, isFalse);
@@ -145,11 +145,11 @@ void main() {
       );
       // A batch skips the busy comic and deletes the others.
       final extra = await addComic('extra');
-      final result = await manager.batchDeleteComics(
-        [other, busy, extra],
-        true,
-        false,
-      );
+      final result = await manager.batchDeleteComics([
+        other,
+        busy,
+        extra,
+      ], false);
       expect(result.deleted.map((c) => c.id), ['other', 'extra']);
       expect(result.skippedTitles, ['busy']);
       expect(manager.find(other.id, other.comicType), isNull);
@@ -162,7 +162,7 @@ void main() {
 
       // Nothing deletable is left: refused as for a single comic.
       await expectLater(
-        manager.batchDeleteComics([busy], true, false),
+        manager.batchDeleteComics([busy], false),
         throwsA(isA<LocalComicTaskBusy>()),
       );
       expect(manager.find(busy.id, busy.comicType), isNotNull);
@@ -173,7 +173,7 @@ void main() {
       final task = _Task('archive')..extracting = true;
       manager.restorePausedDownloads([task]);
       await expectLater(
-        manager.batchDeleteComics([item], true, false),
+        manager.batchDeleteComics([item], false),
         throwsA(
           isA<LocalComicTaskBusy>().having(
             (e) => e.message,
@@ -184,7 +184,7 @@ void main() {
       );
       expect(manager.downloadingTasks, [task]);
       task.extracting = false;
-      await manager.batchDeleteComics([item], true, false);
+      await manager.batchDeleteComics([item], false);
       expect(manager.downloadingTasks, isEmpty);
     });
 
@@ -219,7 +219,7 @@ void main() {
       final next = _Task('next');
       manager.restorePausedDownloads([first, next]);
       manager.resumeDownload(first);
-      final deleting = manager.batchDeleteComics([item], true, true);
+      final deleting = manager.batchDeleteComics([item], true);
       await entered.future;
       // The running task ends while the deletion is deciding: the queue does
       // not start the next one by itself until the deletion ends.
@@ -264,7 +264,7 @@ void main() {
         states: {task: DownloadTaskState.paused},
       );
       await manager
-          .batchDeleteComics([item], true, false)
+          .batchDeleteComics([item], false)
           .timeout(const Duration(seconds: 5));
       expect(cleaned, isTrue);
       expect(manager.downloadingTasks, isEmpty);
@@ -280,7 +280,7 @@ void main() {
       final next = _Task('next');
       manager.restorePausedDownloads([first, book, next]);
       manager.resumeDownload(first);
-      final deleting = manager.batchDeleteComics([item], true, true);
+      final deleting = manager.batchDeleteComics([item], true);
       await entered.future;
       await manager.cancelDownload(first);
       await pumpEventQueue();
@@ -301,7 +301,7 @@ void main() {
       final running = _Task('fresh')..completed = comic('fresh');
       Directory('${manager.path}/fresh').createSync();
       manager.addTask(running);
-      final deleting = manager.batchDeleteComics([item], true, true);
+      final deleting = manager.batchDeleteComics([item], true);
       await entered.future;
       manager.completeTask(running);
       expect(manager.find('fresh', _type), isNotNull);
@@ -336,7 +336,7 @@ void main() {
         states: {task: DownloadTaskState.paused},
       );
       manager.resumeDownload(alias);
-      final deleting = manager.batchDeleteComics([item], true, true);
+      final deleting = manager.batchDeleteComics([item], true);
       await entered.future;
       manager.completeTask(alias);
       commit.complete();
@@ -366,7 +366,7 @@ void main() {
         [task],
         states: {task: DownloadTaskState.paused},
       );
-      final deleting = manager.batchDeleteComics([item], true, true);
+      final deleting = manager.batchDeleteComics([item], true);
       await entered.future;
       manager.resumeDownload(task);
       await manager.moveToFirst(task);
@@ -376,22 +376,33 @@ void main() {
       expect(manager.downloadingTasks, isEmpty);
     });
 
-    test('keeping the files clears the download markers', () async {
-      final item = await addComic('book');
-      for (final marker in [
-        DownloadOwnerToken.imagesMarker,
-        DownloadOwnerToken.archiveMarker,
-      ]) {
-        File('${manager.path}/book/$marker').writeAsStringSync(_token);
-      }
-      await manager.batchDeleteComics([item], false, false);
-      expect(manager.find(item.id, item.comicType), isNull);
-      expect(DownloadOwnerToken.hasOutputMarker('${manager.path}/book'), false);
-      expect(File('${manager.path}/book/0.jpg').readAsStringSync(), 'book');
-      // Startup no longer takes the kept folder for an orphan output.
-      await start();
+    test('an external folder keeps its files and download markers', () async {
+      final outside = Directory('${root.path}/outside')..createSync();
+      File('${outside.path}/0.jpg').writeAsStringSync('original');
+      final marker = File('${outside.path}/${DownloadOwnerToken.imagesMarker}')
+        ..writeAsStringSync(_token);
+      final item = LocalComic(
+        id: 'outside',
+        title: 'outside',
+        subtitle: '',
+        tags: [],
+        directory: outside.path,
+        chapters: null,
+        cover: '0.jpg',
+        comicType: _type,
+        downloadedChapters: const [],
+        createdAt: DateTime(2024),
+      );
+      await manager.add(item);
+      final inside = await addComic('inside');
+      final result = await manager.batchDeleteComics([item, inside], false);
       await manager.pendingDeletionCleanup;
-      expect(File('${manager.path}/book/0.jpg').readAsStringSync(), 'book');
+      expect(result.deleted.map((c) => c.id), ['outside', 'inside']);
+      expect(result.external.map((c) => c.id), ['outside']);
+      expect(manager.find(item.id, item.comicType), isNull);
+      expect(File('${outside.path}/0.jpg').readAsStringSync(), 'original');
+      expect(marker.readAsStringSync(), _token);
+      expect(Directory('${manager.path}/inside').existsSync(), isFalse);
     });
   });
 

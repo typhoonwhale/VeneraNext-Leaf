@@ -491,7 +491,6 @@ class _LocalComicsPageState extends State<LocalComicsPage> {
     await showDialog(
       context: appNavigation.rootContext,
       builder: (context) {
-        bool removeComicFile = true;
         bool removeFavoriteAndHistory = true;
         // Only moving the folders aside and committing the records is
         // awaited; their files are removed in the background afterwards.
@@ -507,7 +506,6 @@ class _LocalComicsPageState extends State<LocalComicsPage> {
               try {
                 deleted = await LocalManager().batchDeleteComics(
                   comics,
-                  removeComicFile,
                   removeFavoriteAndHistory,
                 );
                 if (context.mounted) context.pop();
@@ -538,17 +536,6 @@ class _LocalComicsPageState extends State<LocalComicsPage> {
                               state(() {
                                 removeFavoriteAndHistory =
                                     !removeFavoriteAndHistory;
-                              });
-                            },
-                    ),
-                    CheckboxListTile(
-                      title: Text("Also remove files on disk".tl),
-                      value: removeComicFile,
-                      onChanged: deleting
-                          ? null
-                          : (v) {
-                              state(() {
-                                removeComicFile = !removeComicFile;
                               });
                             },
                     ),
@@ -592,6 +579,14 @@ class _LocalComicsPageState extends State<LocalComicsPage> {
         );
       },
     );
+    final external = deleted?.external.length ?? 0;
+    if (external > 0 && mounted) {
+      context.showMessage(
+        message:
+            "@n referenced external folders and were only removed from the list. The original files were kept."
+                .tlParams({'n': external}),
+      );
+    }
     return deleted;
   }
 

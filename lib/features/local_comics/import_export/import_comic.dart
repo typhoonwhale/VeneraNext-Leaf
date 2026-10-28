@@ -16,13 +16,11 @@ import 'pdf_import_tasks.dart';
 class ImportComic {
   final ComicImportService service;
   final String? selectedFolder;
-  final bool copyToLocal;
 
   final ImportComicPresentation presentation;
 
   const ImportComic({
     this.selectedFolder,
-    this.copyToLocal = true,
     this.presentation = const ImportComicPresentation(),
     this.service = const ComicImportService(
       localManager: LocalManager.new,
@@ -157,7 +155,6 @@ class ImportComic {
     if (directory == null) return false;
     return _showImportResult(
       () => service.runImport((importing) async {
-        if (!copyToLocal) await directory.retainAccessForSession();
         operation.checkActive();
         return operation.useDirectory(
           directory,
@@ -171,7 +168,7 @@ class ImportComic {
                 file,
                 comicSource,
                 defaultFolder: '(EhViewer)Default'.tl,
-                copy: copyToLocal,
+                copy: true,
                 isCancelled: () => cancelled,
                 onScanComplete: controller?.close,
               );
@@ -191,14 +188,13 @@ class ImportComic {
     if (selection == null) return false;
     return _showImportResult(
       () => service.runImport((importing) async {
-        if (!copyToLocal) await selection.retainAccessForSession();
         operation.checkActive();
         return operation.useDirectory(
           selection,
           (directory) => importing.directory(
             directory,
             single: single,
-            copy: copyToLocal,
+            copy: true,
             folder: selectedFolder,
           ),
         );

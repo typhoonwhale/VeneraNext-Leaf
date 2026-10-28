@@ -37,22 +37,6 @@ abstract final class DownloadOwnerToken {
     return null;
   }
 
-  /// Remove the markers of both task kinds from [directory], so the folder
-  /// is no longer taken for a download output. Failures are only logged.
-  static void clearOutputMarkers(String directory) {
-    for (final marker in _markers) {
-      final path = FilePath.join(directory, marker);
-      try {
-        if (FileSystemEntity.typeSync(path, followLinks: false) ==
-            FileSystemEntityType.file) {
-          File(path).deleteSync();
-        }
-      } catch (error, stack) {
-        Log.error('Download', error, stack);
-      }
-    }
-  }
-
   /// Real directories directly under [root] that carry a download marker but
   /// belong to no restored task and no registered comic: outputs left by a
   /// task that no longer exists. A marker holding one of [tokens] belongs to

@@ -86,12 +86,19 @@ String _resolveComicDirectory(String directory, String libraryPath) =>
     ? directory
     : FilePath.join(libraryPath, directory);
 
-/// Outcome of a batch deletion: `skipped` comics have an active download.
+/// Outcome of a batch deletion: `skipped` comics have an active download;
+/// `external` ones are among `deleted` but reference a folder outside the
+/// library, so only their records were removed and their files were kept.
 class LocalComicBatchDeleteResult {
-  const LocalComicBatchDeleteResult(this.deleted, this.skipped);
+  const LocalComicBatchDeleteResult(
+    this.deleted,
+    this.skipped, [
+    this.external = const [],
+  ]);
 
   final List<LocalComic> deleted;
   final List<LocalComic> skipped;
+  final List<LocalComic> external;
 
   List<String> get skippedTitles => [for (final c in skipped) c.title];
 }
@@ -394,9 +401,12 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
         : resolveLocalNativePath(value),
     clearContents: (source) async {
       // Paused task folders move with the library.
-      final allowed = await _resolveDeletionDirectories([
-        source,
-      ], protectDownloads: false);
+      // The previous root is outside the library that has just moved.
+      final allowed = await _resolveDeletionDirectories(
+        [source],
+        protectDownloads: false,
+        allowOutsideLibrary: true,
+      );
       if (allowed.isEmpty) {
         throw StateError(
           'Old library is still referenced; its files were kept',
@@ -1135,31 +1145,29 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
   /// Downloads of deleted comics are discarded once the deletion commits;
   /// their own cleanup is awaited after storage ownership is released, so a
   /// deletion never waits for other tasks or for itself.
-  Future<void> deleteComic(LocalComic c, [bool removeFileOnDisk = true]) async {
-    final discarded = await _runWithComicStorage(
-      () => _deleteComic(c, removeFileOnDisk),
-    );
+  ///
+  /// The comic's folder is deleted with it, unless the folder is outside the
+  /// library (a legacy import that was not copied): then only the records
+  /// are removed and the user's original files are kept.
+  Future<void> deleteComic(LocalComic c) async {
+    final discarded = await _runWithComicStorage(() => _deleteComic(c));
     await _awaitDiscardedDownloads(discarded);
   }
 
-  Future<List<DownloadTask>> _deleteComic(
-    LocalComic c,
-    bool removeFileOnDisk,
-  ) async {
+  Future<List<DownloadTask>> _deleteComic(LocalComic c) async {
     final current = find(c.id, c.comicType);
     if (current == null) return const [];
     c = current;
     return _withDeletingDownloads([c], () async {
       final scope = [c.baseDir];
       final snapshot = _deletionSnapshot([c], scope);
-      final directories = removeFileOnDisk
+      final directories = await _isInsideLibrary(c)
           ? await _resolveDeletionDirectories(
               [Directory(c.baseDir)],
               excluding: [c],
               discarding: [c],
             )
           : const <Directory>[];
-      if (!removeFileOnDisk) _clearDownloadMarkers([c]);
       await _runDeletionJournal(
         directories,
         (markCommitted) => _deleteRecords(
@@ -1221,20 +1229,20 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
 
   /// Comics whose download writes now are skipped and reported back; when
   /// nothing else is left the refusal is thrown as for a single comic.
+  /// Folders outside the library are kept as in [deleteComic].
   Future<LocalComicBatchDeleteResult> batchDeleteComics(
     List<LocalComic> comics, [
-    bool removeFileOnDisk = true,
     bool removeFavoriteAndHistory = true,
   ]) async {
     final outcome = await _runWithComicStorage(
-      () => _batchDeleteComics(
-        comics,
-        removeFileOnDisk,
-        removeFavoriteAndHistory,
-      ),
+      () => _batchDeleteComics(comics, removeFavoriteAndHistory),
     );
     await _awaitDiscardedDownloads(outcome.discarded);
-    return LocalComicBatchDeleteResult(outcome.deleted, outcome.skipped);
+    return LocalComicBatchDeleteResult(
+      outcome.deleted,
+      outcome.skipped,
+      outcome.external,
+    );
   }
 
   Future<
@@ -1242,11 +1250,11 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
       List<DownloadTask> discarded,
       List<LocalComic> deleted,
       List<LocalComic> skipped,
+      List<LocalComic> external,
     })
   >
   _batchDeleteComics(
     List<LocalComic> comics,
-    bool removeFileOnDisk,
     bool removeFavoriteAndHistory,
   ) async {
     comics = [for (final comic in comics) ?find(comic.id, comic.comicType)];
@@ -1255,6 +1263,7 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
         discarded: const <DownloadTask>[],
         deleted: const <LocalComic>[],
         skipped: const <LocalComic>[],
+        external: const <LocalComic>[],
       );
     }
     final skipped = <LocalComic>[];
@@ -1271,28 +1280,27 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
     }
     if (remaining.isEmpty) throw firstBusy!;
     comics = remaining;
+    final external = <LocalComic>[];
     final discarded = await _withDeletingDownloads(comics, () async {
       final scope = [for (final comic in comics) comic.baseDir];
       final snapshot = _deletionSnapshot(comics, scope);
       var shouldRemovedDirs = <Directory>[];
       try {
         for (final comic in comics) {
-          if (removeFileOnDisk) {
-            final dir = Directory(comic.baseDir);
-            if (dir.existsSync()) {
-              shouldRemovedDirs.add(dir);
-            }
+          if (!await _isInsideLibrary(comic)) {
+            external.add(comic);
+            continue;
+          }
+          final dir = Directory(comic.baseDir);
+          if (dir.existsSync()) {
+            shouldRemovedDirs.add(dir);
           }
         }
-        if (removeFileOnDisk) {
-          shouldRemovedDirs = await _resolveDeletionDirectories(
-            shouldRemovedDirs,
-            excluding: comics,
-            discarding: comics,
-          );
-        } else {
-          _clearDownloadMarkers(comics);
-        }
+        shouldRemovedDirs = await _resolveDeletionDirectories(
+          shouldRemovedDirs,
+          excluding: comics,
+          discarding: comics,
+        );
         await _runDeletionJournal(
           shouldRemovedDirs,
           (markCommitted) => _deleteRecords(
@@ -1311,7 +1319,12 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
       notifyListeners();
       return discarded;
     });
-    return (discarded: discarded, deleted: comics, skipped: skipped);
+    return (
+      discarded: discarded,
+      deleted: comics,
+      skipped: skipped,
+      external: external,
+    );
   }
 
   List<DownloadTask> _downloadsOf(List<LocalComic> comics) => [
@@ -1401,14 +1414,20 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
     }
   }
 
-  /// Comic folders that stay on disk are no longer download outputs: a
-  /// leftover marker would make startup remove them and imports skip them.
-  void _clearDownloadMarkers(List<LocalComic> comics) {
-    for (final comic in comics) {
-      if (Directory(comic.baseDir) is AndroidDirectory) continue;
-      DownloadOwnerToken.clearOutputMarkers(comic.baseDir);
-    }
-  }
+  /// Folders of legacy imports that were not copied are outside the library
+  /// and belong to the user. SAF paths are compared as recorded; a folder
+  /// whose identity cannot be resolved counts as outside.
+  Future<bool> _isInsideLibrary(LocalComic comic) =>
+      isLocalDirectoryInsideLibrary(
+        directory: comic.baseDir,
+        libraryPath: path,
+        resolvePath: _resolveDeletionPath,
+      );
+
+  Future<String> _resolveDeletionPath(String value) =>
+      Directory(value) is AndroidDirectory
+      ? Future.value(value)
+      : resolveLocalNativePath(value);
 
   Future<void> _deleteRecords(
     List<LocalComic> comics,
@@ -1552,6 +1571,7 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
     List<String>? retainedChapters,
     bool protectDownloads = true,
     List<LocalComic> discarding = const [],
+    bool allowOutsideLibrary = false,
   }) async {
     if (directories.isEmpty) return const [];
     final retained = _repository.directoryReferences(
@@ -1593,9 +1613,8 @@ class LocalManager with ChangeNotifier implements DownloadTaskStorage {
       ],
       libraryPath: path,
       // SAF document paths have provider identity, not native symlink APIs.
-      resolvePath: (value) => Directory(value) is AndroidDirectory
-          ? Future.value(value)
-          : resolveLocalNativePath(value),
+      resolvePath: _resolveDeletionPath,
+      allowOutsideLibrary: allowOutsideLibrary,
     );
     return paths.map(Directory.new).toList();
   }

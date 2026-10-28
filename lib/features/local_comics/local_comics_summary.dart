@@ -14,7 +14,6 @@ import 'package:venera_next/features/comic_details/comic_details.dart';
 import 'package:venera_next/features/comic_widgets/comic_widgets.dart';
 import 'package:venera_next/features/favorites/favorites_manager.dart';
 import 'package:venera_next/features/sync/sync.dart';
-import 'package:venera_next/foundation/app.dart';
 import 'package:venera_next/routing/app_navigation.dart';
 import 'package:venera_next/foundation/context.dart';
 import 'package:venera_next/foundation/translations.dart';
@@ -202,8 +201,6 @@ class _ImportComicsWidgetState extends State<_ImportComicsWidget> {
 
   String? selectedFolder;
 
-  bool copyToLocalFolder = true;
-
   @override
   void dispose() {
     _task?.cancel();
@@ -279,19 +276,6 @@ class _ImportComicsWidgetState extends State<_ImportComicsWidget> {
                         },
                       ),
                     ).paddingHorizontal(8),
-                  if (!App.isIOS &&
-                      !App.isMacOS &&
-                      ![2, 3, 4, 5, 7].contains(type))
-                    CheckboxListTile(
-                      enabled: true,
-                      title: Text("Copy to app local path".tl),
-                      value: copyToLocalFolder,
-                      onChanged: (v) {
-                        setState(() {
-                          copyToLocalFolder = !copyToLocalFolder;
-                        });
-                      },
-                    ).paddingHorizontal(8),
                   const SizedBox(height: 8),
                   Text(info).paddingHorizontal(24),
                 ],
@@ -342,7 +326,6 @@ class _ImportComicsWidgetState extends State<_ImportComicsWidget> {
         favoritesManager: () => favorites,
       ),
       selectedFolder: selectedFolder,
-      copyToLocal: copyToLocalFolder,
       presentation: ImportComicPresentation.forTask(task),
     );
     final selectedType = type;
