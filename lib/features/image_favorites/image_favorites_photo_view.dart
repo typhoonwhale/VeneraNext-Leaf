@@ -246,7 +246,9 @@ class _ImageFavoritesPhotoViewState extends State<ImageFavoritesPhotoView>
 
   Widget buildAppBar() {
     return Material(
-      color: context.colorScheme.surface.toOpacity(0.72),
+      color: context.isEInk
+          ? context.colorScheme.surface
+          : context.colorScheme.surface.toOpacity(0.72),
       child: BlurEffect(
         child: Container(
           decoration: BoxDecoration(
