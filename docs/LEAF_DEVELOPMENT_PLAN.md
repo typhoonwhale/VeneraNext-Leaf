@@ -9,7 +9,7 @@
 - 已发布：Leaf 1.18.2 / versionCode 2402（tag `v1.18.2`，aeab51d）。用户反馈：实机日常使用未发现大问题。
 - 用户实机确认：同签名 Release 覆盖升级保留数据、从原版导入 `data.venera` 均正常；竖屏日常阅读正常。用户只竖屏使用，横屏不在当前验收范围。
 - 未完成：全套 Flutter 测试（macOS 缺 QuickJS 原生框架等环境问题，未全绿）。
-- 墨水屏功能尚无运行代码，路线图停在阶段 1，等待用户实机基线短测反馈，见 [LEAF_EINK_ROADMAP.md](LEAF_EINK_ROADMAP.md)；官方 SDK 约束见 [LEAF_EINK_GUIDELINES.md](LEAF_EINK_GUIDELINES.md)。
+- 墨水屏功能尚无运行代码，路线图停在阶段 1，等待用户实机基线短测反馈，见 [LEAF_EINK_ROADMAP.md](LEAF_EINK_ROADMAP.md)；官方 SDK 约束见 [LEAF_EINK_GUIDELINES.md](LEAF_EINK_GUIDELINES.md)。黑白 UI 与减少动画已在 `feature/leaf-eink-v1` 实现，见 [LEAF_EINK_UI.md](LEAF_EINK_UI.md)。
 - 应用内更新在远端 `feature/leaf-in-app-update` 分支（基于 main）推进，文档随该分支。
 
 ## 2. 基线与分支
