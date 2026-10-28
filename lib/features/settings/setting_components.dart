@@ -549,6 +549,7 @@ class _EndSelectorSelectSettingState
                   current: options[value],
                   values: options.values.toList(),
                   minWidth: 64,
+                  enabled: widget.enabled,
                   onTap: (index) {
                     if (mounted &&
                         target.matches(field) &&

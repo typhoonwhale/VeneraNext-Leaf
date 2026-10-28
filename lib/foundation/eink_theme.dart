@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:venera_next/foundation/appdata.dart';
 import 'package:venera_next/foundation/global_preference_store.dart';
@@ -36,6 +38,83 @@ class EInkProgressIndicator extends StatelessWidget {
   }
 }
 
+/// Hatch segments (bottom-left to top-right, 45 degrees) covering [size],
+/// each clipped to the rectangle. [spacing] is the perpendicular distance
+/// between neighbouring lines.
+List<(Offset, Offset)> einkHatchSegments(Size size, double spacing) {
+  final step = spacing * math.sqrt2;
+  final segments = <(Offset, Offset)>[];
+  if (size.isEmpty || step <= 0) return segments;
+  final total = size.width + size.height;
+  for (var k = 1; k * step < total; k++) {
+    final c = k * step;
+    final xa = math.max(0.0, c - size.height);
+    final xb = math.min(c, size.width);
+    segments.add((Offset(xa, c - xa), Offset(xb, c - xb)));
+  }
+  return segments;
+}
+
+class EInkHatchPainter extends CustomPainter {
+  const EInkHatchPainter({
+    this.shape,
+    this.spacing = EInkStyle.hatchSpacing,
+    this.strokeWidth = EInkStyle.hatchStrokeWidth,
+  });
+
+  /// Clip shape; the plain rectangle when null.
+  final ShapeBorder? shape;
+  final double spacing;
+  final double strokeWidth;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    canvas.save();
+    if (shape != null) canvas.clipPath(shape!.getOuterPath(rect));
+    canvas.clipRect(rect);
+    canvas.drawRect(rect, Paint()..color = Colors.white);
+    final paint = Paint()
+      ..color = Colors.black
+      ..strokeWidth = strokeWidth
+      ..style = PaintingStyle.stroke;
+    for (final (a, b) in einkHatchSegments(size, spacing)) {
+      canvas.drawLine(a, b, paint);
+    }
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(EInkHatchPainter old) =>
+      old.shape != shape ||
+      old.spacing != spacing ||
+      old.strokeWidth != strokeWidth;
+}
+
+/// White background with black 45 degree hatch lines, clipped to [shape];
+/// marks a disabled control on E-Ink.
+class EInkHatch extends StatelessWidget {
+  const EInkHatch({super.key, this.shape, this.child});
+
+  final ShapeBorder? shape;
+  final Widget? child;
+
+  @override
+  Widget build(BuildContext context) => CustomPaint(
+    painter: EInkHatchPainter(shape: shape),
+    child: child,
+  );
+}
+
+/// Keeps a disabled control's label readable on top of the hatch.
+Widget einkHatchLabel(Widget child) => ColoredBox(
+  color: Colors.white,
+  child: Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 4),
+    child: child,
+  ),
+);
+
 /// Theme-carried E-Ink flag and the shared selected-state colors.
 @immutable
 class EInkStyle extends ThemeExtension<EInkStyle> {
@@ -45,8 +124,11 @@ class EInkStyle extends ThemeExtension<EInkStyle> {
   /// Outline width for dialogs, sheets and the FAB.
   static const double strongStrokeWidth = 3.0;
 
-  /// Outline and text color of disabled buttons.
-  static const Color disabledColor = Color(0xFF9E9E9E);
+  /// Stroke width of the hatch lines on disabled controls.
+  static const double hatchStrokeWidth = strokeWidth;
+
+  /// Perpendicular distance between hatch line centers on disabled controls.
+  static const double hatchSpacing = 10.0;
 
   const EInkStyle({
     this.enabled = false,
@@ -202,17 +284,25 @@ ThemeData applyEInkTheme(ThemeData base) {
     borderRadius: BorderRadius.circular(12),
   );
   const buttonShape = StadiumBorder(side: border);
-  const disabledBorder = BorderSide(
-    color: EInkStyle.disabledColor,
-    width: EInkStyle.strokeWidth,
-  );
-  final buttonSide = WidgetStateProperty.resolveWith<BorderSide>(
-    (states) => states.contains(WidgetState.disabled) ? disabledBorder : border,
-  );
+  final buttonSide = const WidgetStatePropertyAll<BorderSide>(border);
   final disabledForeground = WidgetStateProperty.resolveWith<Color?>(
-    (states) =>
-        states.contains(WidgetState.disabled) ? EInkStyle.disabledColor : null,
+    (states) => states.contains(WidgetState.disabled) ? Colors.black : null,
   );
+  // The button Material clips its children to the button shape.
+  Widget hatchBackground(
+    BuildContext context,
+    Set<WidgetState> states,
+    Widget? child,
+  ) => states.contains(WidgetState.disabled)
+      ? EInkHatch(child: child)
+      : child ?? const SizedBox.shrink();
+  Widget hatchForeground(
+    BuildContext context,
+    Set<WidgetState> states,
+    Widget? child,
+  ) => states.contains(WidgetState.disabled) && child != null
+      ? einkHatchLabel(child)
+      : child ?? const SizedBox.shrink();
   return base.copyWith(
     textTheme: _einkTextTheme(base.textTheme),
     primaryTextTheme: _einkTextTheme(base.primaryTextTheme),
@@ -221,6 +311,8 @@ ThemeData applyEInkTheme(ThemeData base) {
         shape: const WidgetStatePropertyAll(buttonShape),
         side: buttonSide,
         foregroundColor: disabledForeground,
+        backgroundBuilder: hatchBackground,
+        foregroundBuilder: hatchForeground,
         padding: const WidgetStatePropertyAll(
           EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         ),
@@ -231,6 +323,8 @@ ThemeData applyEInkTheme(ThemeData base) {
         shape: const WidgetStatePropertyAll(buttonShape),
         side: buttonSide,
         foregroundColor: disabledForeground,
+        backgroundBuilder: hatchBackground,
+        foregroundBuilder: hatchForeground,
       ),
     ),
     filledButtonTheme: FilledButtonThemeData(
@@ -238,8 +332,11 @@ ThemeData applyEInkTheme(ThemeData base) {
         shape: const WidgetStatePropertyAll(buttonShape),
         side: buttonSide,
         foregroundColor: disabledForeground,
+        backgroundBuilder: hatchBackground,
+        foregroundBuilder: hatchForeground,
         backgroundColor: WidgetStateProperty.resolveWith<Color?>(
-          (states) => states.contains(WidgetState.disabled) ? Colors.white : null,
+          (states) =>
+              states.contains(WidgetState.disabled) ? Colors.white : null,
         ),
       ),
     ),
@@ -247,6 +344,19 @@ ThemeData applyEInkTheme(ThemeData base) {
     switchTheme: base.switchTheme.copyWith(
       trackOutlineColor: const WidgetStatePropertyAll(Colors.black),
       trackOutlineWidth: const WidgetStatePropertyAll(EInkStyle.strokeWidth),
+      // Switch tracks are too narrow for hatch lines: disabled is a white
+      // track with a hollow ring thumb.
+      trackColor: WidgetStateProperty.resolveWith<Color?>(
+        (states) => states.contains(WidgetState.disabled) ? Colors.white : null,
+      ),
+      thumbColor: WidgetStateProperty.resolveWith<Color?>(
+        (states) => states.contains(WidgetState.disabled) ? Colors.white : null,
+      ),
+      thumbIcon: WidgetStateProperty.resolveWith<Icon?>(
+        (states) => states.contains(WidgetState.disabled)
+            ? const Icon(Icons.circle_outlined, color: Colors.black)
+            : null,
+      ),
     ),
     splashFactory: NoSplash.splashFactory,
     highlightColor: Colors.transparent,
@@ -280,12 +390,16 @@ ThemeData applyEInkTheme(ThemeData base) {
     segmentedButtonTheme: SegmentedButtonThemeData(
       style: ButtonStyle(
         backgroundColor: WidgetStateProperty.resolveWith(
-          (states) => states.contains(WidgetState.selected)
+          (states) =>
+              states.contains(WidgetState.selected) &&
+                  !states.contains(WidgetState.disabled)
               ? Colors.black
               : Colors.white,
         ),
         foregroundColor: WidgetStateProperty.resolveWith(
-          (states) => states.contains(WidgetState.selected)
+          (states) =>
+              states.contains(WidgetState.selected) &&
+                  !states.contains(WidgetState.disabled)
               ? Colors.white
               : Colors.black,
         ),

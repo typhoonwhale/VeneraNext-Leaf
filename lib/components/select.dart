@@ -17,6 +17,7 @@ class Select extends StatelessWidget {
     required this.values,
     this.onTap,
     this.minWidth,
+    this.enabled = true,
   });
 
   final String? current;
@@ -27,76 +28,112 @@ class Select extends StatelessWidget {
 
   final double? minWidth;
 
+  final bool enabled;
+
   @override
   Widget build(BuildContext context) {
+    final hatched = context.isEInk && !enabled;
+    final radius = BorderRadius.circular(4);
+    final content = ClickInkWell(
+      onTap: () {
+        var renderBox = context.findRenderObject() as RenderBox;
+        var offset = renderBox.localToGlobal(Offset.zero);
+        var size = renderBox.size;
+        final eink = context.isEInk;
+        showMenu(
+          elevation: eink ? 0 : 3,
+          color: eink
+              ? context.colorScheme.surface
+              : context.brightness == Brightness.light
+              ? const Color(0xFFF6F6F6)
+              : const Color(0xFF1E1E1E),
+          shape: eink
+              ? RoundedRectangleBorder(
+                  side: const BorderSide(
+                    color: Colors.black,
+                    width: EInkStyle.strokeWidth,
+                  ),
+                  borderRadius: BorderRadius.circular(4),
+                )
+              : null,
+          context: context,
+          useRootNavigator: true,
+          constraints: BoxConstraints(
+            minWidth: size.width,
+            maxWidth: size.width,
+          ),
+          position: RelativeRect.fromLTRB(
+            offset.dx,
+            offset.dy + size.height + 2,
+            offset.dx + size.height + 2,
+            offset.dy,
+          ),
+          items: values
+              .map(
+                (e) => PopupMenuItem(
+                  height: App.isMobile ? 46 : 40,
+                  value: e,
+                  child: Text(e),
+                ),
+              )
+              .toList(),
+        ).then((value) {
+          if (value != null) {
+            onTap?.call(values.indexOf(value));
+          }
+        });
+      },
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ConstrainedBox(
+            constraints: BoxConstraints(
+              minWidth: minWidth != null ? (minWidth! - 32) : 0,
+            ),
+            child: Text(current ?? ' ', style: ts.s14),
+          ),
+          const SizedBox(width: 8),
+          Icon(Icons.arrow_drop_down, color: context.colorScheme.primary),
+        ],
+      ).padding(const EdgeInsets.symmetric(horizontal: 12, vertical: 4)),
+    );
     return Container(
       decoration: BoxDecoration(
-        border: Border.all(color: context.colorScheme.outlineVariant),
-        borderRadius: BorderRadius.circular(4),
+        border: Border.all(
+          color: hatched ? Colors.black : context.colorScheme.outlineVariant,
+          width: hatched ? EInkStyle.strokeWidth : 1,
+        ),
+        borderRadius: radius,
       ),
-      child: ClickInkWell(
-        onTap: () {
-          var renderBox = context.findRenderObject() as RenderBox;
-          var offset = renderBox.localToGlobal(Offset.zero);
-          var size = renderBox.size;
-          final eink = context.isEInk;
-          showMenu(
-            elevation: eink ? 0 : 3,
-            color: eink
-                ? context.colorScheme.surface
-                : context.brightness == Brightness.light
-                ? const Color(0xFFF6F6F6)
-                : const Color(0xFF1E1E1E),
-            shape: eink
-                ? RoundedRectangleBorder(
-                    side: const BorderSide(
-                      color: Colors.black,
-                      width: EInkStyle.strokeWidth,
+      child: hatched
+          ? ClipRRect(
+              borderRadius: radius,
+              child: EInkHatch(
+                shape: RoundedRectangleBorder(borderRadius: radius),
+                child: Padding(
+                  padding: const EdgeInsets.all(6),
+                  child: einkHatchLabel(
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ConstrainedBox(
+                          constraints: BoxConstraints(
+                            minWidth: minWidth != null ? (minWidth! - 32) : 0,
+                          ),
+                          child: Text(
+                            current ?? ' ',
+                            style: ts.s14.copyWith(color: Colors.black),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        const Icon(Icons.arrow_drop_down, color: Colors.black),
+                      ],
                     ),
-                    borderRadius: BorderRadius.circular(4),
-                  )
-                : null,
-            context: context,
-            useRootNavigator: true,
-            constraints: BoxConstraints(
-              minWidth: size.width,
-              maxWidth: size.width,
-            ),
-            position: RelativeRect.fromLTRB(
-              offset.dx,
-              offset.dy + size.height + 2,
-              offset.dx + size.height + 2,
-              offset.dy,
-            ),
-            items: values
-                .map(
-                  (e) => PopupMenuItem(
-                    height: App.isMobile ? 46 : 40,
-                    value: e,
-                    child: Text(e),
                   ),
-                )
-                .toList(),
-          ).then((value) {
-            if (value != null) {
-              onTap?.call(values.indexOf(value));
-            }
-          });
-        },
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ConstrainedBox(
-              constraints: BoxConstraints(
-                minWidth: minWidth != null ? (minWidth! - 32) : 0,
+                ),
               ),
-              child: Text(current ?? ' ', style: ts.s14),
-            ),
-            const SizedBox(width: 8),
-            Icon(Icons.arrow_drop_down, color: context.colorScheme.primary),
-          ],
-        ).padding(const EdgeInsets.symmetric(horizontal: 12, vertical: 4)),
-      ),
+            )
+          : content,
     );
   }
 }

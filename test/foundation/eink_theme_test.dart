@@ -392,7 +392,7 @@ void main() {
       }
     });
 
-    testWidgets('disabled buttons keep white fill with grey outline', (
+    testWidgets('disabled buttons use black outline, black text and hatch', (
       tester,
     ) async {
       await tester.pumpWidget(
@@ -419,24 +419,98 @@ void main() {
       ]) {
         final side = style.side!.resolve(disabled)!;
         expect(side.width, EInkStyle.strokeWidth);
-        expect(side.color, EInkStyle.disabledColor);
-        expect(style.foregroundColor!.resolve(disabled), EInkStyle.disabledColor);
+        expect(side.color, Colors.black);
+        expect(style.foregroundColor!.resolve(disabled), Colors.black);
         expect(style.shape!.resolve(disabled), isA<StadiumBorder>());
+        expect(style.backgroundBuilder, isNotNull);
       }
       expect(
         t.filledButtonTheme.style!.backgroundColor!.resolve(disabled),
         Colors.white,
       );
-      expect(t.filledButtonTheme.style!.backgroundColor!.resolve({}), isNull);
-      final material = tester.widget<Material>(
+      expect(find.byType(EInkHatch), findsNWidgets(3));
+      for (final type in [FilledButton, TextButton, OutlinedButton]) {
+        expect(
+          tester.getSize(
+            find.descendant(
+              of: find.byType(type),
+              matching: find.byType(EInkHatch),
+            ),
+          ),
+          tester.getSize(
+            find
+                .descendant(
+                  of: find.byType(type),
+                  matching: find.byType(Material),
+                )
+                .first,
+          ),
+        );
+      }
+      final text = tester.widget<DefaultTextStyle>(
         find
             .descendant(
               of: find.byType(FilledButton),
-              matching: find.byType(Material),
+              matching: find.byType(DefaultTextStyle),
             )
             .first,
       );
-      expect(material.color, Colors.white);
+      expect(text.style.color, Colors.black);
+    });
+
+    testWidgets('enabled and regular-theme disabled buttons have no hatch', (
+      tester,
+    ) async {
+      Future<void> pump(bool eink, VoidCallback? onPressed) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: _theme(eink: eink),
+            home: Material(
+              child: Column(
+                children: [
+                  FilledButton(onPressed: onPressed, child: const Text('f')),
+                  TextButton(onPressed: onPressed, child: const Text('t')),
+                  OutlinedButton(onPressed: onPressed, child: const Text('o')),
+                ],
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+      }
+
+      await pump(true, () {});
+      expect(find.byType(EInkHatch), findsNothing);
+      await tester.pumpWidget(const SizedBox());
+      await pump(false, null);
+      expect(find.byType(EInkHatch), findsNothing);
+    });
+
+    testWidgets('disabled Select hatches only on E-Ink', (tester) async {
+      Future<void> pump(bool eink) => tester.pumpWidget(
+        MaterialApp(
+          theme: _theme(eink: eink),
+          home: const Material(
+            child: Select(current: 'a', values: ['a'], enabled: false),
+          ),
+        ),
+      );
+      await pump(true);
+      await tester.pumpAndSettle();
+      expect(find.byType(EInkHatch), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+      await pump(false);
+      await tester.pumpAndSettle();
+      expect(find.byType(EInkHatch), findsNothing);
+    });
+
+    test('disabled switch is white with black outline and ring thumb', () {
+      final sw = _theme(eink: true).switchTheme;
+      const disabled = {WidgetState.disabled};
+      expect(sw.trackOutlineColor!.resolve(disabled), Colors.black);
+      expect(sw.trackColor!.resolve(disabled), Colors.white);
+      expect(sw.thumbIcon!.resolve(disabled), isNotNull);
+      expect(sw.thumbIcon!.resolve({}), isNull);
     });
 
     testWidgets('Button.text is outlined in E-Ink, icon and filled are not', (
