@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:venera_next/components/gesture.dart';
 import 'package:venera_next/foundation/context.dart';
+import 'package:venera_next/foundation/eink_theme.dart';
 import 'package:venera_next/foundation/widget_utils.dart';
 
 class ComicDetailActionButton extends StatelessWidget {
@@ -54,10 +55,12 @@ class ComicDetailActionButton extends StatelessWidget {
               margin: const EdgeInsets.symmetric(vertical: 6),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(18),
-                border: Border.all(
-                  color: context.colorScheme.outlineVariant,
-                  width: 0.6,
-                ),
+                border:
+                    context.einkBorder() ??
+                    Border.all(
+                      color: context.colorScheme.outlineVariant,
+                      width: 0.6,
+                    ),
               ),
               child: IconTheme.merge(
                 data: IconThemeData(size: 20, color: iconColor),

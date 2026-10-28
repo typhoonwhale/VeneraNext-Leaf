@@ -45,6 +45,9 @@ class EInkStyle extends ThemeExtension<EInkStyle> {
   /// Outline width for dialogs, sheets and the FAB.
   static const double strongStrokeWidth = 3.0;
 
+  /// Outline and text color of disabled buttons.
+  static const Color disabledColor = Color(0xFF9E9E9E);
+
   const EInkStyle({
     this.enabled = false,
     this.selectedBackground = Colors.black,
@@ -198,24 +201,47 @@ ThemeData applyEInkTheme(ThemeData base) {
     side: strongBorder,
     borderRadius: BorderRadius.circular(12),
   );
-  final buttonShape = RoundedRectangleBorder(
-    side: border,
-    borderRadius: BorderRadius.circular(4),
+  const buttonShape = StadiumBorder(side: border);
+  const disabledBorder = BorderSide(
+    color: EInkStyle.disabledColor,
+    width: EInkStyle.strokeWidth,
+  );
+  final buttonSide = WidgetStateProperty.resolveWith<BorderSide>(
+    (states) => states.contains(WidgetState.disabled) ? disabledBorder : border,
+  );
+  final disabledForeground = WidgetStateProperty.resolveWith<Color?>(
+    (states) =>
+        states.contains(WidgetState.disabled) ? EInkStyle.disabledColor : null,
   );
   return base.copyWith(
     textTheme: _einkTextTheme(base.textTheme),
     primaryTextTheme: _einkTextTheme(base.primaryTextTheme),
     textButtonTheme: TextButtonThemeData(
       style: ButtonStyle(
-        shape: WidgetStatePropertyAll(buttonShape),
-        side: const WidgetStatePropertyAll(border),
+        shape: const WidgetStatePropertyAll(buttonShape),
+        side: buttonSide,
+        foregroundColor: disabledForeground,
         padding: const WidgetStatePropertyAll(
           EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         ),
       ),
     ),
-    outlinedButtonTheme: const OutlinedButtonThemeData(
-      style: ButtonStyle(side: WidgetStatePropertyAll(border)),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: ButtonStyle(
+        shape: const WidgetStatePropertyAll(buttonShape),
+        side: buttonSide,
+        foregroundColor: disabledForeground,
+      ),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: ButtonStyle(
+        shape: const WidgetStatePropertyAll(buttonShape),
+        side: buttonSide,
+        foregroundColor: disabledForeground,
+        backgroundColor: WidgetStateProperty.resolveWith<Color?>(
+          (states) => states.contains(WidgetState.disabled) ? Colors.white : null,
+        ),
+      ),
     ),
     chipTheme: base.chipTheme.copyWith(side: border),
     switchTheme: base.switchTheme.copyWith(

@@ -131,7 +131,7 @@ class SideBarRoute<T> extends PopupRoute<T> {
 
     body = Container(
       decoration: BoxDecoration(
-        borderRadius: showSideBar
+        borderRadius: showSideBar && !context.isEInk
             ? const BorderRadius.horizontal(left: Radius.circular(16))
             : null,
         color: Theme.of(context).colorScheme.surfaceTint,

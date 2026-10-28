@@ -216,7 +216,7 @@ class _ButtonState extends State<Button> {
           decoration: BoxDecoration(
             color: buttonColor,
             borderRadius: BorderRadius.circular(
-              context.isEInk && widget.type != ButtonType.filled ? 4 : 16,
+              context.isEInk ? 999 : 16,
             ),
             boxShadow:
                 (isHover &&

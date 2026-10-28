@@ -347,29 +347,96 @@ void main() {
       );
     });
 
-    testWidgets('TextButton is outlined in E-Ink only', (tester) async {
-      Future<ShapeBorder?> shapeOf(bool eink) async {
+    testWidgets('buttons are stadium with strokeWidth outline in E-Ink only', (
+      tester,
+    ) async {
+      for (final eink in [true, false]) {
         await tester.pumpWidget(
           MaterialApp(
             theme: _theme(eink: eink),
             home: Material(
-              child: TextButton(onPressed: () {}, child: const Text('OK')),
+              child: Column(
+                children: [
+                  TextButton(onPressed: () {}, child: const Text('text')),
+                  OutlinedButton(onPressed: () {}, child: const Text('out')),
+                  FilledButton.tonal(
+                    onPressed: () {},
+                    child: const Text('tonal'),
+                  ),
+                ],
+              ),
             ),
           ),
         );
         await tester.pumpAndSettle();
-        final style = Theme.of(
-          tester.element(find.text('OK')),
-        ).textButtonTheme.style;
-        final side = style?.side?.resolve({});
-        final shape = style?.shape?.resolve({});
-        expect(side?.width, eink ? EInkStyle.strokeWidth : isNull);
-        expect(shape?.side.width, eink ? EInkStyle.strokeWidth : isNull);
-        return shape;
+        for (final type in [TextButton, OutlinedButton, FilledButton]) {
+          final style = tester.widget<ButtonStyleButton>(find.byType(type));
+          final theme = Theme.of(tester.element(find.byType(type)));
+          final themed = switch (type) {
+            const (TextButton) => theme.textButtonTheme.style,
+            const (OutlinedButton) => theme.outlinedButtonTheme.style,
+            _ => theme.filledButtonTheme.style,
+          };
+          expect(style, isNotNull);
+          final shape = themed?.shape?.resolve({});
+          final side = themed?.side?.resolve({});
+          if (eink) {
+            expect(shape, isA<StadiumBorder>());
+            expect(side!.width, EInkStyle.strokeWidth);
+            expect(side.color, Colors.black);
+          } else {
+            expect(shape, isNull);
+            expect(side, isNull);
+          }
+        }
       }
+    });
 
-      await shapeOf(true);
-      await shapeOf(false);
+    testWidgets('disabled buttons keep white fill with grey outline', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: _theme(eink: true),
+          home: const Material(
+            child: Column(
+              children: [
+                FilledButton(onPressed: null, child: Text('f')),
+                TextButton(onPressed: null, child: Text('t')),
+                OutlinedButton(onPressed: null, child: Text('o')),
+              ],
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final t = _theme(eink: true);
+      const disabled = {WidgetState.disabled};
+      for (final style in [
+        t.filledButtonTheme.style!,
+        t.textButtonTheme.style!,
+        t.outlinedButtonTheme.style!,
+      ]) {
+        final side = style.side!.resolve(disabled)!;
+        expect(side.width, EInkStyle.strokeWidth);
+        expect(side.color, EInkStyle.disabledColor);
+        expect(style.foregroundColor!.resolve(disabled), EInkStyle.disabledColor);
+        expect(style.shape!.resolve(disabled), isA<StadiumBorder>());
+      }
+      expect(
+        t.filledButtonTheme.style!.backgroundColor!.resolve(disabled),
+        Colors.white,
+      );
+      expect(t.filledButtonTheme.style!.backgroundColor!.resolve({}), isNull);
+      final material = tester.widget<Material>(
+        find
+            .descendant(
+              of: find.byType(FilledButton),
+              matching: find.byType(Material),
+            )
+            .first,
+      );
+      expect(material.color, Colors.white);
     });
 
     testWidgets('Button.text is outlined in E-Ink, icon and filled are not', (
@@ -401,10 +468,24 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
+        BorderRadius? radiusOf(String label) {
+          final box = tester.widget<AnimatedContainer>(
+            find.ancestor(
+              of: find.text(label),
+              matching: find.byType(AnimatedContainer),
+            ),
+          );
+          return (box.decoration! as BoxDecoration).borderRadius
+              as BorderRadius?;
+        }
+
         if (eink) {
+          expect(radiusOf('t'), BorderRadius.circular(999));
+          expect(radiusOf('n'), BorderRadius.circular(999));
           expect(borderOf('t')!.top.width, EInkStyle.strokeWidth);
           expect(borderOf('n')!.top.width, EInkStyle.strokeWidth);
         } else {
+          expect(radiusOf('t'), BorderRadius.circular(16));
           expect(borderOf('t'), isNull);
           expect(borderOf('n'), isNull);
         }
