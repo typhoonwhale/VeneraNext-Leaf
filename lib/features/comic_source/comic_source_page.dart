@@ -39,6 +39,7 @@ import 'source_import_dialog.dart';
 import 'source_update_service.dart';
 import 'source_update_prompt.dart';
 import 'source_mutation_failure.dart';
+import 'package:venera_next/foundation/eink_theme.dart';
 
 class ComicSourcePage extends StatelessWidget {
   const ComicSourcePage({
@@ -952,7 +953,7 @@ class _SliverComicSourceState extends SettingsSaveState<_SliverComicSource> {
           trailing: loading
               ? const SizedBox.square(
                   dimension: 24,
-                  child: CircularProgressIndicator(strokeWidth: 2),
+                  child: EInkProgressIndicator(strokeWidth: 2),
                 )
               : const Icon(Icons.refresh),
         );

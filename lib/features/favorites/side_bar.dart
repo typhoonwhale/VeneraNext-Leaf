@@ -15,6 +15,7 @@ import 'package:venera_next/features/favorites/folder_order_dialog.dart';
 import 'package:venera_next/routing/app_navigation.dart';
 import 'package:venera_next/foundation/appdata.dart';
 import 'package:venera_next/foundation/context.dart';
+import 'package:venera_next/foundation/eink_theme.dart';
 import 'package:venera_next/foundation/log.dart';
 import 'package:venera_next/foundation/translations.dart';
 import 'package:venera_next/foundation/widget_utils.dart';
@@ -266,7 +267,9 @@ class _FavoritesFolderSidebarState extends State<FavoritesFolderSidebar>
         alignment: Alignment.centerLeft,
         decoration: BoxDecoration(
           color: isSelected
-              ? context.colorScheme.primaryContainer.toOpacity(0.36)
+              ? context.isEInk
+                    ? context.einkStyle.selectedBackground
+                    : context.colorScheme.primaryContainer.toOpacity(0.36)
               : null,
           border: Border(
             left: BorderSide(
@@ -280,12 +283,25 @@ class _FavoritesFolderSidebarState extends State<FavoritesFolderSidebar>
         padding: const EdgeInsets.only(left: 16),
         child: Row(
           children: [
-            Expanded(child: Text(folderName)),
+            Expanded(
+              child: Text(
+                folderName,
+                style: context.isEInk && isSelected
+                    ? TextStyle(color: context.einkStyle.selectedForeground)
+                    : null,
+              ),
+            ),
             Container(
               margin: EdgeInsets.only(right: 8),
               padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
                 color: context.colorScheme.surfaceContainer,
+                border: context.isEInk
+                    ? Border.all(
+                        color: context.colorScheme.outline,
+                        width: EInkStyle.strokeWidth,
+                      )
+                    : null,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(count.toString()),
@@ -315,7 +331,9 @@ class _FavoritesFolderSidebarState extends State<FavoritesFolderSidebar>
         alignment: Alignment.centerLeft,
         decoration: BoxDecoration(
           color: isSelected
-              ? context.colorScheme.primaryContainer.toOpacity(0.36)
+              ? context.isEInk
+                    ? context.einkStyle.selectedBackground
+                    : context.colorScheme.primaryContainer.toOpacity(0.36)
               : null,
           border: Border(
             left: BorderSide(
@@ -327,7 +345,12 @@ class _FavoritesFolderSidebarState extends State<FavoritesFolderSidebar>
           ),
         ),
         padding: const EdgeInsets.only(left: 16),
-        child: Text(data.title),
+        child: Text(
+          data.title,
+          style: context.isEInk && isSelected
+              ? TextStyle(color: context.einkStyle.selectedForeground)
+              : null,
+        ),
       ),
     );
   }

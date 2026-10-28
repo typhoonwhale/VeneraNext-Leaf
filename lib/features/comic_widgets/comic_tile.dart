@@ -1,3 +1,4 @@
+import 'package:venera_next/foundation/eink_theme.dart';
 import 'dart:math' as math;
 import 'package:venera_next/foundation/application_preferences.dart';
 import 'package:venera_next/foundation/global_preference_store.dart';
@@ -171,7 +172,7 @@ Widget _buildUpdateBadge(BuildContext context, {double size = 24}) {
   return Container(
     height: size,
     width: size,
-    color: Colors.deepOrange.shade700,
+    color: context.einkBadgeColor(Colors.deepOrange.shade700),
     child: Icon(Icons.update, size: size * 2 / 3, color: Colors.white),
   );
 }
@@ -369,7 +370,7 @@ class ComicTile extends StatelessWidget {
                             Container(
                               height: badgeSize,
                               width: badgeSize,
-                              color: Colors.green,
+                              color: context.einkBadgeColor(Colors.green),
                               child: Icon(
                                 Icons.bookmark_rounded,
                                 size: badgeSize * 2 / 3,
@@ -386,7 +387,9 @@ class ComicTile extends StatelessWidget {
                           if (historyPage != null && historyDescription == null)
                             Container(
                               height: badgeSize,
-                              color: Colors.blue.toOpacity(0.9),
+                              color: context.einkBadgeColor(
+                                Colors.blue.toOpacity(0.9),
+                              ),
                               constraints: BoxConstraints(minWidth: badgeSize),
                               padding: EdgeInsets.symmetric(
                                 horizontal: compact ? 2 : 4,
@@ -441,14 +444,17 @@ class ComicTile extends StatelessWidget {
           height: double.infinity,
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.secondaryContainer,
-            borderRadius: BorderRadius.circular(8),
-            boxShadow: [
-              BoxShadow(
-                color: context.colorScheme.outlineVariant,
-                blurRadius: 1,
-                offset: const Offset(0, 1),
-              ),
-            ],
+            borderRadius: context.einkCoverRadius(BorderRadius.circular(8)),
+            border: context.einkBorder(),
+            boxShadow: context.isEInk
+                ? null
+                : [
+                    BoxShadow(
+                      color: context.colorScheme.outlineVariant,
+                      blurRadius: 1,
+                      offset: const Offset(0, 1),
+                    ),
+                  ],
           ),
           clipBehavior: Clip.antiAlias,
           child: buildImage(context),
@@ -504,14 +510,17 @@ class ComicTile extends StatelessWidget {
         Widget image = Container(
           decoration: BoxDecoration(
             color: context.colorScheme.secondaryContainer,
-            borderRadius: BorderRadius.circular(8),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.toOpacity(0.2),
-                blurRadius: 2,
-                offset: const Offset(0, 2),
-              ),
-            ],
+            borderRadius: context.einkCoverRadius(BorderRadius.circular(8)),
+            border: context.einkBorder(),
+            boxShadow: context.isEInk
+                ? null
+                : [
+                    BoxShadow(
+                      color: Colors.black.toOpacity(0.2),
+                      blurRadius: 2,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
           ),
           clipBehavior: Clip.antiAlias,
           child: buildImage(context),
@@ -572,7 +581,9 @@ class ComicTile extends StatelessWidget {
                                   : const EdgeInsets.fromLTRB(5, 2, 5, 2),
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(8),
-                                color: Colors.black.toOpacity(0.5),
+                                color: context.isEInk
+                                    ? Colors.black
+                                    : Colors.black.toOpacity(0.5),
                               ),
                               constraints: BoxConstraints(
                                 maxWidth: constraints.maxWidth,
@@ -636,14 +647,17 @@ class ComicTile extends StatelessWidget {
         Widget image = Container(
           decoration: BoxDecoration(
             color: context.colorScheme.secondaryContainer,
-            borderRadius: BorderRadius.circular(8),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.toOpacity(0.16),
-                blurRadius: 2,
-                offset: const Offset(0, 1),
-              ),
-            ],
+            borderRadius: context.einkCoverRadius(BorderRadius.circular(8)),
+            border: context.einkBorder(),
+            boxShadow: context.isEInk
+                ? null
+                : [
+                    BoxShadow(
+                      color: Colors.black.toOpacity(0.16),
+                      blurRadius: 2,
+                      offset: const Offset(0, 1),
+                    ),
+                  ],
           ),
           clipBehavior: Clip.antiAlias,
           child: buildImage(context),
@@ -899,7 +913,7 @@ class _ComicDescription extends StatelessWidget {
     ];
     Widget descriptionText = Text(
       description,
-      style: const TextStyle(fontSize: 12.0),
+      style: context.einkSmallText(const TextStyle(fontSize: 12.0)),
       maxLines: displayTags.isEmpty ? 3 : 2,
       overflow: TextOverflow.ellipsis,
     );
@@ -929,9 +943,13 @@ class _ComicDescription extends StatelessWidget {
         if (subtitle != "")
           Text(
             subtitle,
-            style: TextStyle(
-              fontSize: 10.0,
-              color: context.colorScheme.onSurface.toOpacity(0.7),
+            style: context.einkSmallText(
+              TextStyle(
+                fontSize: 10.0,
+                color: context.isEInk
+                    ? context.colorScheme.onSurface
+                    : context.colorScheme.onSurface.toOpacity(0.7),
+              ),
             ),
             maxLines: 1,
             softWrap: true,
@@ -970,6 +988,7 @@ class _ComicDescription extends StatelessWidget {
                                 ? context.colorScheme.errorContainer
                                 : context.colorScheme.secondaryContainer,
                             borderRadius: BorderRadius.circular(8),
+                            border: context.einkBorder(),
                           ),
                           child: Center(
                             widthFactor: 1,
@@ -977,7 +996,9 @@ class _ComicDescription extends StatelessWidget {
                               enableTranslate
                                   ? TagsTranslation.translateTag(s)
                                   : s.split(':').last,
-                              style: const TextStyle(fontSize: 12),
+                              style: context.einkSmallText(
+                                const TextStyle(fontSize: 12),
+                              ),
                               softWrap: true,
                               overflow: TextOverflow.ellipsis,
                               maxLines: 1,
@@ -1014,7 +1035,7 @@ class _ComicDescription extends StatelessWidget {
                 child: Center(
                   child: Text(
                     "${badge![0].toUpperCase()}${badge!.substring(1).toLowerCase()}",
-                    style: const TextStyle(fontSize: 12),
+                    style: context.einkSmallText(const TextStyle(fontSize: 12)),
                   ),
                 ),
               ),
@@ -1133,9 +1154,11 @@ class _ReadingProgressBadge extends StatelessWidget {
                 line,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: context.colorScheme.onPrimaryContainer,
+                style: context.einkSmallText(
+                  TextStyle(
+                    fontSize: 12,
+                    color: context.colorScheme.onPrimaryContainer,
+                  ),
                 ),
               ),
           ],
@@ -1184,7 +1207,8 @@ class SimpleComicTile extends StatelessWidget {
       width: 98,
       height: 136,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: context.einkCoverRadius(BorderRadius.circular(8)),
+        border: context.einkBorder(),
         color: Theme.of(context).colorScheme.secondaryContainer,
       ),
       clipBehavior: Clip.antiAlias,

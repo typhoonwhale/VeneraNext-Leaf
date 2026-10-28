@@ -14,6 +14,7 @@ import 'package:venera_next/foundation/consts.dart';
 import 'package:venera_next/foundation/context.dart';
 import 'package:venera_next/foundation/translations.dart';
 import 'package:venera_next/foundation/widget_utils.dart';
+import 'package:venera_next/foundation/eink_theme.dart';
 
 class ImageFavoritesGalleryPage extends StatefulWidget {
   const ImageFavoritesGalleryPage({
@@ -196,7 +197,7 @@ class _ImageFavoritesGalleryPageState extends State<ImageFavoritesGalleryPage> {
               icon: _deleting
                   ? const SizedBox.square(
                       dimension: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
+                      child: EInkProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.delete_outline),
               tooltip: "Delete".tl,
@@ -287,9 +288,11 @@ class _ImageFavoritesGalleryPageState extends State<ImageFavoritesGalleryPage> {
                   right: 4,
                   child: Container(
                     decoration: BoxDecoration(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.surface.toOpacity(0.7),
+                      color: context.isEInk
+                          ? Theme.of(context).colorScheme.surface
+                          : Theme.of(
+                              context,
+                            ).colorScheme.surface.toOpacity(0.7),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
@@ -313,7 +316,9 @@ class _ImageFavoritesGalleryPageState extends State<ImageFavoritesGalleryPage> {
                       bottomLeft: Radius.circular(8),
                       bottomRight: Radius.circular(8),
                     ),
-                    color: Theme.of(context).colorScheme.surface.toOpacity(0.7),
+                    color: context.isEInk
+                        ? Theme.of(context).colorScheme.surface
+                        : Theme.of(context).colorScheme.surface.toOpacity(0.7),
                   ),
                   padding: const EdgeInsets.symmetric(
                     horizontal: 4,

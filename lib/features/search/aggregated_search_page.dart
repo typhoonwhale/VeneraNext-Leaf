@@ -195,6 +195,7 @@ class _SliverSearchResultState extends State<_SliverSearchResult>
               height: _kComicHeight,
               width: double.infinity,
               child: Shimmer(
+                enabled: !MediaQuery.disableAnimationsOf(context),
                 child: LayoutBuilder(
                   builder: (context, constrains) {
                     var itemWidth = _comicWidth + _kLeftPadding;

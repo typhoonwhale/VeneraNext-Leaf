@@ -107,7 +107,9 @@ class ReaderBrightnessControl extends StatelessWidget {
           onChanged: onEnabledChanged,
         ),
         AnimatedSize(
-          duration: const Duration(milliseconds: 180),
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : const Duration(milliseconds: 180),
           curve: Curves.easeOut,
           child: enabled
               ? ListTile(

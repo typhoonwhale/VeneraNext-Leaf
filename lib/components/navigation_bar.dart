@@ -1,3 +1,4 @@
+import 'package:venera_next/foundation/eink_theme.dart';
 import 'dart:collection';
 import 'dart:math' as math;
 
@@ -430,7 +431,15 @@ class _SideNaviWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final icon = Icon(enabled ? entry.activeIcon : entry.icon);
+    final eink = context.isEInk;
+    final style = context.einkStyle;
+    final selectedForeground = eink && enabled
+        ? style.selectedForeground
+        : null;
+    final icon = Icon(
+      enabled ? entry.activeIcon : entry.icon,
+      color: selectedForeground,
+    );
     return ClickInkWell(
       borderRadius: BorderRadius.circular(12),
       onTap: onTap,
@@ -439,12 +448,25 @@ class _SideNaviWidget extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12),
         height: 38,
         decoration: BoxDecoration(
-          color: enabled ? colorScheme.primaryContainer : null,
+          color: enabled
+              ? eink
+                    ? style.selectedBackground
+                    : colorScheme.primaryContainer
+              : null,
           borderRadius: BorderRadius.circular(12),
         ),
         child: showTitle
             ? Row(
-                children: [icon, const SizedBox(width: 12), Text(entry.label)],
+                children: [
+                  icon,
+                  const SizedBox(width: 12),
+                  Text(
+                    entry.label,
+                    style: selectedForeground == null
+                        ? null
+                        : TextStyle(color: selectedForeground),
+                  ),
+                ],
               )
             : Align(alignment: Alignment.centerLeft, child: icon),
       ),
@@ -518,6 +540,9 @@ class _SingleBottomNaviWidgetState extends State<_SingleBottomNaviWidget>
   void didUpdateWidget(covariant _SingleBottomNaviWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.enabled != widget.enabled) {
+      controller.duration = MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : fastAnimationDuration;
       if (widget.enabled) {
         controller.forward(from: 0);
       } else {
@@ -558,8 +583,10 @@ class _SingleBottomNaviWidgetState extends State<_SingleBottomNaviWidget>
   Widget buildContent() {
     final value = controller.value;
     final colorScheme = Theme.of(context).colorScheme;
+    final eink = context.isEInk;
     final icon = Icon(
       widget.enabled ? widget.entry.activeIcon : widget.entry.icon,
+      color: eink && value != 0 ? context.einkStyle.selectedForeground : null,
     );
     return Center(
       child: Container(
@@ -576,7 +603,9 @@ class _SingleBottomNaviWidgetState extends State<_SingleBottomNaviWidget>
             decoration: BoxDecoration(
               borderRadius: const BorderRadius.all(Radius.circular(32)),
               color: value != 0
-                  ? colorScheme.secondaryContainer
+                  ? eink
+                        ? context.einkStyle.selectedBackground
+                        : colorScheme.secondaryContainer
                   : Colors.transparent,
             ),
             child: Center(child: icon),
@@ -773,7 +802,9 @@ class _NaviMainViewState extends State<_NaviMainView> {
             context: context,
             removeTop: shouldShowAppBar,
             child: AnimatedSwitcher(
-              duration: fastAnimationDuration,
+              duration: MediaQuery.disableAnimationsOf(context)
+                  ? Duration.zero
+                  : fastAnimationDuration,
               child: state.buildMainViewContent(),
             ),
           ),

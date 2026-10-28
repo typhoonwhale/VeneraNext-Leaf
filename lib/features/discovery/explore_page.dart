@@ -21,6 +21,7 @@ import 'package:venera_next/routing/settings.dart';
 import 'package:venera_next/foundation/extensions.dart';
 import 'package:venera_next/foundation/translations.dart';
 import 'package:venera_next/foundation/widget_utils.dart';
+import 'package:venera_next/foundation/eink_theme.dart';
 
 class ExplorePage extends StatefulWidget {
   const ExplorePage({super.key});
@@ -587,7 +588,7 @@ class _MultiPartExplorePageState extends State<_MultiPartExplorePage> {
   Widget build(BuildContext context) {
     if (loading) {
       load();
-      return const Center(child: CircularProgressIndicator());
+      return const Center(child: EInkProgressIndicator());
     } else if (message != null) {
       return NetworkError(
         message: message!,

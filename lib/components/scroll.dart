@@ -169,6 +169,11 @@ class _SmoothScrollProviderState extends State<SmoothScrollProvider> {
         duration = const Duration(milliseconds: 10);
       }
     }
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _resetWheel();
+      controller.jumpTo(target);
+      return;
+    }
     final generation = ++_wheelGeneration;
     controller.animateTo(target, duration: duration, curve: Curves.linear).then(
       (_) {

@@ -1,3 +1,4 @@
+import 'package:venera_next/foundation/eink_theme.dart';
 import 'dart:async';
 
 import 'package:battery_plus/battery_plus.dart';
@@ -133,7 +134,7 @@ class _ReaderStatusInfoState extends State<ReaderStatusInfo> {
       batteryIcon = Icons.battery_0_bar_sharp;
     } else {
       batteryIcon = Icons.battery_alert_sharp;
-      batteryColor = Colors.red;
+      if (!context.isEInk) batteryColor = Colors.red;
     }
 
     return Row(

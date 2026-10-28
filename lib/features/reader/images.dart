@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:venera_next/network/request_scope.dart';
 import 'package:venera_next/foundation/image_work.dart';
 import 'reader_controller.dart';
+import 'package:venera_next/foundation/eink_theme.dart';
 
 /// Owns the view lifetime of a content attempt, independent of ReaderState.
 class ReaderImages extends StatefulWidget {
@@ -121,11 +122,11 @@ class _ReaderImagesState extends State<ReaderImages> {
     if (widget.controller.isDisposed) return const SizedBox.expand();
     final content = widget.controller.content;
     if (_attempt?.waitingForImageWork == true) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(child: EInkProgressIndicator());
     }
     if (content.isLoading) {
       unawaited(_load());
-      return const Center(child: CircularProgressIndicator());
+      return const Center(child: EInkProgressIndicator());
     }
     if (content.error case final String error) {
       final attempt = _attempt;

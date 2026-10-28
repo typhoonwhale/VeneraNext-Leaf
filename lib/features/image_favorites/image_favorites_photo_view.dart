@@ -19,6 +19,7 @@ import 'package:venera_next/foundation/image_save_work.dart';
 import 'package:venera_next/foundation/log.dart';
 import 'package:venera_next/foundation/translations.dart';
 import 'package:venera_next/foundation/widget_utils.dart';
+import 'package:venera_next/foundation/eink_theme.dart';
 
 class ImageFavoritesPhotoView extends StatefulWidget {
   const ImageFavoritesPhotoView({
@@ -183,7 +184,7 @@ class _ImageFavoritesPhotoViewState extends State<ImageFavoritesPhotoView>
                     child: SizedBox(
                       width: 20.0,
                       height: 20.0,
-                      child: CircularProgressIndicator(
+                      child: EInkProgressIndicator(
                         backgroundColor:
                             context.colorScheme.surfaceContainerHigh,
                         value: event == null || event.expectedTotalBytes == null
@@ -245,7 +246,9 @@ class _ImageFavoritesPhotoViewState extends State<ImageFavoritesPhotoView>
 
   Widget buildAppBar() {
     return Material(
-      color: context.colorScheme.surface.toOpacity(0.72),
+      color: context.isEInk
+          ? context.colorScheme.surface
+          : context.colorScheme.surface.toOpacity(0.72),
       child: BlurEffect(
         child: Container(
           decoration: BoxDecoration(

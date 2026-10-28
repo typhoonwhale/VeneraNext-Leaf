@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'app_page_route.dart';
+import 'eink_theme.dart';
 import 'navigation_admission.dart';
 
 void Function(BuildContext context, String message)? _showMessageHandler;
@@ -74,10 +75,12 @@ extension Navigation on BuildContext {
   }
 
   Color useBackgroundColor(MaterialColor color) {
+    if (isEInk) return colorScheme.surface;
     return color[brightness == Brightness.light ? 100 : 800]!;
   }
 
   Color useTextColor(MaterialColor color) {
+    if (isEInk) return colorScheme.onSurface;
     return color[brightness == Brightness.light ? 800 : 100]!;
   }
 }

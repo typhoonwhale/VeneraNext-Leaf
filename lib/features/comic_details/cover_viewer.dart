@@ -11,6 +11,7 @@ import 'package:venera_next/foundation/image_save_work.dart';
 import 'package:venera_next/foundation/log.dart';
 import 'package:venera_next/foundation/translations.dart';
 import 'package:venera_next/foundation/widget_utils.dart';
+import 'package:venera_next/foundation/eink_theme.dart';
 
 class ComicCoverViewer extends StatefulWidget {
   const ComicCoverViewer({
@@ -66,7 +67,7 @@ class _ComicCoverViewerState extends State<ComicCoverViewer> {
                     child: SizedBox(
                       width: 24.0,
                       height: 24.0,
-                      child: CircularProgressIndicator(
+                      child: EInkProgressIndicator(
                         value: event == null || event.expectedTotalBytes == null
                             ? null
                             : event.cumulativeBytesLoaded /
@@ -98,7 +99,9 @@ class _ComicCoverViewerState extends State<ComicCoverViewer> {
 
   Widget _buildAppBar() {
     return Material(
-      color: context.colorScheme.surface.toOpacity(0.72),
+      color: context.isEInk
+          ? context.colorScheme.surface
+          : context.colorScheme.surface.toOpacity(0.72),
       child: BlurEffect(
         child: Container(
           decoration: BoxDecoration(

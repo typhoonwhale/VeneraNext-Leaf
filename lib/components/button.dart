@@ -1,8 +1,12 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:venera_next/foundation/context.dart';
+import 'package:venera_next/foundation/eink_theme.dart';
 import 'package:venera_next/foundation/translations.dart';
 import 'package:venera_next/foundation/widget_utils.dart';
 
+import 'consts.dart';
 import 'menu.dart';
 
 class HoverBox extends StatefulWidget {
@@ -166,21 +170,28 @@ class _ButtonState extends State<Button> {
 
   @override
   Widget build(BuildContext context) {
-    var padding = widget.padding ?? const EdgeInsets.symmetric(horizontal: 16);
+    var padding =
+        widget.padding ??
+        EdgeInsets.symmetric(horizontal: context.isEInk ? 18 : 16);
+    // On E-Ink the outline is part of the decoration padding, so the fixed
+    // size gives up its width to keep the outer size as requested.
+    final einkOutline = context.isEInk && widget.type != ButtonType.filled
+        ? 2 * EInkStyle.strokeWidth
+        : 0.0;
     var width = widget.width;
     if (width != null) {
-      width = width - padding.horizontal;
+      width = math.max(0.0, width - padding.horizontal - einkOutline);
     }
     var height = widget.height;
     if (height != null) {
-      height = height - padding.vertical;
+      height = math.max(0.0, height - padding.vertical - einkOutline);
     }
     Widget child = IconTheme(
       data: IconThemeData(color: textColor),
       child: DefaultTextStyle(
         style: TextStyle(color: textColor, fontSize: 14),
         child: isLoading
-            ? CircularProgressIndicator(
+            ? EInkProgressIndicator(
                 color: widget.type == ButtonType.filled
                     ? context.colorScheme.inversePrimary
                     : context.colorScheme.primary,
@@ -207,12 +218,12 @@ class _ButtonState extends State<Button> {
           }
         },
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
+          duration: tweenDuration(context),
           padding: padding,
           constraints: const BoxConstraints(minWidth: 76, minHeight: 32),
           decoration: BoxDecoration(
             color: buttonColor,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(context.isEInk ? 999 : 16),
             boxShadow:
                 (isHover &&
                     !isLoading &&
@@ -231,12 +242,14 @@ class _ButtonState extends State<Button> {
                     color:
                         widget.color ??
                         Theme.of(context).colorScheme.outlineVariant,
-                    width: 0.6,
+                    width: context.isEInk ? EInkStyle.strokeWidth : 0.6,
                   )
+                : context.isEInk && widget.type != ButtonType.filled
+                ? Border.all(color: Colors.black, width: EInkStyle.strokeWidth)
                 : null,
           ),
           child: AnimatedSize(
-            duration: const Duration(milliseconds: 160),
+            duration: tweenDuration(context),
             child: SizedBox(
               width: width,
               height: height,
@@ -327,7 +340,7 @@ class _IconButtonState extends State<_IconButton> {
       child: widget.icon,
     );
     if (widget.isLoading) {
-      icon = const CircularProgressIndicator(
+      icon = const EInkProgressIndicator(
         strokeWidth: 1.5,
       ).paddingAll(2).fixWidth(iconSize).fixHeight(iconSize);
     }

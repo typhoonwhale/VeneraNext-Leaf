@@ -15,6 +15,7 @@ import 'package:venera_next/foundation/widget_utils.dart';
 import 'package:venera_next/components/application_update_prompt.dart';
 
 import 'changelog_document.dart';
+import 'package:venera_next/foundation/eink_theme.dart';
 
 class AboutSettings extends StatefulWidget {
   const AboutSettings({super.key});
@@ -112,7 +113,7 @@ class _AboutSettingsState extends State<AboutSettings> {
               child: _checkingNetwork
                   ? SizedBox.square(
                       dimension: 16,
-                      child: CircularProgressIndicator(
+                      child: EInkProgressIndicator(
                         strokeWidth: 2,
                         semanticsLabel: 'Check for updates'.tl,
                       ),
@@ -205,7 +206,7 @@ class _ChangelogPageState extends State<ChangelogPage> {
                   );
                 }
                 if (!snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
+                  return const Center(child: EInkProgressIndicator());
                 }
                 final sections = snapshot.data!;
                 if (sections.isEmpty) {

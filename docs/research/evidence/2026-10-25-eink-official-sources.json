@@ -1,0 +1,61 @@
+{
+  "date": "2026-10-25",
+  "method": "BOOX help/product/blog pages read through browser visible text; official SDK Markdown retrieved through GitHub API at fixed commit. Excerpts only, not complete page snapshots.",
+  "sources": [
+    {
+      "url": "https://support.boox.com/#/document/6a72f173e7311e5c36b2c396",
+      "title": "1.4.2 安装第三方应用后，如何进行优化？",
+      "excerpts": [
+        "例如知乎、今日头条等需要滚动浏览的App，可以设置为快速或极速刷新模式",
+        "例如阅读类App，多为静态内容，则使用标准/净清模式优先保证画质即可"
+      ],
+      "scope": "BOOX通用说明，实际固件菜单待核对"
+    },
+    {
+      "url": "https://support.boox.com/#/document/69bb771cde2ae6af6648952e",
+      "title": "四种刷新模式，刷知乎刷得到轻轻松松！",
+      "excerpts": [
+        "得益于双芯硬件支持，Tab系列拥有专属四种刷新模式"
+      ],
+      "scope": "明确为Tab系列；不能当Leaf5+支持BSR的证明"
+    },
+    {
+      "url": "https://shop.boox.com/blogs/news/boox-super-refresh-bsr-technology",
+      "title": "BOOX Super Refresh (BSR): Technology That Brings Silky Refresh And Razor-sharp Visuals",
+      "published": "2023-09-13",
+      "excerpts": [
+        "Fast Mode aims at a smooth experience of browsing websites or activities that involve lots of scrolling. Subtle ghosting may occur but responsiveness is enhanced.",
+        "Ultrafast mode provides the most rapid response to dynamic content. Though some detail would be lost it enables you to watch videos and seamlessly use different apps."
+      ],
+      "scope": "原理与取舍参考，非Leaf5+性能实测"
+    },
+    {
+      "url": "https://zh.boox.com/product-ad/?id=5499",
+      "title": "Leaf5+",
+      "excerpts": [
+        "Leaf5+",
+        "天使之握，得心应手"
+      ],
+      "scope": "当次仅核对可读取页面标题；参数为宣传图片，未将其他机型参数外推到此机"
+    },
+    {
+      "url": "https://github.com/onyx-intl/OnyxAndroidDemo/tree/ec512c79c0d39c1e294214d36580ce4c914bbea6/doc",
+      "commit": "ec512c79c0d39c1e294214d36580ce4c914bbea6",
+      "files": [
+        "Eink-Develop-Guide.md",
+        "EPD-Screen-Update.md",
+        "EPD-Update-Mode.md",
+        "EpdController.md"
+      ],
+      "excerpts": [
+        "Pls use black and white (16 level gray scale) as the main color of pages;",
+        "Pls don’t add transparent layers on images or texts;",
+        "Pls use the page based way to load more contents;",
+        "Pls try to avoid animation, such as scrolling/dragging etc.",
+        "The font size should not be smaller than 14sp;",
+        "ANIMATION: black/white screen update, faster than DU, but lower quality"
+      ],
+      "scope": "通用开发建议和SDK语义；未验证Leaf5+固件、Flutter Surface兼容性"
+    }
+  ]
+}

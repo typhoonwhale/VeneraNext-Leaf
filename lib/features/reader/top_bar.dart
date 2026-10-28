@@ -1,3 +1,4 @@
+import 'package:venera_next/foundation/eink_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:venera_next/components/effects.dart';
 import 'package:venera_next/foundation/context.dart';
@@ -21,9 +22,16 @@ class ReaderTopBar extends StatelessWidget {
       child: Container(
         padding: EdgeInsets.only(top: context.padding.top),
         decoration: BoxDecoration(
-          color: context.colorScheme.surface.toOpacity(0.92),
+          color: context.isEInk
+              ? context.colorScheme.surface
+              : context.colorScheme.surface.toOpacity(0.92),
           border: Border(
-            bottom: BorderSide(color: Colors.grey.toOpacity(0.5), width: 0.5),
+            bottom: context.isEInk
+                ? const BorderSide(
+                    color: Colors.black,
+                    width: EInkStyle.strokeWidth,
+                  )
+                : BorderSide(color: Colors.grey.toOpacity(0.5), width: 0.5),
           ),
         ),
         child: Padding(

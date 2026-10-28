@@ -12,12 +12,13 @@ import 'package:venera_next/foundation/app.dart';
 import 'package:venera_next/routing/app_navigation.dart';
 import 'package:venera_next/foundation/appdata.dart';
 import 'package:venera_next/foundation/context.dart';
+import 'package:venera_next/foundation/eink_theme.dart';
 import 'package:venera_next/foundation/translations.dart';
 import 'package:venera_next/foundation/widget_utils.dart';
 
 const _savingIndicator = SizedBox.square(
   dimension: 18,
-  child: CircularProgressIndicator(strokeWidth: 2),
+  child: EInkProgressIndicator(strokeWidth: 2),
 );
 
 /// Own the actual save until it finishes, including during forced unmount.
@@ -187,6 +188,8 @@ class SelectSetting extends StatelessWidget {
     this.comicId,
     this.comicSource,
     this.useDeviceSettings = false,
+    this.enabled = true,
+    this.subtitle,
   });
 
   factory SelectSetting.preference({
@@ -196,6 +199,8 @@ class SelectSetting extends StatelessWidget {
     VoidCallback? onChanged,
     required Map<String, String> optionTranslation,
     String? help,
+    bool enabled = true,
+    String? subtitle,
   }) => SelectSetting(
     key: key,
     title: title,
@@ -204,6 +209,8 @@ class SelectSetting extends StatelessWidget {
     onChanged: onChanged,
     optionTranslation: optionTranslation,
     help: help,
+    enabled: enabled,
+    subtitle: subtitle,
   );
 
   factory SelectSetting.reader({
@@ -247,6 +254,10 @@ class SelectSetting extends StatelessWidget {
 
   final bool useDeviceSettings;
 
+  final bool enabled;
+
+  final String? subtitle;
+
   @override
   Widget build(BuildContext context) {
     return SizedBox(
@@ -264,6 +275,8 @@ class SelectSetting extends StatelessWidget {
               comicId: comicId,
               comicSource: comicSource,
               useDeviceSettings: useDeviceSettings,
+              enabled: enabled,
+              subtitle: subtitle,
             );
           } else {
             return _EndSelectorSelectSetting(
@@ -276,6 +289,8 @@ class SelectSetting extends StatelessWidget {
               comicId: comicId,
               comicSource: comicSource,
               useDeviceSettings: useDeviceSettings,
+              enabled: enabled,
+              subtitle: subtitle,
             );
           }
         },
@@ -295,6 +310,8 @@ class _DoubleLineSelectSettings extends StatefulWidget {
     this.comicId,
     this.comicSource,
     this.useDeviceSettings = false,
+    this.enabled = true,
+    this.subtitle,
   });
 
   final Preference<String?>? preference;
@@ -314,6 +331,10 @@ class _DoubleLineSelectSettings extends StatefulWidget {
   final String? comicSource;
 
   final bool useDeviceSettings;
+
+  final bool enabled;
+
+  final String? subtitle;
 
   @override
   State<_DoubleLineSelectSettings> createState() =>
@@ -336,76 +357,111 @@ class _DoubleLineSelectSettingsState
   @override
   Widget build(BuildContext context) {
     final value = currentValue;
-    return withSaveStatus(
-      ListTile(
-        title: Row(
-          children: [
-            Expanded(child: Text(widget.title)),
-            const SizedBox(width: 4),
-            if (widget.help != null)
-              Button.icon(
-                size: 18,
-                icon: const Icon(Icons.help_outline),
-                onPressed: () {
-                  showDialog(
-                    context: context,
-                    builder: (context) {
-                      return ContentDialog(
-                        title: "Help".tl,
-                        content: Text(
-                          widget.help!,
-                        ).paddingHorizontal(16).fixWidth(double.infinity),
-                        actions: [
-                          Button.filled(
-                            onPressed: context.pop,
-                            child: Text("OK".tl),
-                          ),
-                        ],
-                      );
-                    },
-                  );
-                },
-              ),
-          ],
-        ),
-        subtitle: Text(widget.optionTranslation[value] ?? "None"),
-        trailing: saving ? _savingIndicator : const Icon(Icons.arrow_drop_down),
-        onTap: saving
-            ? null
-            : () {
-                var renderBox = context.findRenderObject() as RenderBox;
-                var offset = renderBox.localToGlobal(Offset.zero);
-                var size = renderBox.size;
-                var rect = offset & size;
-                final target = field;
-                showMenu(
-                  elevation: 3,
-                  color: context.brightness == Brightness.light
-                      ? const Color(0xFFF6F6F6)
-                      : const Color(0xFF1E1E1E),
+    final hatched = context.isEInk && !widget.enabled;
+    Widget halo(Widget child) => hatched ? einkHaloLabel(child) : child;
+    final tile = ListTile(
+      title: Row(
+        children: [
+          Expanded(child: halo(Text(widget.title))),
+          const SizedBox(width: 4),
+          if (widget.help != null)
+            Button.icon(
+              size: 18,
+              icon: halo(const Icon(Icons.help_outline)),
+              onPressed: () {
+                showDialog(
                   context: context,
-                  position: RelativeRect.fromRect(
-                    rect,
-                    Offset.zero & MediaQuery.of(context).size,
-                  ),
-                  items: widget.optionTranslation.keys
-                      .map(
-                        (key) => PopupMenuItem(
-                          value: key,
-                          height: App.isMobile ? 46 : 40,
-                          child: Text(widget.optionTranslation[key]!),
+                  builder: (context) {
+                    return ContentDialog(
+                      title: "Help".tl,
+                      content: Text(
+                        widget.help!,
+                      ).paddingHorizontal(16).fixWidth(double.infinity),
+                      actions: [
+                        Button.filled(
+                          onPressed: context.pop,
+                          child: Text("OK".tl),
                         ),
-                      )
-                      .toList(),
-                ).then((value) async {
-                  if (value != null &&
-                      mounted &&
-                      target.matches(field) &&
-                      widget.optionTranslation.containsKey(value)) {
-                    await change(value);
-                  }
-                });
+                      ],
+                    );
+                  },
+                );
               },
+            ),
+        ],
+      ),
+      enabled: widget.enabled,
+      subtitle: halo(
+        Text(widget.subtitle ?? widget.optionTranslation[value] ?? "None"),
+      ),
+      trailing: saving
+          ? _savingIndicator
+          : halo(const Icon(Icons.arrow_drop_down)),
+      onTap: saving || !widget.enabled
+          ? null
+          : () {
+              var renderBox = context.findRenderObject() as RenderBox;
+              var offset = renderBox.localToGlobal(Offset.zero);
+              var size = renderBox.size;
+              var rect = offset & size;
+              final target = field;
+              final eink = context.isEInk;
+              showMenu(
+                elevation: eink ? 0 : 3,
+                color: eink
+                    ? context.colorScheme.surface
+                    : context.brightness == Brightness.light
+                    ? const Color(0xFFF6F6F6)
+                    : const Color(0xFF1E1E1E),
+                shape: eink
+                    ? RoundedRectangleBorder(
+                        side: const BorderSide(
+                          color: Colors.black,
+                          width: EInkStyle.strokeWidth,
+                        ),
+                        borderRadius: BorderRadius.circular(4),
+                      )
+                    : null,
+                context: context,
+                position: RelativeRect.fromRect(
+                  rect,
+                  Offset.zero & MediaQuery.of(context).size,
+                ),
+                items: widget.optionTranslation.keys
+                    .map(
+                      (key) => PopupMenuItem(
+                        value: key,
+                        height: App.isMobile ? 46 : 40,
+                        child: Text(widget.optionTranslation[key]!),
+                      ),
+                    )
+                    .toList(),
+              ).then((value) async {
+                if (value != null &&
+                    mounted &&
+                    target.matches(field) &&
+                    widget.optionTranslation.containsKey(value)) {
+                  await change(value);
+                }
+              });
+            },
+    );
+    if (!hatched) return withSaveStatus(tile);
+    // Same hatched, outlined look as the disabled Select of the wide layout.
+    final radius = BorderRadius.circular(4);
+    return withSaveStatus(
+      DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.black, width: EInkStyle.strokeWidth),
+          borderRadius: radius,
+        ),
+        child: ClipRRect(
+          borderRadius: radius,
+          child: EInkHatch(
+            shape: RoundedRectangleBorder(borderRadius: radius),
+            child: tile,
+          ),
+        ),
       ),
     );
   }
@@ -422,6 +478,8 @@ class _EndSelectorSelectSetting extends StatefulWidget {
     this.comicId,
     this.comicSource,
     this.useDeviceSettings = false,
+    this.enabled = true,
+    this.subtitle,
   });
 
   final Preference<String?>? preference;
@@ -441,6 +499,10 @@ class _EndSelectorSelectSetting extends StatefulWidget {
   final String? comicSource;
 
   final bool useDeviceSettings;
+
+  final bool enabled;
+
+  final String? subtitle;
 
   @override
   State<_EndSelectorSelectSetting> createState() =>
@@ -497,23 +559,29 @@ class _EndSelectorSelectSettingState
               ),
           ],
         ),
+        enabled: widget.enabled,
+        subtitle: widget.subtitle == null ? null : Text(widget.subtitle!),
         trailing: saving
             ? _savingIndicator
-            : Select(
-                current: options[value],
-                values: options.values.toList(),
-                minWidth: 64,
-                onTap: (index) {
-                  if (mounted &&
-                      target.matches(field) &&
-                      index >= 0 &&
-                      index < options.length) {
-                    final selected = options.keys.elementAt(index);
-                    if (widget.optionTranslation.containsKey(selected)) {
-                      unawaited(change(selected));
+            : IgnorePointer(
+                ignoring: !widget.enabled,
+                child: Select(
+                  current: options[value],
+                  values: options.values.toList(),
+                  minWidth: 64,
+                  enabled: widget.enabled,
+                  onTap: (index) {
+                    if (mounted &&
+                        target.matches(field) &&
+                        index >= 0 &&
+                        index < options.length) {
+                      final selected = options.keys.elementAt(index);
+                      if (widget.optionTranslation.containsKey(selected)) {
+                        unawaited(change(selected));
+                      }
                     }
-                  }
-                },
+                  },
+                ),
               ),
       ),
     );
@@ -719,14 +787,16 @@ class _MultiPagesFilterState
           : const Duration(milliseconds: 500),
       dragChildBoxDecoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surfaceContainer,
-        boxShadow: const [
-          BoxShadow(
-            color: Colors.black12,
-            blurRadius: 5,
-            offset: Offset(0, 2),
-            spreadRadius: 2,
-          ),
-        ],
+        boxShadow: context.isEInk
+            ? null
+            : const [
+                BoxShadow(
+                  color: Colors.black12,
+                  blurRadius: 5,
+                  offset: Offset(0, 2),
+                  spreadRadius: 2,
+                ),
+              ],
       ),
       onReorder: (reorderFunc) {
         setState(() {

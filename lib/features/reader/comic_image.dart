@@ -1,3 +1,4 @@
+import 'package:venera_next/foundation/eink_theme.dart';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -379,7 +380,12 @@ class ComicImageState extends State<ComicImage> with WidgetsBindingObserver {
                       child: Center(
                         child: Text(
                           "Retry".tl,
-                          style: TextStyle(color: Colors.blue),
+                          style: context.isEInk
+                              ? TextStyle(
+                                  color: context.colorScheme.primary,
+                                  decoration: TextDecoration.underline,
+                                )
+                              : TextStyle(color: Colors.blue),
                         ),
                       ),
                     ),
@@ -503,7 +509,7 @@ class ComicImageState extends State<ComicImage> with WidgetsBindingObserver {
               child: SizedBox(
                 width: 24,
                 height: 24,
-                child: CircularProgressIndicator(
+                child: EInkProgressIndicator(
                   strokeWidth: 3,
                   backgroundColor: context.colorScheme.surfaceContainer,
                   value:
