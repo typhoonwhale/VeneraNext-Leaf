@@ -80,9 +80,11 @@ void main() {
       final big = await addComic('big', pages: 3000);
       final other = await addComic('other');
       final removal = Completer<void>();
+      final started = Completer<void>();
       final removing = <String>[];
       manager.debugDeleteQuarantine = (path) async {
         removing.add(path);
+        if (!started.isCompleted) started.complete();
         await removal.future;
         await Directory(path).delete(recursive: true);
       };
@@ -93,7 +95,8 @@ void main() {
       final staged = quarantines(manager.path).single;
       expect(Directory(staged).listSync(), hasLength(3000));
       expect(LocalComicStorageGuard.instance.pendingExclusive, isNull);
-      await pumpEventQueue();
+      // The background pass checks the quarantine on disk before removing it.
+      await started.future;
       expect(removing, [staged]);
 
       // Storage is free for the next deletion while the first is removed.

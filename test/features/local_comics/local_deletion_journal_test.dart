@@ -137,12 +137,14 @@ void main() {
       File('${directory.path}/$i.jpg').writeAsStringSync('$i');
     }
     final removal = Completer<void>();
+    final started = Completer<void>();
     final removing = <String>[];
     final gated = LocalDeletionJournal(
       db,
       exists: exists,
       deleteDirectory: (path) async {
         removing.add(path);
+        if (!started.isCompleted) started.complete();
         await removal.future;
         await Directory(path).delete(recursive: true);
       },
@@ -165,7 +167,8 @@ void main() {
     expect(removing, isEmpty);
 
     final purge = gated.purgeCommitted();
-    await pumpEventQueue();
+    // The existence check is real file IO; wait for removal itself to begin.
+    await started.future;
     expect(removing, [staged]);
     // A second purge never removes the same quarantine concurrently.
     await gated.purgeCommitted();
