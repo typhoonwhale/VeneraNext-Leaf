@@ -263,6 +263,10 @@ class EInkStyle extends ThemeExtension<EInkStyle> {
   /// Perpendicular distance between hatch line centers on disabled controls.
   static const double hatchSpacing = 10.0;
 
+  /// Side and stroke width of the read check mark in chapter cells.
+  static const double checkMarkSize = 14.0;
+  static const double checkMarkStrokeWidth = 2.5;
+
   const EInkStyle({
     this.enabled = false,
     this.selectedBackground = Colors.black,
@@ -599,4 +603,44 @@ ThemeData applyEInkTheme(ThemeData base) {
     ),
     extensions: [...base.extensions.values, const EInkStyle(enabled: true)],
   );
+}
+
+/// A bold, round-capped check mark; the font glyph is too thin on E-Ink.
+class EInkCheckMark extends StatelessWidget {
+  const EInkCheckMark({super.key, this.color = Colors.black});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => CustomPaint(
+    size: const Size.square(EInkStyle.checkMarkSize),
+    painter: _CheckMarkPainter(color),
+  );
+}
+
+class _CheckMarkPainter extends CustomPainter {
+  const _CheckMarkPainter(this.color);
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const width = EInkStyle.checkMarkStrokeWidth;
+    const m = width / 2;
+    canvas.drawPath(
+      Path()
+        ..moveTo(m, size.height * 0.55)
+        ..lineTo(size.width * 0.38, size.height - m)
+        ..lineTo(size.width - m, m),
+      Paint()
+        ..color = color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = width
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_CheckMarkPainter old) => old.color != color;
 }

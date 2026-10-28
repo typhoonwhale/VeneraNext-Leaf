@@ -61,7 +61,8 @@ Widget _einkChapterLabel(
   return Row(
     mainAxisSize: MainAxisSize.min,
     children: [
-      Text('\u2713 ', style: style),
+      const EInkCheckMark(),
+      const SizedBox(width: 4),
       Flexible(child: text),
     ],
   );

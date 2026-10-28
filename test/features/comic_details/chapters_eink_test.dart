@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:venera_next/foundation/eink_theme.dart';
 import 'package:venera_next/features/comic_details/chapters.dart';
 import 'package:venera_next/features/comic_source/models.dart';
 import 'package:venera_next/features/history/history_model.dart';
@@ -72,7 +73,7 @@ int _blackCells(WidgetTester tester, Iterable<String> titles) =>
 
 Finder _check(String title) => find.descendant(
   of: find.ancestor(of: find.text(title), matching: find.byType(Row)).first,
-  matching: find.text('✓ '),
+  matching: find.byType(EInkCheckMark),
 );
 
 void main() {
@@ -84,7 +85,7 @@ void main() {
     await _show(tester, _normal, _history(3, {'1', '3', '4', '5'}), eink: true);
     expect(_isBlack(_cell(tester, 'Ch3')), isTrue);
     expect(_blackCells(tester, titles), 1);
-    expect(find.text('✓ '), findsNWidgets(3));
+    expect(find.byType(EInkCheckMark), findsNWidgets(3));
     for (final t in ['Ch1', 'Ch4', 'Ch5']) {
       final m = _cell(tester, t);
       expect(m.color, Colors.white);
@@ -100,7 +101,7 @@ void main() {
         of: find
             .ancestor(of: find.text('Ch2'), matching: find.byType(Material))
             .first,
-        matching: find.text('✓ '),
+        matching: find.byType(EInkCheckMark),
       ),
       findsNothing,
     );
@@ -118,7 +119,7 @@ void main() {
       _history(2, {'1', '2'}),
       eink: true,
     );
-    expect(find.text('✓ '), findsOneWidget);
+    expect(find.byType(EInkCheckMark), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -135,15 +136,15 @@ void main() {
     await tester.pumpAndSettle();
     expect(_blackCells(tester, ['A1', 'A2', 'A3']), 0);
     expect(_check('A2'), findsOneWidget);
-    expect(find.text('✓ '), findsOneWidget);
+    expect(find.byType(EInkCheckMark), findsOneWidget);
   });
 
   testWidgets('eink: no history means all unread', (tester) async {
     await _show(tester, _normal, null, eink: true);
     expect(_blackCells(tester, titles), 0);
-    expect(find.text('✓ '), findsNothing);
+    expect(find.byType(EInkCheckMark), findsNothing);
     await _show(tester, _grouped, null, eink: true);
-    expect(find.text('✓ '), findsNothing);
+    expect(find.byType(EInkCheckMark), findsNothing);
     expect(_blackCells(tester, ['A1', 'A2', 'A3']), 0);
   });
 
@@ -156,7 +157,7 @@ void main() {
       _history(3, {'3', '4'}),
       eink: false,
     );
-    expect(find.text('✓ '), findsNothing);
+    expect(find.byType(EInkCheckMark), findsNothing);
     Color? color(String t) => tester.widget<Text>(find.text(t)).style?.color;
     expect(color('Ch3'), theme.colorScheme.outline);
     expect(color('Ch4'), theme.colorScheme.outline);
