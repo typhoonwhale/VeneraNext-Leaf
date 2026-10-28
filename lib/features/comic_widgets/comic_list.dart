@@ -22,6 +22,7 @@ import 'package:venera_next/foundation/translations.dart';
 import 'package:venera_next/foundation/widget_utils.dart';
 
 import 'comic_tile.dart';
+import 'package:venera_next/foundation/eink_theme.dart';
 
 class SliverGridComics extends StatefulWidget {
   const SliverGridComics({
@@ -631,7 +632,7 @@ class ComicListState extends State<ComicList> {
       return Column(
         children: [
           if (widget.errorLeading != null) widget.errorLeading!,
-          const Expanded(child: Center(child: CircularProgressIndicator())),
+          const Expanded(child: Center(child: EInkProgressIndicator())),
         ],
       );
     }
@@ -678,7 +679,7 @@ class ComicListState extends State<ComicList> {
       return Column(
         children: [
           if (widget.errorLeading != null) widget.errorLeading!,
-          const Expanded(child: Center(child: CircularProgressIndicator())),
+          const Expanded(child: Center(child: EInkProgressIndicator())),
         ],
       );
     }

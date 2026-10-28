@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:venera_next/foundation/translations.dart';
 import 'platform_effects_controller.dart';
 import 'image_favorite_controller.dart';
+import 'package:venera_next/foundation/eink_theme.dart';
 
 /// Snapshot of the automatic-reading action, independent of its controller.
 class ReaderAutomaticReadingAction {
@@ -61,7 +62,7 @@ List<Widget> buildReaderBottomActions(
                   imageFavoriteStatus == ReaderImageFavoriteStatus.loading
               ? SizedBox.square(
                   dimension: 20,
-                  child: CircularProgressIndicator(
+                  child: EInkProgressIndicator(
                     strokeWidth: 2,
                     value: MediaQuery.disableAnimationsOf(context) ? 0.5 : null,
                   ),

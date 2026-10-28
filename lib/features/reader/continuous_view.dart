@@ -28,6 +28,7 @@ import 'reader_controller.dart';
 import 'reader_viewport.dart';
 import 'package:venera_next/network/request_scope.dart';
 import 'chapter_swipe_indicator.dart';
+import 'package:venera_next/foundation/eink_theme.dart';
 
 const Set<PointerDeviceKind> _kTouchLikeDeviceTypes = <PointerDeviceKind>{
   PointerDeviceKind.touch,
@@ -764,7 +765,7 @@ class ContinuousModeState extends State<ReaderContinuousView>
               const SizedBox(
                 width: 18,
                 height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
+                child: EInkProgressIndicator(strokeWidth: 2),
               ),
               const SizedBox(width: 12),
               Text('Loading next chapter'.tl),

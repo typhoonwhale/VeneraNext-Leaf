@@ -8,6 +8,7 @@ import "package:venera_next/features/comic_source/comic_source.dart";
 import "package:venera_next/foundation/context.dart";
 import "package:venera_next/foundation/translations.dart";
 import "package:venera_next/foundation/widget_utils.dart";
+import 'package:venera_next/foundation/eink_theme.dart';
 
 class CategoryComicsPage extends StatefulWidget {
   const CategoryComicsPage({
@@ -120,7 +121,7 @@ class _CategoryComicsPageState extends State<CategoryComicsPage> {
     Widget body;
 
     if (options == null) {
-      body = Center(child: CircularProgressIndicator());
+      body = Center(child: EInkProgressIndicator());
     } else if (error != null) {
       body = NetworkError(
         message: error!,

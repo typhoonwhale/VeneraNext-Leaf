@@ -191,7 +191,7 @@ class _ButtonState extends State<Button> {
       child: DefaultTextStyle(
         style: TextStyle(color: textColor, fontSize: 14),
         child: isLoading
-            ? CircularProgressIndicator(
+            ? EInkProgressIndicator(
                 color: widget.type == ButtonType.filled
                     ? context.colorScheme.inversePrimary
                     : context.colorScheme.primary,
@@ -340,7 +340,7 @@ class _IconButtonState extends State<_IconButton> {
       child: widget.icon,
     );
     if (widget.isLoading) {
-      icon = const CircularProgressIndicator(
+      icon = const EInkProgressIndicator(
         strokeWidth: 1.5,
       ).paddingAll(2).fixWidth(iconSize).fixHeight(iconSize);
     }

@@ -21,6 +21,7 @@ import 'package:venera_next/foundation/persistence_failure.dart';
 import 'package:venera_next/foundation/selection_operation.dart';
 import 'package:venera_next/foundation/translations.dart';
 import 'package:venera_next/network/cache.dart';
+import 'package:venera_next/foundation/eink_theme.dart';
 
 Future<bool> confirmNetworkFavoriteDeletion(
   BuildContext context, {
@@ -330,7 +331,7 @@ class _MultiFolderFavoritesPageState extends State<_MultiFolderFavoritesPage> {
       return Column(
         children: [
           appBar,
-          const Expanded(child: Center(child: CircularProgressIndicator())),
+          const Expanded(child: Center(child: EInkProgressIndicator())),
         ],
       );
     } else if (_errorMessage != null) {

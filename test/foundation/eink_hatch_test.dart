@@ -80,9 +80,7 @@ void main() {
         home: const Scaffold(
           body: Row(
             children: [
-              Expanded(
-                child: FilledButton(onPressed: null, child: Text('x')),
-              ),
+              Expanded(child: FilledButton(onPressed: null, child: Text('x'))),
             ],
           ),
         ),
@@ -110,11 +108,7 @@ void main() {
                   icon: const Icon(Icons.download),
                   label: const Text('x'),
                 ),
-                Select(
-                  current: 'a',
-                  values: const ['a'],
-                  enabled: enabled,
-                ),
+                Select(current: 'a', values: const ['a'], enabled: enabled),
               ],
             ),
           ),
@@ -177,10 +171,7 @@ void main() {
       expectHalo(tester, inSelect(find.text('a')));
       final arrows = inSelect(find.byIcon(Icons.arrow_drop_down));
       expect(arrows, findsNWidgets(2));
-      expect(
-        IconTheme.of(tester.element(arrows.first)).shadows,
-        hasLength(16),
-      );
+      expect(IconTheme.of(tester.element(arrows.first)).shadows, hasLength(16));
       expect(IconTheme.of(tester.element(arrows.last)).shadows, isNull);
     });
 
@@ -207,6 +198,94 @@ void main() {
       expect(tester.getRect(texts.first), tester.getRect(texts.last));
       final icons = inButton(find.byIcon(Icons.download));
       expect(tester.getRect(icons.first), tester.getRect(icons.last));
+    });
+
+    testWidgets('disabled button with a spinner runs one animation', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: applyEInkTheme(ThemeData.light()),
+          home: const Scaffold(
+            body: FilledButton(
+              onPressed: null,
+              child: SizedBox.square(
+                dimension: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(find.byType(EInkHatch), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(tester.binding.transientCallbackCount, 1);
+    });
+
+    testWidgets('a halo copy with a spinner has muted tickers', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: einkHaloStack(
+              const CircularProgressIndicator(),
+              const CircularProgressIndicator(),
+            ),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(find.byType(CircularProgressIndicator), findsNWidgets(2));
+      expect(tester.binding.transientCallbackCount, 1);
+    });
+
+    testWidgets('a GlobalKey child is not duplicated', (tester) async {
+      final key = GlobalKey();
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: applyEInkTheme(ThemeData.light()),
+          home: Scaffold(
+            body: FilledButton(onPressed: null, child: Text('keyed', key: key)),
+          ),
+        ),
+      );
+      expect(tester.takeException(), isNull);
+      expect(find.text('keyed'), findsOneWidget);
+      expect(find.byType(EInkHatch), findsOneWidget);
+    });
+
+    test('einkHaloSafe accepts plain labels and refuses stateful ones', () {
+      expect(einkHaloSafe(const Text('a')), isTrue);
+      expect(
+        einkHaloSafe(
+          const Padding(
+            padding: EdgeInsets.all(2),
+            child: Row(children: [Icon(Icons.add), Text('a')]),
+          ),
+        ),
+        isTrue,
+      );
+      expect(einkHaloSafe(const CircularProgressIndicator()), isFalse);
+      expect(einkHaloSafe(const EInkProgressIndicator()), isFalse);
+      expect(
+        einkHaloSafe(
+          const Row(
+            children: [Text('a'), Checkbox(value: true, onChanged: null)],
+          ),
+        ),
+        isFalse,
+      );
+      expect(einkHaloSafe(Text('a', key: GlobalKey())), isFalse);
+      expect(
+        einkHaloSafe(
+          Text.rich(
+            TextSpan(
+              children: [WidgetSpan(child: Text('a', key: GlobalKey()))],
+            ),
+          ),
+        ),
+        isFalse,
+      );
     });
   });
 }

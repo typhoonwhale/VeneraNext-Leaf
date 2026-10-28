@@ -71,7 +71,7 @@ class ComicDetailActionButton extends StatelessWidget {
                       const SizedBox(
                         width: 20,
                         height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 1.8),
+                        child: EInkProgressIndicator(strokeWidth: 1.8),
                       )
                     else
                       (isActive ?? false) ? (activeIcon ?? icon) : icon,

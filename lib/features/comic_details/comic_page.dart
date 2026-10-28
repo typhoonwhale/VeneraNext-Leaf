@@ -1012,7 +1012,7 @@ class _ComicPageLoadingPlaceHolder extends StatelessWidget {
           const Divider(),
           const SizedBox(height: 8),
           Center(
-            child: CircularProgressIndicator(
+            child: EInkProgressIndicator(
               strokeWidth: 2.4,
             ).fixHeight(24).fixWidth(24),
           ),

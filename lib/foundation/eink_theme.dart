@@ -15,18 +15,28 @@ abstract final class EInkPreferences {
 
 /// A [CircularProgressIndicator] that stops spinning when animations are
 /// disabled: an indeterminate indicator then shows a static half ring.
-/// Determinate progress is passed through unchanged.
+/// Every other argument, and a determinate [value], pass through unchanged.
 class EInkProgressIndicator extends StatelessWidget {
   const EInkProgressIndicator({
     super.key,
     this.value,
-    this.strokeWidth = 4.0,
+    this.strokeWidth,
     this.backgroundColor,
+    this.color,
+    this.valueColor,
+    this.semanticsLabel,
+    this.semanticsValue,
+    this.strokeCap,
   });
 
   final double? value;
-  final double strokeWidth;
+  final double? strokeWidth;
   final Color? backgroundColor;
+  final Color? color;
+  final Animation<Color?>? valueColor;
+  final String? semanticsLabel;
+  final String? semanticsValue;
+  final StrokeCap? strokeCap;
 
   @override
   Widget build(BuildContext context) {
@@ -34,6 +44,11 @@ class EInkProgressIndicator extends StatelessWidget {
       value: value ?? (MediaQuery.disableAnimationsOf(context) ? 0.5 : null),
       strokeWidth: strokeWidth,
       backgroundColor: backgroundColor,
+      color: color,
+      valueColor: valueColor,
+      semanticsLabel: semanticsLabel,
+      semanticsValue: semanticsValue,
+      strokeCap: strokeCap,
     );
   }
 }
@@ -160,35 +175,75 @@ IconThemeData einkHaloIconTheme() => IconThemeData(
   ],
 );
 
-/// Overlays [top] on [halo], which must lay out identically to it.
+/// Overlays [top] on [halo], which must lay out identically to it. The halo
+/// layer is a decoration: its tickers are muted, it has no semantics and
+/// takes no input.
 Widget einkHaloStack(Widget halo, Widget top) => Stack(
   clipBehavior: Clip.none,
   children: [
-    ExcludeSemantics(child: IgnorePointer(child: halo)),
+    TickerMode(
+      enabled: false,
+      child: ExcludeSemantics(child: IgnorePointer(child: halo)),
+    ),
     top,
   ],
 );
 
+/// Whether [child] can be built a second time as a halo layer. The walk goes
+/// through the widgets visible from here and refuses stateful widgets,
+/// progress indicators and anything carrying a GlobalKey: those would run
+/// twice or collide on the key. Widgets that build their own subtree are
+/// not looked into; the halo layer's tickers are muted for them.
+bool einkHaloSafe(Widget? child) {
+  if (child == null) return true;
+  if (child.key is GlobalKey) return false;
+  if (child is StatefulWidget ||
+      child is ProgressIndicator ||
+      child is EInkProgressIndicator) {
+    return false;
+  }
+  if (child is Text && child.textSpan != null) {
+    var safe = true;
+    child.textSpan!.visitChildren((span) {
+      if (span is WidgetSpan && !einkHaloSafe(span.child)) safe = false;
+      return safe;
+    });
+    return safe;
+  }
+  if (child is SingleChildRenderObjectWidget) {
+    return einkHaloSafe(child.child);
+  }
+  if (child is MultiChildRenderObjectWidget) {
+    return child.children.every(einkHaloSafe);
+  }
+  if (child is ProxyWidget) return einkHaloSafe(child.child);
+  return true;
+}
+
 /// Keeps a disabled control's label readable on top of the hatch: text and
-/// icons get a white halo, so the hatch lines stop at the glyph edges.
-Widget einkHaloLabel(Widget child) => Builder(
-  builder: (context) {
-    final base = DefaultTextStyle.of(context);
-    return einkHaloStack(
-      DefaultTextStyle(
-        style: base.style.copyWith(foreground: einkHaloPaint()),
-        textAlign: base.textAlign,
-        softWrap: base.softWrap,
-        overflow: base.overflow,
-        maxLines: base.maxLines,
-        textWidthBasis: base.textWidthBasis,
-        textHeightBehavior: base.textHeightBehavior,
-        child: IconTheme.merge(data: einkHaloIconTheme(), child: child),
-      ),
-      child,
-    );
-  },
-);
+/// icons get a white halo, so the hatch lines stop at the glyph edges. A
+/// child that cannot be duplicated safely (see [einkHaloSafe]) is returned
+/// as is: the hatch stays, the halo is skipped.
+Widget einkHaloLabel(Widget child) => !einkHaloSafe(child)
+    ? child
+    : Builder(
+        builder: (context) {
+          final base = DefaultTextStyle.of(context);
+          return einkHaloStack(
+            DefaultTextStyle(
+              style: base.style.copyWith(foreground: einkHaloPaint()),
+              textAlign: base.textAlign,
+              softWrap: base.softWrap,
+              overflow: base.overflow,
+              maxLines: base.maxLines,
+              textWidthBasis: base.textWidthBasis,
+              textHeightBehavior: base.textHeightBehavior,
+              child: IconTheme.merge(data: einkHaloIconTheme(), child: child),
+            ),
+            child,
+          );
+        },
+      );
 
 /// Theme-carried E-Ink flag and the shared selected-state colors.
 @immutable

@@ -30,6 +30,7 @@ import 'package:venera_next/features/comic_details/comic_details.dart';
 import 'aggregated_search_page.dart';
 import 'search_result_page.dart';
 import 'search_shortcuts.dart';
+import 'package:venera_next/foundation/eink_theme.dart';
 
 class SearchPage extends StatefulWidget {
   const SearchPage({super.key});
@@ -652,9 +653,7 @@ class _SearchHistoryState extends State<_SearchHistory> {
                         child: saving
                             ? const SizedBox.square(
                                 dimension: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
+                                child: EInkProgressIndicator(strokeWidth: 2),
                               )
                             : Text("Clear".tl),
                       ),

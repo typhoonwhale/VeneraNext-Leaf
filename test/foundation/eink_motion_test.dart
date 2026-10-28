@@ -322,6 +322,46 @@ void main() {
       );
     });
 
+    testWidgets('every argument reaches the wrapped indicator', (tester) async {
+      _setMode(false);
+      final animation = AlwaysStoppedAnimation<Color?>(Colors.red);
+      await tester.pumpWidget(
+        _app(
+          Scaffold(
+            body: EInkProgressIndicator(
+              value: 0.4,
+              strokeWidth: 2,
+              backgroundColor: Colors.blue,
+              color: Colors.green,
+              valueColor: animation,
+              semanticsLabel: 'l',
+              semanticsValue: '40',
+              strokeCap: StrokeCap.round,
+            ),
+          ),
+        ),
+      );
+      final inner = tester.widget<CircularProgressIndicator>(
+        find.byType(CircularProgressIndicator),
+      );
+      expect(inner.value, 0.4);
+      expect(inner.strokeWidth, 2);
+      expect(inner.backgroundColor, Colors.blue);
+      expect(inner.color, Colors.green);
+      expect(inner.valueColor, same(animation));
+      expect(inner.semanticsLabel, 'l');
+      expect(inner.semanticsValue, '40');
+      expect(inner.strokeCap, StrokeCap.round);
+      await tester.pumpWidget(
+        _app(const Scaffold(body: EInkProgressIndicator())),
+      );
+      final plain = tester.widget<CircularProgressIndicator>(
+        find.byType(CircularProgressIndicator),
+      );
+      expect(plain.value, isNull);
+      expect(plain.strokeWidth, isNull);
+    });
+
     testWidgets('static dots are black', (tester) async {
       _setMode(true);
       await tester.pumpWidget(

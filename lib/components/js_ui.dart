@@ -16,6 +16,7 @@ import 'package:venera_next/foundation/widget_utils.dart';
 
 import 'message.dart';
 import 'window_selection_task.dart';
+import 'package:venera_next/foundation/eink_theme.dart';
 
 class JsUiApi implements JsUiMessageHandler {
   final _loadingDialogControllers = <int, _JsLoadingPresentation>{};
@@ -513,7 +514,7 @@ class _JSCallbackButtonState extends State<_JSCallbackButton> {
         ? Semantics(
             label: widget.text,
             child: ExcludeSemantics(
-              child: CircularProgressIndicator(
+              child: EInkProgressIndicator(
                 strokeWidth: 1.4,
               ).fixWidth(18).fixHeight(18),
             ),

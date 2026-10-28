@@ -5,6 +5,7 @@ import 'package:venera_next/foundation/translations.dart';
 
 import 'source_installation.dart';
 import 'source_installations_scope.dart';
+import 'package:venera_next/foundation/eink_theme.dart';
 
 /// A persistent entry point, shared by the manager page and every catalog.
 class SourceInstallationSummary extends StatelessWidget {
@@ -270,7 +271,7 @@ class _SourceInstallationAction extends StatelessWidget {
             child: Center(
               child: SizedBox.square(
                 dimension: 24,
-                child: CircularProgressIndicator(
+                child: EInkProgressIndicator(
                   strokeWidth: 2.5,
                   strokeCap: StrokeCap.round,
                   backgroundColor: colors.surfaceContainerHighest,

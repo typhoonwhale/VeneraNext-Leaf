@@ -142,7 +142,7 @@ class _CommentsPageState extends State<CommentsPage> {
   Widget buildBody(BuildContext context) {
     if (_loading) {
       firstLoad();
-      return const Center(child: CircularProgressIndicator());
+      return const Center(child: EInkProgressIndicator());
     } else if (_error != null) {
       return NetworkError(
         message: _error!,
@@ -277,7 +277,7 @@ class _CommentsPageState extends State<CommentsPage> {
                 child: SizedBox(
                   width: 24,
                   height: 24,
-                  child: CircularProgressIndicator(strokeWidth: 2),
+                  child: EInkProgressIndicator(strokeWidth: 2),
                 ),
               )
             else
@@ -526,7 +526,7 @@ class _CommentTileState extends State<_CommentTile> {
               const SizedBox(
                 width: 16,
                 height: 16,
-                child: CircularProgressIndicator(),
+                child: EInkProgressIndicator(),
               )
             else if (isLiked)
               Icon(

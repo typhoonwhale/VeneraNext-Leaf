@@ -19,6 +19,7 @@ import 'package:venera_next/network/proxy.dart';
 import 'package:venera_next/foundation/extensions.dart';
 import 'package:venera_next/foundation/translations.dart';
 import 'dart:io' as io;
+import 'package:venera_next/foundation/eink_theme.dart';
 
 export 'package:flutter_inappwebview/flutter_inappwebview.dart'
     show WebUri, URLRequest;
@@ -206,9 +207,7 @@ class _AppWebviewState extends State<AppWebview> with ContextMenuOwner {
       children: [
         Positioned.fill(child: body),
         if (_progress < 1.0)
-          const Positioned.fill(
-            child: Center(child: CircularProgressIndicator()),
-          ),
+          const Positioned.fill(child: Center(child: EInkProgressIndicator())),
       ],
     );
 

@@ -243,7 +243,7 @@ class _ImportComicsWidgetState extends State<_ImportComicsWidget> {
           ? SizedBox(
               width: 600,
               height: height,
-              child: const Center(child: CircularProgressIndicator()),
+              child: const Center(child: EInkProgressIndicator()),
             )
           : RadioGroup<int>(
               groupValue: type,

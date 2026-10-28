@@ -17,6 +17,7 @@ import 'package:venera_next/foundation/context.dart';
 import 'package:venera_next/foundation/translations.dart';
 import 'package:venera_next/foundation/widget_utils.dart';
 import 'package:venera_next/network/cache.dart';
+import 'package:venera_next/foundation/eink_theme.dart';
 
 class ComicFavoritePanel extends StatefulWidget {
   const ComicFavoritePanel({
@@ -402,7 +403,7 @@ class _NetworkSectionState extends State<NetworkFavoriteSection> {
               ? const SizedBox(
                   width: 20,
                   height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
+                  child: EInkProgressIndicator(strokeWidth: 2),
                 )
               : _HoverButton(
                   isFavorite: isFavorite,
@@ -462,7 +463,7 @@ class _NetworkSectionState extends State<NetworkFavoriteSection> {
                 ? const SizedBox(
                     width: 20,
                     height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                    child: EInkProgressIndicator(strokeWidth: 2),
                   )
                 : _HoverButton(
                     isFavorite: isAdded,

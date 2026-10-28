@@ -509,7 +509,7 @@ class ComicImageState extends State<ComicImage> with WidgetsBindingObserver {
               child: SizedBox(
                 width: 24,
                 height: 24,
-                child: CircularProgressIndicator(
+                child: EInkProgressIndicator(
                   strokeWidth: 3,
                   backgroundColor: context.colorScheme.surfaceContainer,
                   value:

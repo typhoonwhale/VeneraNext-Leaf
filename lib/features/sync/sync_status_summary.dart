@@ -39,7 +39,7 @@ class SyncStatusSummary extends StatelessWidget {
             leading: const Icon(Icons.sync),
             title: Text(syncStatus.title.tl),
             subtitle: buildSyncStatusSubtitle(syncStatus),
-            trailing: const CircularProgressIndicator(
+            trailing: const EInkProgressIndicator(
               strokeWidth: 2,
             ).fixWidth(18).fixHeight(18),
           ),

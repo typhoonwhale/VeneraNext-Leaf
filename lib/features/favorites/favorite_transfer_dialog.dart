@@ -16,6 +16,7 @@ import 'package:venera_next/foundation/translations.dart';
 import 'favorite_actions.dart' show newFolder;
 import 'favorite_models.dart';
 import 'favorites_manager.dart';
+import 'package:venera_next/foundation/eink_theme.dart';
 
 /// Owns a captured transfer and publishes only its known commit after the
 /// popup and complete save callback have stopped using the initiating page.
@@ -301,7 +302,7 @@ Future<void> _showFavoriteTransferDialog({
                                 child: saving
                                     ? const SizedBox.square(
                                         dimension: 18,
-                                        child: CircularProgressIndicator(
+                                        child: EInkProgressIndicator(
                                           strokeWidth: 2,
                                         ),
                                       )
