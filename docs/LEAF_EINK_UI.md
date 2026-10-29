@@ -1,6 +1,6 @@
 # Leaf 墨水屏 UI 组件索引与修改指南
 
-更新：2026-10-28。分支：`feature/leaf-eink-v1`。本文行号以该分支 `4afdc87` 为准，改动后请同步。阶段与耗电约束见[开发路线图](LEAF_EINK_ROADMAP.md)，官方 SDK 约束见[核心约束](LEAF_EINK_GUIDELINES.md)。
+更新：2026-10-29。随 1.19.0 发布。本文行号以 1.19.0 发布提交为准，改动后请同步。阶段与耗电约束见[开发路线图](LEAF_EINK_ROADMAP.md)，官方 SDK 约束见[核心约束](LEAF_EINK_GUIDELINES.md)。
 
 ## 1. 概述
 
@@ -29,9 +29,9 @@
 
 ### 2.2 主题切换路径
 
-1. `lib/main.dart:345-346` 读取 `appearance`，得到 `eink`。
-2. `getTheme(..., eink:)`（`lib/main.dart:518`）：`eink` 为 true 时 `colorScheme` 用 `einkColorScheme()`（不再用 seed 色），最后 `applyEInkTheme(theme)`（`lib/main.dart:574`）叠加组件主题。
-3. `MaterialApp` 的 `theme` 和 `darkTheme` 都传 `eink`；`themeMode` 固定 `ThemeMode.light`（`lib/main.dart:370`）；`themeAnimationDuration` 为 `Duration.zero`（`lib/main.dart:366`），切换主题时不做渐变。
+1. `lib/main.dart:361-362` 读取 `appearance`，得到 `eink`。
+2. `getTheme(..., eink:)`（`lib/main.dart:536`）：`eink` 为 true 时 `colorScheme` 用 `einkColorScheme()`（不再用 seed 色），最后 `applyEInkTheme(theme)`（`lib/main.dart:592`）叠加组件主题。
+3. `MaterialApp` 的 `theme` 和 `darkTheme` 都传 `eink`；`themeMode` 固定 `ThemeMode.light`（`lib/main.dart:386`）；`themeAnimationDuration` 为 `Duration.zero`（`lib/main.dart:382`），切换主题时不做渐变。
 4. `applyEInkTheme` 末尾注册 `EInkStyle(enabled: true)` 扩展（`lib/foundation/eink_theme.dart:604`），`context.isEInk` 由它读出。
 
 `getTheme` 是 `main.dart` 的顶层函数，测试用 `getTheme(..., eink: true/false)` 直接构造主题。
@@ -47,7 +47,7 @@
 
 ### 2.4 减少动画的机制
 
-- `MaterialApp.builder` 中始终包一层 `EInkReduceMotion(enabled: reduceMotion)`（`lib/main.dart:470-473`，组件在 `lib/foundation/eink_theme.dart:59-77`）：enabled 时覆盖 `MediaQuery(disableAnimations: true)`，否则把原 `MediaQuery` 数据原样透传。包装层常驻，切换开关不改变树结构，下层 `State` 不会被重建，依赖也只局限在这个小组件内。凡是读 `MediaQuery.disableAnimationsOf` 的地方（菜单、阅读器菜单、章节切换按钮等）在任何系统设置下都生效。
+- `MaterialApp.builder` 中始终包一层 `EInkReduceMotion(enabled: reduceMotion)`（`lib/main.dart:488-491`，组件在 `lib/foundation/eink_theme.dart:59-77`）：enabled 时覆盖 `MediaQuery(disableAnimations: true)`，否则把原 `MediaQuery` 数据原样透传。包装层常驻，切换开关不改变树结构，下层 `State` 不会被重建，依赖也只局限在这个小组件内。凡是读 `MediaQuery.disableAnimationsOf` 的地方（菜单、阅读器菜单、章节切换按钮等）在任何系统设置下都生效。
 - Android 嵌入层会读 `Settings.Global.transition_animation_scale`，值为 0 时把 Flutter 的 `disableAnimations` 置 true；只看这一项，不看 `animator_duration_scale`。这个平台标志还会让 `AnimationController.animateTo` 只跑 5% 时长，300ms 转场约剩 15ms，通常留一两帧中间画面。
 - 应用内覆盖只改 `MediaQuery`，**不改**上述 5% 缩放（后者读 `SemanticsBinding`）。所以显式写了 `Duration` 的地方要逐处改成 `Duration.zero`。
 - 系统缩放管不到两类动画：`repeat()` 产生的循环动画（转圈、五点、骨架屏闪光、下载图标）；`AnimationController.unbounded` 驱动的滚动动画（`animateTo`、`animateToPage`、惯性）。这两类必须在应用内处理，见 4.4 节清单。
@@ -119,7 +119,7 @@
 
 | 组件/位置 | 墨水屏样式或行为 | 实现 | 文件:行 |
 |---|---|---|---|
-| 配色 | 单色 `ColorScheme`，固定浅色 | 主题 | `lib/foundation/eink_theme.dart:323`，`lib/main.dart:370` |
+| 配色 | 单色 `ColorScheme`，固定浅色 | 主题 | `lib/foundation/eink_theme.dart:323`，`lib/main.dart:386` |
 | 文字 | 字重下限 w500，小字 w600 | 主题 | `lib/foundation/eink_theme.dart:385` |
 | 按钮（text / outlined / filled / tonal） | 胶囊形，2 描边；禁用黑框黑字，内部 45° 斜线，文字描 3px 白边 | 主题 | `lib/foundation/eink_theme.dart:431-488` |
 | 卡片、弹出菜单、SnackBar | elevation 0 + 描边圆角 12 | 主题 | `lib/foundation/eink_theme.dart:568-570` |
@@ -127,7 +127,7 @@
 | FAB | 白底黑字，3 描边，无阴影 | 主题 | `lib/foundation/eink_theme.dart:571` |
 | SegmentedButton、Chip、Switch | 选中黑底白字、黑描边；Switch 禁用为白轨道 + 空心圆环 | 主题 | `lib/foundation/eink_theme.dart:489-506,584` |
 | 路由转场、水波纹 | 无转场、无水波纹 | 主题 | `lib/foundation/eink_theme.dart:555-562` |
-| 主题切换渐变 | 关闭 | 分支 | `lib/main.dart:366` |
+| 主题切换渐变 | 关闭 | 分支 | `lib/main.dart:382` |
 | `useTextColor` / `useBackgroundColor` | 返回 `onSurface` / `surface`，详情页图标、标签色板、评论点赞/踩、稍后阅读变黑白 | 分支 | `lib/foundation/context.dart:77-85` |
 
 ### 4.2 公共组件（`lib/components`）
@@ -163,8 +163,8 @@
 
 | 组件 | 墨水屏样式或行为 | 实现 | 文件:行 |
 |---|---|---|---|
-| `LocalComicsSummary` 等四张主页摘要卡 | 计数徽标白底黑描边 | 分支 | `lib/features/local_comics/local_comics_summary.dart:95`，`lib/features/comic_source/comic_source_summary.dart:79`，`lib/features/image_favorites/image_favorites_summary.dart:111`，`lib/components/summary_header.dart:38` |
-| 下载中图标 | 无动画时停在静态图标 | 分支 | `lib/features/local_comics/local_comics_summary.dart:403` |
+| `LocalComicsSummary` 等四张主页摘要卡 | 计数徽标白底黑描边 | 分支 | `lib/features/local_comics/local_comics_summary.dart:94`，`lib/features/comic_source/comic_source_summary.dart:79`，`lib/features/image_favorites/image_favorites_summary.dart:111`，`lib/components/summary_header.dart:38` |
+| 下载中图标 | 无动画时停在静态图标 | 分支 | `lib/features/local_comics/local_comics_summary.dart:387` |
 | 图片收藏统计条 | 去渐变，白底 + 黑描边 | 分支 | `lib/features/image_favorites/image_favorites_summary.dart:300-305` |
 | 同步状态错误图标 | `onSurface` 代替红色 | 分支 | `lib/features/sync/sync_status_summary.dart:88` |
 | 收藏夹侧栏 | 选中黑底白字；数量徽标加 2 描边 | 分支 | `lib/features/favorites/side_bar.dart:270,289,299,334,350` |
@@ -243,13 +243,13 @@
 | 封面/缩略图渐显 200ms | 时长 0 | `lib/components/image.dart:331` |
 | 导航切换和底栏选中 | 时长 0 | `lib/components/navigation_bar.dart:543,805` |
 | 亮度面板 `AnimatedSize` | 时长 0 | `lib/features/reader/brightness.dart:110` |
-| 转圈（`CircularProgressIndicator` 无限旋转） | `EInkProgressIndicator`：半圈静态；有 `value` 时原样。`lib/` 下所有 `CircularProgressIndicator` 均已替换（如 `lib/features/reader/images.dart:125,129`、`lib/features/reader/continuous_view.dart:768`、`lib/features/reader/comic_image.dart:512`、`lib/features/comic_widgets/comic_list.dart:635,682`、`lib/features/discovery/explore_page.dart:591`、`lib/features/comic_details/comments_page.dart:145`、`lib/components/button.dart:194,343`、`lib/features/comic_details/action_button.dart:74`、`lib/features/favorites/favorite_transfer_dialog.dart:305`） | `lib/foundation/eink_theme.dart:19` |
+| 转圈（`CircularProgressIndicator` 无限旋转） | `EInkProgressIndicator`：半圈静态；有 `value` 时原样。`lib/` 下所有 `CircularProgressIndicator` 均已替换（如 `lib/features/reader/images.dart:125,129`、`lib/features/reader/continuous_view.dart:768`、`lib/features/reader/comic_image.dart:512`、`lib/features/comic_widgets/comic_list.dart:680,727`、`lib/features/discovery/explore_page.dart:591`、`lib/features/comic_details/comments_page.dart:145`、`lib/components/button.dart:194,343`、`lib/features/comic_details/action_button.dart:74`、`lib/features/favorites/favorite_transfer_dialog.dart:305`） | `lib/foundation/eink_theme.dart:19` |
 | 组件补间（`FilterChipFixedWidth`、`OptionChip`、`AnimatedCheckIcon`、`Button` 的 `AnimatedContainer`/`AnimatedSize`） | `tweenDuration(context)`：`disableAnimations` 时 0 | `lib/components/select.dart:195,204,239,324,359`，`lib/components/button.dart:221,252` |
 | 五点加载（`repeat`） | `didChangeDependencies` 中停止并归零，黑点 | `lib/components/loading.dart:410-420` |
-| 下载中图标（`repeat`） | 同上 | `lib/features/local_comics/local_comics_summary.dart:403-409` |
+| 下载中图标（`repeat`） | 同上 | `lib/features/local_comics/local_comics_summary.dart:387-393` |
 | 骨架屏 `Shimmer` | `enabled: false`（3 处） | `lib/features/comic_details/comic_page.dart:976`，`lib/features/comic_details/favorite.dart:309`，`lib/features/search/aggregated_search_page.dart:198` |
 | 回到顶部、滚轮/滚动条、连续模式定位和翻页键 | `jumpTo` | `lib/features/comic_details/comic_page.dart:233`，`lib/components/scroll.dart:172`，`lib/features/reader/continuous_view.dart:1155,1293` |
-| 主题切换渐变 | `themeAnimationDuration` 为 0 | `lib/main.dart:366` |
+| 主题切换渐变 | `themeAnimationDuration` 为 0 | `lib/main.dart:382` |
 | 水波纹 | `NoSplash` | `lib/foundation/eink_theme.dart:555` |
 
 ## 5. 明确不改的地方
@@ -311,7 +311,7 @@
 1. 分支处都应是 `isEInk ? 新 : 原` 的形式，原值保持不变；`git diff` 里不应出现原分支行为变化。
 2. 每个测试用 `eink: false` 构造一遍，断言原值（参考 `action_button_test.dart` 的 0.6 描边、`eink_sidebar_test.dart` 的圆角）。
 3. 设置页关闭墨水屏模式，主题模式、主题颜色恢复可选，彩色主题和动画恢复；重新打开、强制重启后状态保持。
-4. 非墨水屏下 `MediaQuery` 数据不应被改写：`lib/main.dart:470` 的 `EInkReduceMotion` 在 `enabled` 为 false 时原样透传。
+4. 非墨水屏下 `MediaQuery` 数据不应被改写：`lib/main.dart:488` 的 `EInkReduceMotion` 在 `enabled` 为 false 时原样透传。
 
 ## 8. 已知遗漏与后续方向
 
