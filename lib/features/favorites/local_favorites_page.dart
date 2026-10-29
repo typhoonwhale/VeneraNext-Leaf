@@ -47,6 +47,7 @@ import 'package:venera_next/foundation/context.dart';
 import 'package:venera_next/foundation/opencc.dart';
 import 'package:venera_next/foundation/translations.dart';
 import 'package:venera_next/foundation/widget_utils.dart';
+import 'package:venera_next/foundation/eink_theme.dart';
 
 /// If the number of comics in a folder exceeds this limit, it will be
 /// fetched asynchronously.
@@ -868,7 +869,7 @@ class _LocalFavoritesPageState extends State<LocalFavoritesPage> {
           SliverToBoxAdapter(
             child: SizedBox(
               height: 200,
-              child: const Center(child: CircularProgressIndicator()),
+              child: const Center(child: EInkProgressIndicator()),
             ),
           )
         else

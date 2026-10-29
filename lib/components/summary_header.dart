@@ -1,3 +1,4 @@
+import 'package:venera_next/foundation/eink_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:venera_next/foundation/widget_utils.dart';
 
@@ -34,6 +35,7 @@ class SummaryHeader extends StatelessWidget {
                   ),
                   decoration: BoxDecoration(
                     color: Theme.of(context).colorScheme.secondaryContainer,
+                    border: context.einkBorder(),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(count.toString(), style: ts.s12),

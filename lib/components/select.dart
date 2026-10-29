@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:venera_next/foundation/app.dart';
 import 'package:venera_next/foundation/context.dart';
+import 'package:venera_next/foundation/eink_theme.dart';
 import 'package:venera_next/foundation/widget_utils.dart';
 
 import 'consts.dart';
@@ -16,6 +17,7 @@ class Select extends StatelessWidget {
     required this.values,
     this.onTap,
     this.minWidth,
+    this.enabled = true,
   });
 
   final String? current;
@@ -26,64 +28,120 @@ class Select extends StatelessWidget {
 
   final double? minWidth;
 
+  final bool enabled;
+
+  /// Black label with a white halo, for the disabled E-Ink state. The text
+  /// sets its own color, so the halo layer is built here, not inherited.
+  Widget _haloLabel() {
+    Widget layer(TextStyle style) => Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        ConstrainedBox(
+          constraints: BoxConstraints(
+            minWidth: minWidth != null ? (minWidth! - 32) : 0,
+          ),
+          child: Text(current ?? ' ', style: style),
+        ),
+        const SizedBox(width: 8),
+        const Icon(Icons.arrow_drop_down, color: Colors.black),
+      ],
+    );
+    return einkHaloStack(
+      IconTheme.merge(
+        data: einkHaloIconTheme(),
+        child: layer(ts.s14.copyWith(foreground: einkHaloPaint())),
+      ),
+      layer(ts.s14.copyWith(color: Colors.black)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final hatched = context.isEInk && !enabled;
+    final radius = BorderRadius.circular(4);
+    final content = ClickInkWell(
+      onTap: () {
+        var renderBox = context.findRenderObject() as RenderBox;
+        var offset = renderBox.localToGlobal(Offset.zero);
+        var size = renderBox.size;
+        final eink = context.isEInk;
+        showMenu(
+          elevation: eink ? 0 : 3,
+          color: eink
+              ? context.colorScheme.surface
+              : context.brightness == Brightness.light
+              ? const Color(0xFFF6F6F6)
+              : const Color(0xFF1E1E1E),
+          shape: eink
+              ? RoundedRectangleBorder(
+                  side: const BorderSide(
+                    color: Colors.black,
+                    width: EInkStyle.strokeWidth,
+                  ),
+                  borderRadius: BorderRadius.circular(4),
+                )
+              : null,
+          context: context,
+          useRootNavigator: true,
+          constraints: BoxConstraints(
+            minWidth: size.width,
+            maxWidth: size.width,
+          ),
+          position: RelativeRect.fromLTRB(
+            offset.dx,
+            offset.dy + size.height + 2,
+            offset.dx + size.height + 2,
+            offset.dy,
+          ),
+          items: values
+              .map(
+                (e) => PopupMenuItem(
+                  height: App.isMobile ? 46 : 40,
+                  value: e,
+                  child: Text(e),
+                ),
+              )
+              .toList(),
+        ).then((value) {
+          if (value != null) {
+            onTap?.call(values.indexOf(value));
+          }
+        });
+      },
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ConstrainedBox(
+            constraints: BoxConstraints(
+              minWidth: minWidth != null ? (minWidth! - 32) : 0,
+            ),
+            child: Text(current ?? ' ', style: ts.s14),
+          ),
+          const SizedBox(width: 8),
+          Icon(Icons.arrow_drop_down, color: context.colorScheme.primary),
+        ],
+      ).padding(const EdgeInsets.symmetric(horizontal: 12, vertical: 4)),
+    );
     return Container(
       decoration: BoxDecoration(
-        border: Border.all(color: context.colorScheme.outlineVariant),
-        borderRadius: BorderRadius.circular(4),
+        border: Border.all(
+          color: hatched ? Colors.black : context.colorScheme.outlineVariant,
+          width: context.isEInk ? EInkStyle.strokeWidth : 1,
+        ),
+        borderRadius: radius,
       ),
-      child: ClickInkWell(
-        onTap: () {
-          var renderBox = context.findRenderObject() as RenderBox;
-          var offset = renderBox.localToGlobal(Offset.zero);
-          var size = renderBox.size;
-          showMenu(
-            elevation: 3,
-            color: context.brightness == Brightness.light
-                ? const Color(0xFFF6F6F6)
-                : const Color(0xFF1E1E1E),
-            context: context,
-            useRootNavigator: true,
-            constraints: BoxConstraints(
-              minWidth: size.width,
-              maxWidth: size.width,
-            ),
-            position: RelativeRect.fromLTRB(
-              offset.dx,
-              offset.dy + size.height + 2,
-              offset.dx + size.height + 2,
-              offset.dy,
-            ),
-            items: values
-                .map(
-                  (e) => PopupMenuItem(
-                    height: App.isMobile ? 46 : 40,
-                    value: e,
-                    child: Text(e),
-                  ),
-                )
-                .toList(),
-          ).then((value) {
-            if (value != null) {
-              onTap?.call(values.indexOf(value));
-            }
-          });
-        },
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ConstrainedBox(
-              constraints: BoxConstraints(
-                minWidth: minWidth != null ? (minWidth! - 32) : 0,
+      child: hatched
+          ? ClipRRect(
+              borderRadius: radius,
+              child: EInkHatch(
+                shape: RoundedRectangleBorder(borderRadius: radius),
+                child: Padding(
+                  padding: const EdgeInsets.all(6),
+                  child: _haloLabel(),
+                ),
               ),
-              child: Text(current ?? ' ', style: ts.s14),
-            ),
-            const SizedBox(width: 8),
-            Icon(Icons.arrow_drop_down, color: context.colorScheme.primary),
-          ],
-        ).padding(const EdgeInsets.symmetric(horizontal: 12, vertical: 4)),
-      ),
+            )
+          : content,
     );
   }
 }
@@ -131,17 +189,28 @@ class _FilterChipFixedWidthState extends State<FilterChipFixedWidth> {
 
   @override
   Widget build(BuildContext context) {
+    final eink = context.isEInk;
+    final style = context.einkStyle;
+    final filled = eink && selected;
+    final duration = tweenDuration(context);
     return Material(
-      textStyle: Theme.of(context).textTheme.labelLarge,
+      textStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
+        color: filled ? style.selectedForeground : null,
+      ),
       child: ClickInkWell(
         onTap: () => widget.onSelected(true),
         borderRadius: const BorderRadius.all(Radius.circular(8)),
         child: AnimatedContainer(
-          duration: fastAnimationDuration,
+          duration: duration,
           decoration: BoxDecoration(
-            border: Border.all(color: Theme.of(context).colorScheme.outline),
+            border: Border.all(
+              color: Theme.of(context).colorScheme.outline,
+              width: eink ? EInkStyle.strokeWidth : 1.0,
+            ),
             borderRadius: const BorderRadius.all(Radius.circular(8)),
-            color: selected
+            color: filled
+                ? style.selectedBackground
+                : selected
                 ? Theme.of(context).colorScheme.primaryContainer
                 : null,
           ),
@@ -167,7 +236,7 @@ class _FilterChipFixedWidthState extends State<FilterChipFixedWidth> {
       child: Stack(
         children: [
           AnimatedPositioned(
-            duration: fastAnimationDuration,
+            duration: tweenDuration(context),
             left: selected ? (iconSize + gap) : (iconSize + gap) / 2,
             child: widget.label,
           ),
@@ -209,7 +278,9 @@ class AnimatedCheckWidget extends AnimatedWidget {
             child: Icon(
               Icons.check,
               size: iconSize,
-              color: Theme.of(context).colorScheme.primary,
+              color: context.isEInk
+                  ? context.einkStyle.selectedForeground
+                  : Theme.of(context).colorScheme.primary,
             ),
           ),
         ),
@@ -242,8 +313,16 @@ class _AnimatedCheckIconState extends State<AnimatedCheckIcon>
       ..addListener(() {
         setState(() {});
       });
-    controller.forward();
     super.initState();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (controller.isAnimating || controller.isCompleted) return;
+    // Jump to the end when animations are disabled.
+    controller.duration = tweenDuration(context);
+    controller.forward();
   }
 
   @override
@@ -274,13 +353,22 @@ class OptionChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final eink = context.isEInk;
+    final style = context.einkStyle;
     return AnimatedContainer(
-      duration: fastAnimationDuration,
+      duration: tweenDuration(context),
       decoration: BoxDecoration(
-        color: isSelected
+        color: eink && isSelected
+            ? style.selectedBackground
+            : isSelected
             ? context.colorScheme.secondaryContainer
             : context.colorScheme.surface,
-        border: isSelected
+        border: eink
+            ? Border.all(
+                color: context.colorScheme.outline,
+                width: EInkStyle.strokeWidth,
+              )
+            : isSelected
             ? Border.all(color: context.colorScheme.secondaryContainer)
             : Border.all(color: context.colorScheme.outline),
         borderRadius: BorderRadius.circular(8),
@@ -292,7 +380,12 @@ class OptionChip extends StatelessWidget {
           onTap: onTap,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            child: Text(text),
+            child: Text(
+              text,
+              style: eink && isSelected
+                  ? TextStyle(color: style.selectedForeground)
+                  : null,
+            ),
           ),
         ),
       ),

@@ -1,3 +1,4 @@
+import 'package:venera_next/foundation/eink_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:sliver_tools/sliver_tools.dart';
 import 'package:venera_next/components/gesture.dart';
@@ -38,7 +39,7 @@ class SyncStatusSummary extends StatelessWidget {
             leading: const Icon(Icons.sync),
             title: Text(syncStatus.title.tl),
             subtitle: buildSyncStatusSubtitle(syncStatus),
-            trailing: const CircularProgressIndicator(
+            trailing: const EInkProgressIndicator(
               strokeWidth: 2,
             ).fixWidth(18).fixHeight(18),
           ),
@@ -84,7 +85,9 @@ class SyncStatusSummary extends StatelessWidget {
                         children: [
                           Icon(
                             Icons.error_outline,
-                            color: Colors.red,
+                            color: context.isEInk
+                                ? context.colorScheme.onSurface
+                                : Colors.red,
                             size: 18,
                           ),
                           const SizedBox(width: 4),

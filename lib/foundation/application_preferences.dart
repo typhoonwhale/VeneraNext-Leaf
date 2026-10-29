@@ -92,7 +92,8 @@ abstract final class AppearancePreferences {
     'yellow',
     'cyan',
   ]);
-  static const all = <Preference<Object>>[themeMode, color];
+  static const eInkMode = BoolPreference('eInkMode', true);
+  static const all = <Preference<Object>>[themeMode, color, eInkMode];
 }
 
 abstract final class DiscoveryPreferences {

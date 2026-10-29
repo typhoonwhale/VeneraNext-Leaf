@@ -5,6 +5,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:venera_next/foundation/context.dart';
+import 'package:venera_next/foundation/eink_theme.dart';
 import 'package:venera_next/foundation/log.dart';
 import 'package:venera_next/foundation/res.dart';
 import 'package:venera_next/foundation/translations.dart';
@@ -168,7 +169,7 @@ abstract class LoadingState<T extends StatefulWidget, S extends Object>
 
   Widget buildLoading() {
     return Center(
-      child: const CircularProgressIndicator(
+      child: const EInkProgressIndicator(
         strokeWidth: 2,
       ).fixWidth(32).fixHeight(32),
     );
@@ -346,7 +347,7 @@ abstract class MultiPageLoadingState<T extends StatefulWidget, S extends Object>
 
   Widget buildLoading(BuildContext context) {
     return Center(
-      child: const CircularProgressIndicator().fixWidth(32).fixHeight(32),
+      child: const EInkProgressIndicator().fixWidth(32).fixHeight(32),
     );
   }
 
@@ -398,7 +399,25 @@ class _FiveDotLoadingAnimationState extends State<FiveDotLoadingAnimation>
       vsync: this,
       duration: const Duration(milliseconds: 1200),
       upperBound: 6,
-    )..repeat(min: 0, max: 5.2, period: const Duration(milliseconds: 1200));
+    );
+  }
+
+  bool _still = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _still = MediaQuery.disableAnimationsOf(context);
+    if (_still) {
+      _controller.stop();
+      _controller.value = 0;
+    } else if (!_controller.isAnimating) {
+      _controller.repeat(
+        min: 0,
+        max: 5.2,
+        period: const Duration(milliseconds: 1200),
+      );
+    }
   }
 
   @override
@@ -447,7 +466,7 @@ class _FiveDotLoadingAnimationState extends State<FiveDotLoadingAnimation>
         width: _dotSize,
         height: _dotSize,
         decoration: BoxDecoration(
-          color: _colors[index],
+          color: _still || context.isEInk ? Colors.black : _colors[index],
           shape: BoxShape.circle,
         ),
       ),

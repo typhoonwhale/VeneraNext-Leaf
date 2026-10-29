@@ -19,6 +19,7 @@ import 'package:venera_next/foundation/translations.dart';
 import 'package:venera_next/foundation/widget_utils.dart';
 import 'comments_controller.dart';
 import 'sidebar_binding.dart';
+import 'package:venera_next/foundation/eink_theme.dart';
 
 class ChapterCommentsPage extends StatelessWidget {
   const ChapterCommentsPage({
@@ -369,7 +370,7 @@ class _ChapterCommentsViewState extends State<_ChapterCommentsView> {
     );
   }
 
-  Widget _progress() => CircularProgressIndicator(
+  Widget _progress() => EInkProgressIndicator(
     value: MediaQuery.disableAnimationsOf(context) ? 0.5 : null,
   );
   Widget _composer() {
@@ -546,7 +547,7 @@ class _ChapterCommentTileState extends State<_ChapterCommentTile> {
         ? SizedBox(
             width: 18,
             height: 18,
-            child: CircularProgressIndicator(
+            child: EInkProgressIndicator(
               value: MediaQuery.disableAnimationsOf(context) ? 0.5 : null,
             ),
           )

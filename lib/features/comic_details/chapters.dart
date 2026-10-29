@@ -12,8 +12,61 @@ import 'package:venera_next/foundation/appdata.dart';
 import 'package:venera_next/foundation/application_preferences.dart';
 import 'package:venera_next/foundation/global_preference_store.dart';
 import 'package:venera_next/foundation/context.dart';
+import 'package:venera_next/foundation/eink_theme.dart';
 import 'package:venera_next/foundation/translations.dart';
 import 'package:venera_next/foundation/widget_utils.dart';
+
+const _einkChapterShape = RoundedRectangleBorder(
+  side: BorderSide(color: Colors.black, width: EInkStyle.strokeWidth),
+  borderRadius: BorderRadius.all(Radius.circular(4)),
+);
+
+enum _EInkChapterState { unread, read, last }
+
+_EInkChapterState _einkChapterState(bool visited, bool last) => last
+    ? _EInkChapterState.last
+    : visited
+    ? _EInkChapterState.read
+    : _EInkChapterState.unread;
+
+Color _einkChapterFill(BuildContext context, _EInkChapterState state) =>
+    state == _EInkChapterState.last
+    ? context.einkStyle.selectedBackground
+    : Colors.white;
+
+TextStyle _einkChapterTextStyle(
+  BuildContext context,
+  _EInkChapterState state,
+) => TextStyle(
+  color: state == _EInkChapterState.last
+      ? context.einkStyle.selectedForeground
+      : Colors.black,
+  fontWeight: FontWeight.w600,
+);
+
+Widget _einkChapterLabel(
+  BuildContext context,
+  String title,
+  _EInkChapterState state,
+) {
+  final style = _einkChapterTextStyle(context, state);
+  final text = Text(
+    title,
+    maxLines: 1,
+    textAlign: TextAlign.center,
+    overflow: TextOverflow.ellipsis,
+    style: style,
+  );
+  if (state != _EInkChapterState.read) return text;
+  return Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      const EInkCheckMark(),
+      const SizedBox(width: 4),
+      Flexible(child: text),
+    ],
+  );
+}
 
 class ComicChaptersView extends StatefulWidget {
   const ComicChaptersView({
@@ -196,28 +249,39 @@ class _NormalComicChaptersState extends State<_NormalComicChapters> {
                 var value = chapters[key]!;
                 bool visited =
                     history?.readEpisode.contains((i + 1).toString()) ?? false;
+                final state = _einkChapterState(
+                  visited,
+                  history != null && history!.ep == i + 1,
+                );
                 return Padding(
                   padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
                   child: Material(
-                    color: context.colorScheme.surfaceContainer,
-                    borderRadius: BorderRadius.circular(16),
+                    color: context.isEInk
+                        ? _einkChapterFill(context, state)
+                        : context.colorScheme.surfaceContainer,
+                    borderRadius: context.isEInk
+                        ? null
+                        : BorderRadius.circular(16),
+                    shape: context.isEInk ? _einkChapterShape : null,
                     child: ClickInkWell(
                       onTap: () => widget.readChapter(i + 1),
                       borderRadius: BorderRadius.circular(16),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 8),
                         child: Center(
-                          child: Text(
-                            value,
-                            maxLines: 1,
-                            textAlign: TextAlign.center,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: visited
-                                  ? context.colorScheme.outline
-                                  : null,
-                            ),
-                          ),
+                          child: context.isEInk
+                              ? _einkChapterLabel(context, value, state)
+                              : Text(
+                                  value,
+                                  maxLines: 1,
+                                  textAlign: TextAlign.center,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: visited
+                                        ? context.colorScheme.outline
+                                        : null,
+                                  ),
+                                ),
                         ),
                       ),
                     ),
@@ -407,33 +471,47 @@ class _GroupedComicChaptersState extends State<_GroupedComicChapters>
                 String rawIndex = (chapterIndex + 1).toString();
                 String groupedIndex = "${index + 1}-${i + 1}";
                 bool visited = false;
+                bool last = false;
                 if (history != null) {
                   visited =
                       history!.readEpisode.contains(groupedIndex) ||
                       history!.readEpisode.contains(rawIndex);
+                  // history.ep is relative to history.group; a missing group
+                  // means ep is the raw index across all groups.
+                  last = history!.group == null
+                      ? history!.ep == chapterIndex + 1
+                      : history!.group == index + 1 && history!.ep == i + 1;
                 }
+                final state = _einkChapterState(visited, last);
                 return Padding(
                   padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
                   child: Material(
-                    color: context.colorScheme.surfaceContainerLow,
-                    borderRadius: BorderRadius.circular(12),
+                    color: context.isEInk
+                        ? _einkChapterFill(context, state)
+                        : context.colorScheme.surfaceContainerLow,
+                    borderRadius: context.isEInk
+                        ? null
+                        : BorderRadius.circular(12),
+                    shape: context.isEInk ? _einkChapterShape : null,
                     child: ClickInkWell(
                       onTap: () => widget.readChapter(chapterIndex + 1),
                       borderRadius: BorderRadius.circular(12),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 8),
                         child: Center(
-                          child: Text(
-                            value,
-                            maxLines: 1,
-                            textAlign: TextAlign.center,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: visited
-                                  ? context.colorScheme.outline
-                                  : null,
-                            ),
-                          ),
+                          child: context.isEInk
+                              ? _einkChapterLabel(context, value, state)
+                              : Text(
+                                  value,
+                                  maxLines: 1,
+                                  textAlign: TextAlign.center,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: visited
+                                        ? context.colorScheme.outline
+                                        : null,
+                                  ),
+                                ),
                         ),
                       ),
                     ),

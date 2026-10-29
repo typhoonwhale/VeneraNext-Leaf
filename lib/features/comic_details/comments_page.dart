@@ -1,3 +1,4 @@
+import 'package:venera_next/foundation/eink_theme.dart';
 import 'package:venera_next/foundation/log.dart';
 import 'package:flutter/material.dart';
 import 'package:venera_next/components/appbar.dart';
@@ -141,7 +142,7 @@ class _CommentsPageState extends State<CommentsPage> {
   Widget buildBody(BuildContext context) {
     if (_loading) {
       firstLoad();
-      return const Center(child: CircularProgressIndicator());
+      return const Center(child: EInkProgressIndicator());
     } else if (_error != null) {
       return NetworkError(
         message: _error!,
@@ -276,7 +277,7 @@ class _CommentsPageState extends State<CommentsPage> {
                 child: SizedBox(
                   width: 24,
                   height: 24,
-                  child: CircularProgressIndicator(strokeWidth: 2),
+                  child: EInkProgressIndicator(strokeWidth: 2),
                 ),
               )
             else
@@ -385,6 +386,7 @@ class _CommentTileState extends State<_CommentTile> {
               clipBehavior: Clip.antiAlias,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(18),
+                border: context.einkBorder(),
                 color: Theme.of(context).colorScheme.secondaryContainer,
               ),
               child: widget.comment.avatar == null
@@ -524,7 +526,7 @@ class _CommentTileState extends State<_CommentTile> {
               const SizedBox(
                 width: 16,
                 height: 16,
-                child: CircularProgressIndicator(),
+                child: EInkProgressIndicator(),
               )
             else if (isLiked)
               Icon(

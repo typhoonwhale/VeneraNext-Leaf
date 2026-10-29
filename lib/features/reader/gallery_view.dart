@@ -1,3 +1,4 @@
+import 'package:venera_next/foundation/eink_theme.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -420,7 +421,7 @@ class GalleryModeState extends State<ReaderGalleryView>
         child: SizedBox(
           width: 20.0,
           height: 20.0,
-          child: CircularProgressIndicator(
+          child: EInkProgressIndicator(
             backgroundColor: context.colorScheme.surfaceContainerHigh,
             value: event == null || event.expectedTotalBytes == null
                 ? null

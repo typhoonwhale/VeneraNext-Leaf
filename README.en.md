@@ -1,6 +1,6 @@
 ## This fork: BOOX Leaf5+ adaptation
 
-**Leaf (VeneraNext-Leaf) adapts VeneraNext for daily comic reading on the BOOX Leaf5+.** Priorities are a compact information footer that does not cover comic pages, readable E-Ink presentation, gesture navigation without an artificial bottom gap, and data-preserving updates using a stable Android package ID and signing key.
+**Leaf (VeneraNext-Leaf) adapts VeneraNext for daily comic reading on the BOOX Leaf5+.** Priorities are a compact information footer that does not cover comic pages, readable E-Ink presentation (an E-Ink mode with a black-and-white interface and reduced motion, on by default and switchable under Settings → Appearance), gesture navigation without an artificial bottom gap, and data-preserving updates using a stable Android package ID and signing key.
 
 Start with the [Leaf development plan](docs/LEAF_DEVELOPMENT_PLAN.md), [research and agent handoff index](docs/research/README.md), and [Android build guide](docs/LEAF_BUILD.md) (maintained in Chinese). Record future device investigations in `docs/research/`, distinguishing official documentation, user reports, code observations, and unverified assumptions.
 
@@ -8,7 +8,7 @@ The footer uses a 1 logical-pixel divider, a fixed 2-pixel gap, natural text hei
 
 The VeneraNext badges, screenshots, platform descriptions and download links below are retained upstream references; they do not describe Leaf release availability or device validation status.
 
-**Download Leaf: [1.18.4 / Android ARM64](https://github.com/typhoonwhale/VeneraNext-Leaf/releases/tag/v1.18.4).** Existing Leaf Release builds with the same signing key can be updated in place. Starting with 1.18.4, Leaf downloads and installs new versions in the app; upgrading from 1.18.2 or earlier requires one manual install.
+**Download Leaf: [1.19.0 / Android ARM64](https://github.com/typhoonwhale/VeneraNext-Leaf/releases/tag/v1.19.0).** Existing Leaf Release builds with the same signing key can be updated in place. Starting with 1.18.4, Leaf downloads and installs new versions in the app; upgrading from 1.18.2 or earlier requires one manual install.
 
 In-app updates download and verify the package, then hand it to Android for installation confirmation. See the [design](docs/LEAF_IN_APP_UPDATE_DESIGN.md) and [validation record](docs/LEAF_IN_APP_UPDATE_VALIDATION.md).
 

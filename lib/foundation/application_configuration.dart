@@ -39,7 +39,18 @@ class AppearanceConfiguration {
       ),
       color = AppearancePreferences.color.normalize(
         read(AppearancePreferences.color.key),
+      ),
+      eInkMode = AppearancePreferences.eInkMode.normalize(
+        read(AppearancePreferences.eInkMode.key),
       );
   final String themeMode;
   final String color;
+  final bool eInkMode;
+
+  /// Black-and-white theme; derived from [eInkMode] so the two effects can be
+  /// split into separate switches later.
+  bool get einkTheme => eInkMode;
+
+  /// Disables non-essential animation; derived from [eInkMode].
+  bool get reduceMotion => eInkMode;
 }

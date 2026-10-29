@@ -5,11 +5,19 @@ import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:venera_next/features/comic_details/action_button.dart';
+import 'package:venera_next/foundation/eink_theme.dart';
+import 'package:venera_next/main.dart' show getTheme;
 
-Future<void> _pumpActionRow(WidgetTester tester, Widget action) async {
+Future<void> _pumpActionRow(
+  WidgetTester tester,
+  Widget action, {
+  ThemeData? theme,
+}) async {
   await tester.pumpWidget(
     MaterialApp(
-      theme: ThemeData(useMaterial3: true, platform: TargetPlatform.android),
+      theme:
+          theme ??
+          ThemeData(useMaterial3: true, platform: TargetPlatform.android),
       home: Scaffold(
         body: Align(
           alignment: Alignment.topLeft,
@@ -29,6 +37,7 @@ Future<void> _pumpActionRow(WidgetTester tester, Widget action) async {
 }
 
 void main() {
+  _actionBorderTests();
   testWidgets('the full detail action row remains a labeled button target', (
     tester,
   ) async {
@@ -156,4 +165,31 @@ void main() {
     expect(presses, 1, reason: 'The action must become usable after loading.');
     expect(tester.takeException(), isNull);
   });
+}
+
+void _actionBorderTests() {
+  for (final eink in [true, false]) {
+    testWidgets('action button outline width, eink=$eink', (tester) async {
+      await _pumpActionRow(
+        tester,
+        ComicDetailActionButton(
+          icon: const Icon(Icons.bookmark),
+          text: 'Favorite',
+          onPressed: () {},
+        ),
+        theme: getTheme(Colors.blue, null, null, Brightness.light, eink: eink),
+      );
+      final box = tester.widget<Container>(
+        find
+            .descendant(
+              of: find.byType(ComicDetailActionButton),
+              matching: find.byType(Container),
+            )
+            .first,
+      );
+      final border = (box.decoration! as BoxDecoration).border! as Border;
+      expect(border.top.width, eink ? EInkStyle.strokeWidth : 0.6);
+      if (eink) expect(border.top.color, Colors.black);
+    });
+  }
 }

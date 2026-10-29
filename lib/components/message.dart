@@ -1,3 +1,4 @@
+import 'package:venera_next/foundation/eink_theme.dart';
 import 'package:venera_next/foundation/navigation_admission.dart';
 import 'dart:async';
 import 'dart:math' as math;
@@ -88,7 +89,7 @@ class _ToastOverlay extends StatelessWidget {
     return Material(
       color: Theme.of(context).colorScheme.inverseSurface,
       borderRadius: BorderRadius.circular(8),
-      elevation: 2,
+      elevation: context.isEInk ? 0 : 2,
       textStyle: ts.withColor(Theme.of(context).colorScheme.onInverseSurface),
       child: IconTheme(
         data: IconThemeData(
@@ -218,9 +219,13 @@ class OverlayWidgetState extends State<OverlayWidget> {
   }
 }
 
+AnimationStyle? _dialogAnimationStyle(BuildContext context) =>
+    MediaQuery.disableAnimationsOf(context) ? AnimationStyle.noAnimation : null;
+
 void showDialogMessage(BuildContext context, String title, String message) {
   showDialog(
     context: context,
+    animationStyle: _dialogAnimationStyle(context),
     builder: (context) => ContentDialog(
       title: title,
       content: Text(message).paddingHorizontal(16),
@@ -239,6 +244,7 @@ Future<void> showConfirmDialog({
 }) {
   return showDialog(
     context: context,
+    animationStyle: _dialogAnimationStyle(context),
     builder: (context) => ContentDialog(
       title: title,
       content: Text(content).paddingHorizontal(16).paddingVertical(8),
@@ -525,14 +531,19 @@ class ContentDialog extends StatelessWidget {
     return Dialog(
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
-        side: context.brightness == Brightness.dark
+        side: context.isEInk
+            ? const BorderSide(
+                color: Colors.black,
+                width: EInkStyle.strongStrokeWidth,
+              )
+            : context.brightness == Brightness.dark
             ? BorderSide(color: context.colorScheme.outlineVariant)
             : BorderSide.none,
       ),
       insetPadding: context.width < 400
           ? const EdgeInsets.symmetric(horizontal: 4)
           : const EdgeInsets.symmetric(horizontal: 16),
-      elevation: 2,
+      elevation: context.isEInk ? 0 : 2,
       shadowColor: context.colorScheme.shadow,
       backgroundColor: context.colorScheme.surface,
       child: AnimatedSize(
@@ -565,6 +576,7 @@ void showInfoDialog({
 }) {
   showDialog(
     context: context,
+    animationStyle: _dialogAnimationStyle(context),
     builder: (context) {
       return ContentDialog(
         title: title,

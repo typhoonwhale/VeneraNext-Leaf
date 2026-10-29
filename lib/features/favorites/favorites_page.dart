@@ -1,3 +1,4 @@
+import 'package:venera_next/foundation/eink_theme.dart';
 import 'package:venera_next/features/favorites/favorites_scope.dart';
 import 'dart:math';
 import 'dart:async';
@@ -113,11 +114,20 @@ class _FavoritesPageState extends SettingsSaveState<FavoritesPage> {
     if (!acceptsSettingsChanges || _folderSelector != null) return;
     final origin = ModalRoute.of(context);
     final navigator = Navigator.of(context, rootNavigator: true);
+    final noMotion = MediaQuery.disableAnimationsOf(context);
     final route = PageRouteBuilder<void>(
+      transitionDuration: noMotion
+          ? Duration.zero
+          : const Duration(milliseconds: 300),
+      reverseTransitionDuration: noMotion
+          ? Duration.zero
+          : const Duration(milliseconds: 300),
       barrierDismissible: true,
       fullscreenDialog: true,
       opaque: false,
-      barrierColor: Colors.black.toOpacity(0.36),
+      barrierColor: EInkPreferences.einkTheme
+          ? Colors.transparent
+          : Colors.black.toOpacity(0.36),
       pageBuilder: (context, animation, secondary) {
         return Align(
           alignment: Alignment.centerLeft,

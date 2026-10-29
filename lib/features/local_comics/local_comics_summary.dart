@@ -1,3 +1,4 @@
+import 'package:venera_next/foundation/eink_theme.dart';
 import 'package:venera_next/features/favorites/favorites_scope.dart';
 import 'package:venera_next/features/local_comics/import_export/comic_import_service.dart';
 import 'package:flutter/material.dart';
@@ -90,6 +91,7 @@ class _LocalComicsSummaryState extends State<LocalComicsSummary> {
                       ),
                       decoration: BoxDecoration(
                         color: Theme.of(context).colorScheme.secondaryContainer,
+                        border: context.einkBorder(),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(count.toString(), style: ts.s12),
@@ -239,7 +241,7 @@ class _ImportComicsWidgetState extends State<_ImportComicsWidget> {
           ? SizedBox(
               width: 600,
               height: height,
-              child: const Center(child: CircularProgressIndicator()),
+              child: const Center(child: EInkProgressIndicator()),
             )
           : RadioGroup<int>(
               groupValue: type,
@@ -376,7 +378,18 @@ class __AnimatedDownloadingIconState extends State<_AnimatedDownloadingIcon>
       lowerBound: -1,
       vsync: this,
       duration: const Duration(milliseconds: 2000),
-    )..repeat();
+    );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _controller.stop();
+      _controller.value = 0;
+    } else if (!_controller.isAnimating) {
+      _controller.repeat();
+    }
   }
 
   @override

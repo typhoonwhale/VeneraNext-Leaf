@@ -9,6 +9,7 @@ import 'package:venera_next/foundation/widget_utils.dart';
 
 import 'sponsor_catalog.dart';
 import 'sponsors_loader.dart';
+import 'package:venera_next/foundation/eink_theme.dart';
 
 const _afdianUrl = "https://ifdian.net/a/cyril";
 
@@ -65,7 +66,7 @@ class _SponsorsPageState extends State<SponsorsPage> {
             if (snapshot.connectionState != ConnectionState.done) {
               return const SliverFillRemaining(
                 hasScrollBody: false,
-                child: Center(child: CircularProgressIndicator()),
+                child: Center(child: EInkProgressIndicator()),
               );
             }
             if (snapshot.hasError) {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/rendering.dart';
 import 'package:venera_next/foundation/context.dart';
+import 'package:venera_next/foundation/eink_theme.dart';
 import 'package:venera_next/foundation/extensions.dart';
 import 'package:venera_next/foundation/translations.dart';
 import 'package:venera_next/foundation/widget_utils.dart';
@@ -91,7 +92,9 @@ class _AppbarState extends State<Appbar> {
       decoration: BoxDecoration(
         color:
             widget.backgroundColor ??
-            context.colorScheme.surface.toOpacity(0.86),
+            (context.isEInk
+                ? context.colorScheme.surface
+                : context.colorScheme.surface.toOpacity(0.86)),
       ),
       height: _kAppBarHeight + context.padding.top,
       child: Row(
@@ -231,7 +234,9 @@ class _MySliverAppBarDelegate extends SliverPersistentHeaderDelegate {
         child: BlurEffect(
           blur: 15,
           child: Material(
-            color: context.colorScheme.surface.toOpacity(0.86),
+            color: context.isEInk
+                ? context.colorScheme.surface
+                : context.colorScheme.surface.toOpacity(0.86),
             elevation: 0,
             borderRadius: BorderRadius.circular(radius),
             child: body,

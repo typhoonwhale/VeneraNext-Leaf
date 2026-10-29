@@ -1,3 +1,4 @@
+import 'package:venera_next/foundation/eink_theme.dart';
 import 'package:venera_next/features/history/history_scope.dart';
 import 'package:flutter/material.dart';
 import 'package:venera_next/components/gesture.dart';
@@ -107,6 +108,7 @@ class _ImageFavoritesSummaryState extends State<ImageFavoritesSummary> {
                           color: Theme.of(
                             context,
                           ).colorScheme.secondaryContainer,
+                          border: context.einkBorder(),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
@@ -295,11 +297,20 @@ class __ChartLineState extends State<_ChartLine>
                     height: 18,
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(2),
-                      gradient: LinearGradient(
-                        colors: context.isDarkMode
-                            ? [Colors.blue.shade800, Colors.blue.shade500]
-                            : [Colors.blue.shade300, Colors.blue.shade600],
-                      ),
+                      border: context.einkBorder(),
+                      color: context.isEInk
+                          ? context.colorScheme.surface
+                          : null,
+                      gradient: context.isEInk
+                          ? null
+                          : LinearGradient(
+                              colors: context.isDarkMode
+                                  ? [Colors.blue.shade800, Colors.blue.shade500]
+                                  : [
+                                      Colors.blue.shade300,
+                                      Colors.blue.shade600,
+                                    ],
+                            ),
                     ),
                   ).toAlign(Alignment.centerLeft);
                 },

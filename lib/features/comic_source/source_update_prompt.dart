@@ -16,6 +16,7 @@ import 'source_failure.dart';
 import 'source_failure_presentation.dart';
 import 'source_mutation_failure.dart';
 import 'source_update_service.dart';
+import 'package:venera_next/foundation/eink_theme.dart';
 
 /// Retain the exact route and also settle when its navigator is disposed.
 /// Navigator disposal alone does not complete the Future returned by push.
@@ -386,7 +387,7 @@ class _SourceUpdateCheckButtonState extends State<SourceUpdateCheckButton> {
         ? const SizedBox(
             width: 18,
             height: 18,
-            child: CircularProgressIndicator(strokeWidth: 2),
+            child: EInkProgressIndicator(strokeWidth: 2),
           )
         : const Icon(Icons.update),
     label: Text('Check updates'.tl),

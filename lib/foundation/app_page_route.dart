@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:venera_next/foundation/edge_back_gesture.dart';
 import 'package:venera_next/foundation/app.dart';
+import 'package:venera_next/foundation/eink_theme.dart';
 
 const double _kBackGestureWidth = 24.0;
 const int _kMaxDroppedSwipePageForwardAnimationTime = 800;
@@ -58,7 +59,14 @@ mixin _AppRouteTransitionMixin<T> on PageRoute<T> {
   Widget buildContent(BuildContext context);
 
   @override
-  Duration get transitionDuration => const Duration(milliseconds: 300);
+  Duration get transitionDuration => EInkPreferences.reduceMotion
+      ? Duration.zero
+      : const Duration(milliseconds: 300);
+
+  @override
+  Duration get reverseTransitionDuration => EInkPreferences.reduceMotion
+      ? Duration.zero
+      : const Duration(milliseconds: 300);
 
   @override
   Color? get barrierColor => null;
@@ -121,6 +129,7 @@ mixin _AppRouteTransitionMixin<T> on PageRoute<T> {
     Animation<double> secondaryAnimation,
     Widget child,
   ) {
+    if (EInkPreferences.reduceMotion) return child;
     PageTransitionsBuilder builder;
     if (App.isAndroid) {
       builder = PredictiveBackPageTransitionsBuilder();

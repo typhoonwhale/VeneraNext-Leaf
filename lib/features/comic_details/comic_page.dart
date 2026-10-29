@@ -1,3 +1,4 @@
+import 'package:venera_next/foundation/eink_theme.dart';
 import 'package:venera_next/features/history/history_scope.dart';
 import 'package:venera_next/features/favorites/favorites_scope.dart';
 import 'package:venera_next/components/file_save_task.dart';
@@ -229,11 +230,15 @@ class _ComicPageState extends LoadingState<ComicPage, ComicDetails>
       floatingActionButton: showFAB
           ? FloatingActionButton(
               onPressed: () {
-                scrollController.animateTo(
-                  0,
-                  duration: const Duration(milliseconds: 200),
-                  curve: Curves.ease,
-                );
+                if (MediaQuery.disableAnimationsOf(context)) {
+                  scrollController.jumpTo(0);
+                } else {
+                  scrollController.animateTo(
+                    0,
+                    duration: const Duration(milliseconds: 200),
+                    curve: Curves.ease,
+                  );
+                }
               },
               child: const Icon(Icons.arrow_upward),
             )
@@ -357,14 +362,19 @@ class _ComicPageState extends LoadingState<ComicPage, ComicDetails>
               child: Container(
                 decoration: BoxDecoration(
                   color: context.colorScheme.primaryContainer,
-                  borderRadius: BorderRadius.circular(8),
-                  boxShadow: [
-                    BoxShadow(
-                      color: context.colorScheme.outlineVariant,
-                      blurRadius: 1,
-                      offset: const Offset(0, 1),
-                    ),
-                  ],
+                  borderRadius: context.einkCoverRadius(
+                    BorderRadius.circular(8),
+                  ),
+                  border: context.einkBorder(),
+                  boxShadow: context.isEInk
+                      ? null
+                      : [
+                          BoxShadow(
+                            color: context.colorScheme.outlineVariant,
+                            blurRadius: 1,
+                            offset: const Offset(0, 1),
+                          ),
+                        ],
                 ),
                 height: 144,
                 width: 144 * 0.72,
@@ -396,7 +406,7 @@ class _ComicPageState extends LoadingState<ComicPage, ComicDetails>
                   ).paddingVertical(4),
                 Text(
                   (ComicSource.find(comic.sourceKey)?.name) ?? '',
-                  style: ts.s12,
+                  style: context.einkSmallText(ts.s12),
                 ),
               ],
             ),
@@ -638,7 +648,16 @@ class _ComicPageState extends LoadingState<ComicPage, ComicDetails>
           builder: (tagContext) {
             return Material(
               color: color,
-              borderRadius: borderRadius,
+              borderRadius: context.isEInk ? null : borderRadius,
+              shape: context.isEInk
+                  ? RoundedRectangleBorder(
+                      borderRadius: borderRadius,
+                      side: const BorderSide(
+                        color: Colors.black,
+                        width: EInkStyle.strokeWidth,
+                      ),
+                    )
+                  : null,
               child: ClickInkWell(
                 borderRadius: borderRadius,
                 onTap: onTap,
@@ -674,7 +693,11 @@ class _ComicPageState extends LoadingState<ComicPage, ComicDetails>
         );
       } else {
         return Container(
-          decoration: BoxDecoration(color: color, borderRadius: borderRadius),
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: borderRadius,
+            border: context.einkBorder(),
+          ),
           child: Text(text).padding(padding),
         );
       }
@@ -950,6 +973,7 @@ class _ComicPageLoadingPlaceHolder extends StatelessWidget {
     }
 
     return Shimmer(
+      enabled: !MediaQuery.disableAnimationsOf(context),
       color: context.isDarkMode ? Colors.grey.shade700 : Colors.white,
       child: Column(
         children: [
@@ -988,7 +1012,7 @@ class _ComicPageLoadingPlaceHolder extends StatelessWidget {
           const Divider(),
           const SizedBox(height: 8),
           Center(
-            child: CircularProgressIndicator(
+            child: EInkProgressIndicator(
               strokeWidth: 2.4,
             ).fixHeight(24).fixWidth(24),
           ),
@@ -1015,14 +1039,17 @@ class _ComicPageLoadingPlaceHolder extends StatelessWidget {
       child: Container(
         decoration: BoxDecoration(
           color: context.colorScheme.primaryContainer,
-          borderRadius: BorderRadius.circular(8),
-          boxShadow: [
-            BoxShadow(
-              color: context.colorScheme.outlineVariant,
-              blurRadius: 1,
-              offset: const Offset(0, 1),
-            ),
-          ],
+          borderRadius: context.einkCoverRadius(BorderRadius.circular(8)),
+          border: context.einkBorder(),
+          boxShadow: context.isEInk
+              ? null
+              : [
+                  BoxShadow(
+                    color: context.colorScheme.outlineVariant,
+                    blurRadius: 1,
+                    offset: const Offset(0, 1),
+                  ),
+                ],
         ),
         height: 144,
         width: 144 * 0.72,

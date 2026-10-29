@@ -1,3 +1,4 @@
+import 'package:venera_next/foundation/eink_theme.dart';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -24,7 +25,8 @@ class PopUpWidget<T> extends PopupRoute<T> {
   }
 
   @override
-  Color? get barrierColor => Colors.black54;
+  Color? get barrierColor =>
+      EInkPreferences.einkTheme ? Colors.transparent : Colors.black54;
 
   @override
   bool get barrierDismissible => canDismiss?.call() ?? true;
@@ -51,6 +53,7 @@ class PopUpWidget<T> extends PopupRoute<T> {
         decoration: showPopUp
             ? BoxDecoration(
                 borderRadius: BorderRadius.all(Radius.circular(12)),
+                border: context.einkBorder(width: EInkStyle.strongStrokeWidth),
                 boxShadow: context.brightness == ui.Brightness.dark
                     ? [
                         BoxShadow(
@@ -93,7 +96,9 @@ class PopUpWidget<T> extends PopupRoute<T> {
   }
 
   @override
-  Duration get transitionDuration => const Duration(milliseconds: 350);
+  Duration get transitionDuration => EInkPreferences.reduceMotion
+      ? Duration.zero
+      : const Duration(milliseconds: 350);
 
   @override
   Widget buildTransitions(

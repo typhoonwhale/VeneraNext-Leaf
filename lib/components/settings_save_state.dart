@@ -10,6 +10,7 @@ import 'package:venera_next/foundation/image_work.dart';
 import 'package:venera_next/foundation/selection_operation.dart';
 import 'package:venera_next/foundation/navigation_admission.dart';
 import 'package:venera_next/foundation/translations.dart';
+import 'package:venera_next/foundation/eink_theme.dart';
 
 /// Settings opened by a reader retain accepted saves in that reading session,
 /// even if the sidebar or setting control is forcibly removed.
@@ -288,7 +289,7 @@ abstract class SettingsSaveState<W extends StatefulWidget> extends State<W> {
           padding: const EdgeInsets.all(12),
           child: SizedBox.square(
             dimension: 18,
-            child: CircularProgressIndicator(
+            child: EInkProgressIndicator(
               strokeWidth: 2,
               semanticsLabel: 'Save'.tl,
             ),
