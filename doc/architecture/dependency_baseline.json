@@ -674,6 +674,7 @@
     "foundation/app_page_route.dart",
     "foundation/context.dart",
     "foundation/edge_back_gesture.dart",
+    "foundation/eink_theme.dart",
     "foundation/global_state.dart",
     "foundation/navigation_admission.dart",
     "foundation/widget_utils.dart",
