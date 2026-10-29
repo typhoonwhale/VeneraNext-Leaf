@@ -54,10 +54,16 @@ void main() {
               .duration,
           expected,
         );
-        expect(
-          tester.widget<AnimatedSize>(find.byType(AnimatedSize)).duration,
-          expected,
-        );
+        // A zero-duration AnimatedSize trips a layout assertion, so the
+        // button drops it entirely when animations are disabled.
+        if (disabled) {
+          expect(find.byType(AnimatedSize), findsNothing);
+        } else {
+          expect(
+            tester.widget<AnimatedSize>(find.byType(AnimatedSize)).duration,
+            expected,
+          );
+        }
         if (disabled) {
           // The check icon is fully drawn on its first frame and nothing keeps
           // scheduling frames.

@@ -225,7 +225,7 @@
 | 低电量图标 | 保持黑色，不用红色 | 分支 | `lib/features/reader/status_info.dart:137` |
 | 画廊页加载圈 | `EInkProgressIndicator` | 分支 | `lib/features/reader/gallery_view.dart:424` |
 | 连续模式定位、翻页键滚动 | 无动画时 `jumpTo`，目标夹在滚动范围内 | 分支 | `lib/features/reader/continuous_view.dart:1155,1293` |
-| 亮度面板展开 | 无动画时时长 0 | 分支 | `lib/features/reader/brightness.dart:110` |
+| 亮度面板展开 | 无动画时不套 `AnimatedSize`（`_BrightnessSlider`），直接显示 | 分支 | `lib/features/reader/brightness.dart:109,201` |
 | 阅读器菜单、章节按钮、侧栏等 | 原已读 `disableAnimationsOf`，由 builder 覆盖稳定为无动画 | 分支（原有） | `lib/features/reader/scaffold.dart:219`，`lib/features/reader/chapter_navigation_button.dart:25`，`lib/features/reader/chapters.dart:27`，`lib/features/reader/sidebar_binding.dart:99` |
 
 **弹层与对话框**：见 4.2 节 `ContentDialog`、`Flyout`、`PopUpWidget`、`SideBarRoute`、`Select`；`showDialog` 的遮罩和形状走主题，时长受系统缩放影响，见第 8 节。
@@ -242,9 +242,9 @@
 | 封装对话框（message.dart 三个入口） | `AnimationStyle.noAnimation` | `lib/components/message.dart:222-223,228,247,579` |
 | 封面/缩略图渐显 200ms | 时长 0 | `lib/components/image.dart:331` |
 | 导航切换和底栏选中 | 时长 0 | `lib/components/navigation_bar.dart:543,805` |
-| 亮度面板 `AnimatedSize` | 时长 0 | `lib/features/reader/brightness.dart:110` |
+| 亮度面板 `AnimatedSize` | 无动画时整个跳过 | `lib/features/reader/brightness.dart:109,201` |
 | 转圈（`CircularProgressIndicator` 无限旋转） | `EInkProgressIndicator`：半圈静态；有 `value` 时原样。`lib/` 下所有 `CircularProgressIndicator` 均已替换（如 `lib/features/reader/images.dart:125,129`、`lib/features/reader/continuous_view.dart:768`、`lib/features/reader/comic_image.dart:512`、`lib/features/comic_widgets/comic_list.dart:680,727`、`lib/features/discovery/explore_page.dart:591`、`lib/features/comic_details/comments_page.dart:145`、`lib/components/button.dart:194,343`、`lib/features/comic_details/action_button.dart:74`、`lib/features/favorites/favorite_transfer_dialog.dart:305`） | `lib/foundation/eink_theme.dart:19` |
-| 组件补间（`FilterChipFixedWidth`、`OptionChip`、`AnimatedCheckIcon`、`Button` 的 `AnimatedContainer`/`AnimatedSize`） | `tweenDuration(context)`：`disableAnimations` 时 0 | `lib/components/select.dart:195,204,239,324,359`，`lib/components/button.dart:221,252` |
+| 组件补间（`FilterChipFixedWidth`、`OptionChip`、`AnimatedCheckIcon`、`Button` 的 `AnimatedContainer`/`AnimatedSize`） | `tweenDuration(context)`：`disableAnimations` 时 0；`AnimatedSize` 例外，时长为 0 时会在自身布局中触发断言，所以无动画时整个跳过（`_maybeAnimatedSize`） | `lib/components/select.dart:195,204,239,324,359`，`lib/components/button.dart:220,251,409` |
 | 五点加载（`repeat`） | `didChangeDependencies` 中停止并归零，黑点 | `lib/components/loading.dart:410-420` |
 | 下载中图标（`repeat`） | 同上 | `lib/features/local_comics/local_comics_summary.dart:387-393` |
 | 骨架屏 `Shimmer` | `enabled: false`（3 处） | `lib/features/comic_details/comic_page.dart:976`，`lib/features/comic_details/favorite.dart:309`，`lib/features/search/aggregated_search_page.dart:198` |

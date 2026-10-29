@@ -106,11 +106,8 @@ class ReaderBrightnessControl extends StatelessWidget {
           value: enabled,
           onChanged: onEnabledChanged,
         ),
-        AnimatedSize(
-          duration: MediaQuery.disableAnimationsOf(context)
-              ? Duration.zero
-              : const Duration(milliseconds: 180),
-          curve: Curves.easeOut,
+        _BrightnessSlider(
+          animate: !MediaQuery.disableAnimationsOf(context),
           child: enabled
               ? ListTile(
                   contentPadding: compact ? EdgeInsets.zero : null,
@@ -197,4 +194,22 @@ class ReaderBrightnessPanel extends StatelessWidget {
       ),
     );
   }
+}
+
+// A zero-duration AnimatedSize trips a layout assertion; skip it when
+// animations are disabled.
+class _BrightnessSlider extends StatelessWidget {
+  const _BrightnessSlider({required this.animate, required this.child});
+
+  final bool animate;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => animate
+      ? AnimatedSize(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOut,
+          child: child,
+        )
+      : child;
 }

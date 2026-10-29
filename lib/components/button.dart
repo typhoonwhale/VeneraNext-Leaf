@@ -248,9 +248,9 @@ class _ButtonState extends State<Button> {
                 ? Border.all(color: Colors.black, width: EInkStyle.strokeWidth)
                 : null,
           ),
-          child: AnimatedSize(
-            duration: tweenDuration(context),
-            child: SizedBox(
+          child: _maybeAnimatedSize(
+            context,
+            SizedBox(
               width: width,
               height: height,
               child: Center(widthFactor: 1, child: child),
@@ -402,4 +402,12 @@ class _MenuButtonState extends State<MenuButton> with ContextMenuOwner {
       ),
     );
   }
+}
+
+// A zero-duration AnimatedSize completes inside its own layout and trips
+// the "mutated in its own performLayout" assertion, so skip it instead.
+Widget _maybeAnimatedSize(BuildContext context, Widget child) {
+  final duration = tweenDuration(context);
+  if (duration == Duration.zero) return child;
+  return AnimatedSize(duration: duration, child: child);
 }

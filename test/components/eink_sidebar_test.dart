@@ -27,9 +27,9 @@ void main() {
           ),
         ),
       );
-      Navigator.of(context).push(
-        SideBarRoute<void>(const Text('panel'), width: 400),
-      );
+      Navigator.of(
+        context,
+      ).push(SideBarRoute<void>(const Text('panel'), width: 400));
       await tester.pumpAndSettle();
       final box = tester.widget<Container>(
         find

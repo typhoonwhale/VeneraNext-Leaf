@@ -62,8 +62,7 @@ void main() {
           as Map<String, dynamic>,
     );
 
-    Widget host() =>
-        MaterialApp(home: Scaffold(body: AppearanceSettings()));
+    Widget host() => MaterialApp(home: Scaffold(body: AppearanceSettings()));
     // The page re-reads the preference when the app rebuilds.
     final rebuild = ValueNotifier(0);
     await tester.pumpWidget(
