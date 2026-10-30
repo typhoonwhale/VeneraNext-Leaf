@@ -12,6 +12,7 @@ class ChapterImageLoader {
     required this.onLocalFailure,
     required this.localUnavailable,
     required this.sourceUnavailable,
+    required this.emptyChapter,
   });
 
   final Future<List<String>> Function()? readLocal;
@@ -20,6 +21,7 @@ class ChapterImageLoader {
   final void Function(FileSystemException, StackTrace) onLocalFailure;
   final Object Function(String path) localUnavailable;
   final Object sourceUnavailable;
+  final Object emptyChapter;
 
   Future<List<String>> load({
     RequestScope? scope,
@@ -59,6 +61,7 @@ class ChapterImageLoader {
     if (loadOnline == null) throw sourceUnavailable;
     final images = await loadOnline!();
     scope.check();
+    if (images.isEmpty) throw emptyChapter;
     if (missingLocal) onOnlineFallback?.call();
     return images;
   }

@@ -1,3 +1,5 @@
+> [当前分支状态](docs/LEAF_STATUS.md)：本地独立修复 `fix/leaf-empty-chapter`，参见[空章节加载错误与重试](docs/LEAF_EMPTY_CHAPTER_FIX.md)。基于 Leaf 1.19.0，尚未发布。
+
 ## 本 fork 的定位：适配文石 BOOX Leaf5+
 
 **Leaf（VeneraNext-Leaf）是基于 [VeneraNext](https://github.com/CyrilPeng/Venera-Next) 的定制分支，核心目标是适配文石 BOOX Leaf5+ 的日常漫画阅读。后续功能取舍、界面布局与升级方案，应以这台设备的实际使用体验为依据。**

@@ -29,6 +29,8 @@ class _Fixture {
   final favorites = ChangeNotifier();
   final progressIdentity = Object();
   double footerHeight = 4, footerFontSize = 11;
+  int page = 4, maxPage = 12;
+  String informationMode = 'footer';
 
   Widget build(bool eink, Widget content) => MaterialApp(
     theme: _theme(eink),
@@ -57,7 +59,7 @@ class _Fixture {
                   swipeToCollect: false,
                   preferences: ReaderSettings.resolve(
                     global: {
-                      'readerInformationMode': 'footer',
+                      'readerInformationMode': informationMode,
                       'readerFooterHeight': footerHeight,
                       'readerFooterFontSize': footerFontSize,
                       'readerFooterShowChapter': true,
@@ -69,8 +71,8 @@ class _Fixture {
                 ),
                 progress: ReaderProgressRequest(
                   identity: progressIdentity,
-                  page: 4,
-                  maxPage: 12,
+                  page: page,
+                  maxPage: maxPage,
                   chapter: 2,
                   maxChapter: 3,
                   reversed: false,
@@ -146,6 +148,66 @@ int _count(WidgetTester tester, Finder f) => tester.widgetList(f).length;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  for (final eink in [false, true]) {
+    for (final informationMode in ['footer', 'overlay']) {
+      for (final empty in [false, true]) {
+        testWidgets(
+          'reader shell page display: empty=$empty mode=$informationMode eink=$eink',
+          (tester) async {
+            final f = _Fixture()
+              ..page = empty ? 1 : 4
+              ..maxPage = empty ? 0 : 12
+              ..informationMode = informationMode;
+            final buildFailures = <FlutterErrorDetails>[];
+            final originalErrorBuilder = ErrorWidget.builder;
+            ErrorWidget.builder = (details) {
+              buildFailures.add(details);
+              return Material(
+                child: Center(child: Text(details.exception.toString())),
+              );
+            };
+            try {
+              await tester.pumpWidget(f.build(eink, const SizedBox()));
+              await tester.pump();
+              expect(tester.takeException(), isNull);
+              expect(buildFailures, isEmpty);
+              expect(find.byType(ReaderScaffold), findsOneWidget);
+              expect(find.text(empty ? '0/0' : '4/12'), findsWidgets);
+              expect(find.text('1/0'), findsNothing);
+              final bottom = tester.widget<ReaderBottomBar>(
+                find.byType(ReaderBottomBar),
+              );
+              expect(bottom.label, empty ? 'E2 : P0' : 'E2 : P4');
+            } finally {
+              ErrorWidget.builder = originalErrorBuilder;
+              await tester.pumpWidget(const SizedBox());
+              await f.dispose();
+            }
+          },
+        );
+      }
+    }
+  }
+
+  for (final (page, expected) in [(0, '1/12'), (20, '12/12')]) {
+    testWidgets('footer retains normal page clamping at $page', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ReaderInformationFooter(
+            page: page,
+            maxPage: 12,
+            showPage: true,
+            showStatus: false,
+            bottomSpacing: 4,
+            fontSize: 12,
+          ),
+        ),
+      );
+      expect(find.text(expected), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   for (final (height, font) in [(7.0, 13.0), (4.0, 11.0)]) {
     testWidgets(
