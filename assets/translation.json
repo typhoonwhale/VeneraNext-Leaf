@@ -1,5 +1,8 @@
 {
   "zh_CN": {
+    "Mark as read": "标为已读",
+    "Mark as unread": "标为未读",
+    "Mark previous chapters as read": "将之前的章节都标为已读",
     "Update cache cannot be cleaned": "更新缓存无法清理",
     "No compatible ARM64 release package is available": "未找到适用的 ARM64 正式安装包",
     "More than one compatible package was found": "发现多个匹配的安装包，无法自动选择",
@@ -966,6 +969,9 @@
     "@n referenced external folders and were only removed from the list. The original files were kept.": "@n 本引用外部文件夹，仅从列表移除，原文件已保留"
   },
   "zh_TW": {
+    "Mark as read": "標為已讀",
+    "Mark as unread": "標為未讀",
+    "Mark previous chapters as read": "將之前的章節都標為已讀",
     "Update cache cannot be cleaned": "更新快取無法清理",
     "No compatible ARM64 release package is available": "未找到適用的 ARM64 正式安裝套件",
     "More than one compatible package was found": "發現多個符合的安裝套件，無法自動選擇",

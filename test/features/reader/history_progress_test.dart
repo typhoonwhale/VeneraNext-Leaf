@@ -3,6 +3,7 @@ import 'package:venera_next/features/comic_source/comic_source_api.dart';
 import 'package:venera_next/features/history/history_api.dart';
 import 'package:venera_next/features/reader/history_progress.dart';
 import 'package:venera_next/features/reader/page_layout.dart';
+import 'package:venera_next/features/reader/read_progress_tracker.dart';
 
 History history() => History.fromMap({
   'type': 0,
@@ -19,6 +20,30 @@ History history() => History.fromMap({
 });
 
 void main() {
+  test(
+    'one cross-chapter batch applies both marks without moving resume state',
+    () {
+      final item = history()..viewedEpisode.add('1-1');
+      final before = (item.ep, item.page, item.time);
+      applyReaderReadVerdicts(item, const [
+        ReaderReadVerdict('1-1', true, legacyRawKey: '1'),
+        ReaderReadVerdict('1-2', false, legacyRawKey: '2'),
+      ]);
+      expect(item.readEpisode, {'1', '1-1'});
+      expect(item.viewedEpisode, {'1-2'});
+      expect((item.ep, item.page, item.time), before);
+    },
+  );
+
+  test('old flat read key wins over a new grouped viewed verdict', () {
+    final item = history();
+    applyReaderReadVerdicts(item, const [
+      ReaderReadVerdict('1-1', false, legacyRawKey: '1'),
+    ]);
+    expect(item.viewedEpisode, isEmpty);
+    expect(item.readEpisode, {'1'});
+  });
+
   test(
     'grouped chapter identity uses expanded position even with repeated source IDs',
     () {
@@ -47,7 +72,7 @@ void main() {
       expect(item.group, 2);
       expect(item.chapterTitle, 'Different chapter');
       expect(item.groupTitle, 'second');
-      expect(item.readEpisode, {'1', '2-1'});
+      expect(item.readEpisode, {'1'});
       expect(item.time, time);
       expect(item.readDurationMs, 9000);
       expect(item.title, 'Book');
@@ -79,7 +104,7 @@ void main() {
         expect(item.groupTitle, isNull);
         expect(item.maxPage, 9);
         expect(item.maxChapter, 2);
-        expect(item.readEpisode, {'1', '2'});
+        expect(item.readEpisode, {'1'});
         // The original ungrouped update leaves an existing group untouched.
         expect(item.group, 4);
       }

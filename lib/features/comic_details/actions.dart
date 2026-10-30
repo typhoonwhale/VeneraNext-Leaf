@@ -231,6 +231,28 @@ abstract mixin class ComicPageActions {
     return operation;
   }
 
+  bool _savingChapterMark = false;
+
+  bool get isSavingChapterMark => _savingChapterMark;
+
+  /// Keep every reading entry closed until persistence and history refresh end.
+  Future<void> saveChapterMark(Future<void> Function() save) async {
+    final owner = context;
+    final target = comic;
+    if (_savingChapterMark || !owner.mounted || !isComicActive(target)) return;
+    _savingChapterMark = true;
+    try {
+      await save();
+    } catch (error, stack) {
+      Log.error('Chapter mark', error, stack);
+      if (owner.mounted && isComicActive(target)) {
+        owner.showMessage(message: error.toString());
+      }
+    } finally {
+      _savingChapterMark = false;
+    }
+  }
+
   /// read the comic
   ///
   /// [ep] the episode number, start from 1
@@ -239,6 +261,7 @@ abstract mixin class ComicPageActions {
   ///
   /// [group] the chapter group number, start from 1
   void read([int? ep, int? page, int? group]) {
+    if (_savingChapterMark || !context.mounted) return;
     appNavigation.rootContext
         .to(
           () => Reader(

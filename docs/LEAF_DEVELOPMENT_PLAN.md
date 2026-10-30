@@ -1,26 +1,24 @@
 # VeneraNext Leaf：当前状态与开发入口
 
-更新：2026-10-27。
+更新核对：2026-10-30。当前正式版为 **1.19.0 / 2502**；本分支为 `feature/leaf-read-state`（基线 `b416a69`）。本分支以 1.19.0 为基线，已实现 1.19.1 章节已读/看过规则并通过本地专项验证；当前改动尚未发布。发布、验证与待办统一见[当前状态](LEAF_STATUS.md)。
+
+更新：2026-10-30。
 
 ## 1. 目标与状态
 
-- 设备：文石 BOOX Leaf5+（Android 13，手势导航，无底部虚拟按键栏）。使用第三方 Venera JavaScript 漫画源，主要阅读普通漫画、日漫。
-- 目标：阅读信息不遮挡漫画（独立底栏），后续做墨水屏适配。KOOBONE 接入、Venera 源移植到 Mihon 不在范围内。
-- 已发布：Leaf 1.18.4 / versionCode 2492（tag `v1.18.4`，由 CI 从 main 发布），包含应用内更新；之前的 1.18.2 / 2402 为首个公开版本。
-- 用户实机确认：同签名 Release 覆盖升级保留数据、从原版导入 `data.venera` 均正常；竖屏日常阅读正常。用户只竖屏使用，横屏不在当前验收范围。
-- 未完成：全套 Flutter 测试（macOS 缺 QuickJS 原生框架等环境问题，未全绿）。
-- 墨水屏模式（黑白 UI、减少动画，路线图阶段 2/3）已在 1.19.0 发布（默认开启，可在“设置 → 外观”关闭）；组件索引与修改指南见 [LEAF_EINK_UI.md](LEAF_EINK_UI.md)，阶段规划见 [LEAF_EINK_ROADMAP.md](LEAF_EINK_ROADMAP.md)，官方 SDK 约束见 [LEAF_EINK_GUIDELINES.md](LEAF_EINK_GUIDELINES.md)。
-- 应用内更新已在 1.18.4 发布，设计与验收见 [LEAF_IN_APP_UPDATE_DESIGN.md](LEAF_IN_APP_UPDATE_DESIGN.md)、[LEAF_IN_APP_UPDATE_VALIDATION.md](LEAF_IN_APP_UPDATE_VALIDATION.md)。
+- 设备：文石 BOOX Leaf5+（Android 13，手势导航，无底部虚拟按键栏），主要竖屏阅读普通漫画和日漫；KOOBONE 接入与向 Mihon 移植源不在范围内。
+- 当前正式版为 **1.19.0 / 2502**，由 CI 发布，含独立底栏、应用内更新、默认开启的黑白墨水屏模式和减少动画。
+- 历史实机记录：同签名覆盖升级、原版数据导入和竖屏日常阅读正常；1.18.4 → 1.19.0 应用内升级已通过，数据保留。当前设备状态未重新核验，横屏和耗电仍不作已验收结论。
+- PR #3 的 Linux CI 全量 Flutter 测试及其他检查通过；macOS 的原生依赖限制仍在，不能称本机全量通过。
+- 本 checkout：`feature/leaf-read-state`（基线 `b416a69`），版本 `1.19.1+251`。本分支以 1.19.0 为基线，已实现 1.19.1 章节已读/看过规则并通过本地专项验证；当前改动尚未发布。
+- 后续优先级：1.19.1 完整 CI 与实机验收（已在本地 feature/leaf-read-state 实现并通过专项）→ 更新下载超时/镜像候选 → 墨水屏遗漏及硬件/耗电实验。证据与边界见[当前状态](LEAF_STATUS.md)。
 
 ## 2. 基线与分支
 
-- 上游：https://github.com/CyrilPeng/Venera-Next ，基线 `v1.18.1` / `087147a7810039398f4eed3bcc794b576f92c46b`。
-- 本项目：https://github.com/typhoonwhale/VeneraNext-Leaf （`origin`，fork 自上游，上游为 `upstream`）。
-- 暂不跟进上游新版本；需要上游某项修复时再单独评估。
-- `main` 为主线，正式版只能从 main 推 `v*` 标签由 CI 发布，构建与发布流程见 [LEAF_BUILD.md](LEAF_BUILD.md)。功能用独立 `feature/...` 分支开发。
-- `feature/leaf-reader-footer`（3eac32b）是早期开发分支，已合入 main，不再在其上开发。
-- `feature/leaf-eink-adaptation` = main + 墨水屏调研文档。
-- 沿用现有 Flutter/Dart 工程、阅读器、JS 漫画源运行环境、设置继承与数据导入导出；新增设置带默认值，旧 `data.venera` 可进入现有导入流程。
+- 上游来源：[VeneraNext](https://github.com/CyrilPeng/Venera-Next)，采用基线 `v1.18.1 / 087147a`；暂不自动跟进上游。当前本机仅配置 `origin`，其他 checkout 的 remote 需实查。
+- 主线与 `v1.19.0`：`b416a697079764b046caf0015ca6c200ba7c11d6`。新功能基于当次核实的 `origin/main`；正式流程为功能分支 → PR → CI → 合入 main → 附注标签 → CI 发布。
+- `feature/leaf-reader-footer`、`feature/leaf-release-ci`、`feature/leaf-eink-adaptation` 都是早期基线；其中后者仍保留在远端。分支用途、精确 SHA 和清理边界见[分支说明](LEAF_STATUS.md)。
+- 沿用 Flutter/Dart 工程、阅读器、源扩展、设置继承及导入导出；新设置必须带默认值，保留旧数据兼容。
 
 ## 3. 底栏设计（当前）
 
@@ -71,13 +69,18 @@
 4. 先迁一本漫画：从原版导出 CBZ 再导入，或复制兼容的下载目录后用「本地 → 导入 → 恢复本地下载」（需重新授权目录）。核对章节顺序、页数、封面；重导入可能改变漫画身份，在线进度需实测。
 5. 通过后再迁其余漫画，期间保留原应用和文件副本。
 
+章节状态的已确认行为与代码入口见[1.19.1 章节状态说明](LEAF_READ_STATE.md)。
+
 ## 7. 待办与验证
 
-- [ ] 全套 Flutter 测试在可用环境下跑通（当前未全绿）。
-- [x] 同签名 Release 覆盖升级保留数据（用户实机确认）。
-- [x] 从原版导入 `data.venera`（用户实机确认）。
-- [x] Leaf5+ 竖屏日常阅读（用户实机确认）；横屏暂不验收。
-- [ ] 墨水屏适配：按路线图推进，当前等待阶段 1 基线反馈。
+以下是当前主线状态，旧 checkout 的代码能力另见第 1 节。
+
+- [x] 1.19.0 已通过 PR 的 Linux CI 并正式发布；Leaf5+ 从 1.18.4 应用内升级、数据保留有实机记录。
+- [x] 黑白界面与减少动画随墨水屏模式发布；底栏、源接口、固定签名保持既有边界。
+- [x] 1.19.1 已读/看过规则本地实现：D1–D8 已按确认语义落地，443 项专项通过，7 项 Windows 专属既有测试跳过；静态分析、架构和格式检查通过。
+- [ ] 1.19.1 完整 Linux CI、Leaf5+ 与普通手机实机、覆盖升级和跨设备同步；未发布。
+- [ ] 更新下载超时/镜像候选；图片收藏、对话框转场和线性进度动画遗漏。
+- [ ] SDK 硬件全刷实验、同条件 60 分钟耗电对照；本机 Linux CI 复现为可选项。
 
 ## 8. 继续开发
 

@@ -43,6 +43,7 @@ import 'package:venera_next/features/reader/history_progress.dart';
 import 'package:venera_next/features/reader/scaffold.dart';
 import 'shell_host.dart';
 import 'progress_navigation.dart';
+import 'read_progress_tracker.dart';
 import 'image_picker.dart';
 import 'package:venera_next/features/reader/volume.dart';
 import 'package:venera_next/features/reader/volume_controller.dart';
@@ -243,8 +244,9 @@ class ReaderState extends State<Reader>
           identical(ComicSource.find(comicType.sourceKey), source) &&
           listEquals(chapters?.ids.toList(growable: false), ids) &&
           listEquals(chapters?.titles.toList(growable: false), titles),
-      toPage: toPage,
-      toChapter: toChapter,
+      toPage: (page, {animated = true}) =>
+          controller.toPage(page, animated: animated, jump: true),
+      toChapter: (chapter) => controller.toChapter(chapter, jump: true),
     );
   }
 
@@ -693,7 +695,7 @@ class ReaderState extends State<Reader>
       canPrevious: supported && !isFirstChapterOfGroup,
       canNext: supported && !isLastChapterOfGroup,
       reversed: currentMode == ReaderMode.continuousRightToLeft,
-      select: (direction) => controller.toChapter(ep + direction),
+      select: (direction) => controller.toChapter(ep + direction, jump: true),
     );
   }
 
@@ -755,6 +757,8 @@ class ReaderState extends State<Reader>
     viewport: () => imageViewController,
     onChanged: update,
     onPageChanged: onPageChanged,
+    onForwardPastEnd: _reportForwardPastEnd,
+    onVisibleImages: _observeVisibleImages,
     onError: (error, stack) =>
         Log.error('Reader', 'Page navigation failed: $error', stack),
   );
@@ -771,7 +775,11 @@ class ReaderState extends State<Reader>
 
   void setPage(int page) => controller.reportPage(page);
   @override
-  void resetPageAnimation() => controller.resetAnimation();
+  void resetPageAnimation() {
+    controller.resetAnimation();
+    controller.markRemap();
+  }
+
   bool get isPageAnimating => controller.state.isAnimating;
   bool toPage(int page, {bool animated = true}) =>
       controller.toPage(page, animated: animated);
@@ -807,7 +815,7 @@ class ReaderState extends State<Reader>
           identical(widget.chapters, chapters) &&
           identical(ComicSource.find(comicType.sourceKey), source) &&
           data.matches(chapters),
-      select: toChapter,
+      select: (chapter) => controller.toChapter(chapter, jump: true),
     );
   }
 
@@ -1088,6 +1096,7 @@ class ReaderState extends State<Reader>
             ? AutoReadingStep.advanced
             : AutoReadingStep.waiting;
       }
+      controller.reportForwardPastEnd();
       return AutoReadingStep.finished;
     },
   )..addListener(_automaticReadingChanged);
@@ -1330,6 +1339,21 @@ class ReaderState extends State<Reader>
       appdata.settings.readerSettings(cid, type.sourceKey).readerMode,
     );
     history = widget.history;
+    final saved = history;
+    if (saved != null && widget.initialPage == saved.page && saved.page > 0) {
+      final chapters = widget.chapters;
+      final savedChapter =
+          chapters?.isGrouped == true &&
+              saved.group != null &&
+              saved.group! >= 1 &&
+              saved.group! <= chapters!.groups.length
+          ? chapters.chapterIndex(saved.ep, group: saved.group)
+          : saved.ep;
+      if (chapter == savedChapter) {
+        _resumeChapter = savedChapter;
+        _resumeImage = saved.page;
+      }
+    }
     final historyManager = HistoryScope.read(context);
     final durationHistory = widget.history;
     _sessionRegistry = context
@@ -1896,6 +1920,93 @@ class ReaderState extends State<Reader>
     if (!_stateDisposed) _targetValidity.value++;
   }
 
+  final _readTracker = ReaderProgressTracker();
+  int? _resumeChapter, _resumeImage;
+  bool _resumeChecked = false;
+  (int, int)? _lastReadDisplay;
+
+  String _readKey(int ordinal) => widget.chapters?.isGrouped == true
+      ? widget.chapters!.positionAt(ordinal).historyKey
+      : ordinal.toString();
+
+  void _applyReadVerdicts(Iterable<ReaderReadVerdict> verdicts) {
+    final item = history;
+    if (item == null || _sessionFrozen || _stateDisposed) return;
+    final before = (item.readEpisode.length, item.viewedEpisode.length);
+    applyReaderReadVerdicts(item, verdicts);
+    if (before != (item.readEpisode.length, item.viewedEpisode.length)) {
+      _session.scheduleProgress();
+    }
+  }
+
+  void _reportForwardPastEnd() {
+    final verdict = _readTracker.forwardPastEnd();
+    if (verdict != null) _applyReadVerdicts([verdict]);
+  }
+
+  void _observeVisibleImages(
+    int ordinal,
+    int count,
+    int first,
+    int last,
+    bool forward,
+  ) {
+    if (_sessionFrozen || ordinal < 1 || ordinal > maxChapter) return;
+    _applyReadVerdicts([
+      _readTracker.observeVisible(
+        key: _readKey(ordinal),
+        imageCount: count,
+        firstImage: first,
+        lastImage: last,
+        forward: forward,
+        legacyRawKey: ordinal.toString(),
+      ),
+    ]);
+  }
+
+  List<ReaderReadVerdict> _observeReadProgress() {
+    if (controller.contentChapter != chapter || images == null) return const [];
+    final cause = controller.takePositionCause();
+    final previousDisplay = _lastReadDisplay;
+    _lastReadDisplay = (chapter, page);
+    final key = _readKey(chapter);
+    final count = images!.length;
+    if (!_resumeChecked) {
+      _resumeChecked = true;
+      if (_resumeChapter == chapter &&
+          _resumeImage != null &&
+          history?.viewedEpisode.contains(key) == true) {
+        _readTracker.seedResumed(
+          key,
+          count,
+          _resumeImage!,
+          legacyRawKey: chapter.toString(),
+        );
+      }
+    }
+    if (isOnChapterCommentsPage) {
+      final verdict =
+          cause == ReaderPositionCause.user &&
+              previousDisplay != null &&
+              previousDisplay.$1 == chapter &&
+              previousDisplay.$2 < page
+          ? _readTracker.forwardPastEnd()
+          : null;
+      return verdict == null ? const [] : [verdict];
+    }
+    final (first, last) = pageLayout.imageRange(page, count);
+    return _readTracker.observe(
+      key: key,
+      ordinal: chapter,
+      imageCount: count,
+      firstImage: first + 1,
+      lastImage: last,
+      cause: cause,
+      legacyRawKey: chapter.toString(),
+      countProgress: mode.isGallery,
+    );
+  }
+
   void updateHistory() {
     // Initial layout and orientation can update the viewport before images
     // arrive. Keep the saved image index intact until loading/migration ends.
@@ -1903,6 +2014,7 @@ class ReaderState extends State<Reader>
     if (history != null) {
       applyReaderHistoryProgress(
         history: history!,
+        verdicts: _observeReadProgress(),
         page: page,
         imageCount: images!.length,
         chapter: chapter,

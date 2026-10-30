@@ -293,6 +293,7 @@ class GalleryModeState extends State<ReaderGalleryView>
             } else if (i == totalPages + 1) {
               if (data.lastChapter ||
                   !navigation.toChapter(navigation.state.chapter + 1)) {
+                if (data.lastChapter) navigation.reportForwardPastEnd();
                 controller.jumpToPage(totalPages);
               } else {
                 shouldRefreshEInk = true;

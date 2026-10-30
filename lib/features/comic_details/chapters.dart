@@ -21,50 +21,86 @@ const _einkChapterShape = RoundedRectangleBorder(
   borderRadius: BorderRadius.all(Radius.circular(4)),
 );
 
-enum _EInkChapterState { unread, read, last }
+enum _ChapterReadState { unread, viewed, read }
 
-_EInkChapterState _einkChapterState(bool visited, bool last) => last
-    ? _EInkChapterState.last
-    : visited
-    ? _EInkChapterState.read
-    : _EInkChapterState.unread;
+_ChapterReadState _chapterReadState(
+  History? history,
+  String key, {
+  String? legacyRawKey,
+}) {
+  if (history == null) return _ChapterReadState.unread;
+  if (isChapterRead(history, key, legacyRawKey: legacyRawKey)) {
+    return _ChapterReadState.read;
+  }
+  return history.viewedEpisode.contains(key)
+      ? _ChapterReadState.viewed
+      : _ChapterReadState.unread;
+}
 
-Color _einkChapterFill(BuildContext context, _EInkChapterState state) =>
-    state == _EInkChapterState.last
-    ? context.einkStyle.selectedBackground
-    : Colors.white;
+Color _chapterFill(BuildContext context, bool last, Color normal) =>
+    context.isEInk
+    ? (last ? context.einkStyle.selectedBackground : Colors.white)
+    : (last ? context.colorScheme.secondaryContainer : normal);
 
-TextStyle _einkChapterTextStyle(
-  BuildContext context,
-  _EInkChapterState state,
-) => TextStyle(
-  color: state == _EInkChapterState.last
-      ? context.einkStyle.selectedForeground
-      : Colors.black,
-  fontWeight: FontWeight.w600,
-);
-
-Widget _einkChapterLabel(
+Widget _chapterLabel(
   BuildContext context,
   String title,
-  _EInkChapterState state,
+  _ChapterReadState state,
+  bool last,
 ) {
-  final style = _einkChapterTextStyle(context, state);
+  final color = context.isEInk
+      ? (last ? context.einkStyle.selectedForeground : Colors.black)
+      : (last
+            ? context.colorScheme.onSecondaryContainer
+            : state == _ChapterReadState.read
+            ? context.colorScheme.outline
+            : null);
+  final prefix = state == _ChapterReadState.read
+      ? '✓ '
+      : state == _ChapterReadState.viewed
+      ? '○ '
+      : '';
   final text = Text(
-    title,
+    context.isEInk ? title : '$prefix$title',
     maxLines: 1,
     textAlign: TextAlign.center,
     overflow: TextOverflow.ellipsis,
-    style: style,
+    style: TextStyle(
+      color: color,
+      fontWeight: context.isEInk || last ? FontWeight.w600 : null,
+    ),
   );
-  if (state != _EInkChapterState.read) return text;
+  if (!context.isEInk || state == _ChapterReadState.unread) return text;
   return Row(
     mainAxisSize: MainAxisSize.min,
     children: [
-      const EInkCheckMark(),
+      if (state == _ChapterReadState.read)
+        EInkCheckMark(color: color!)
+      else
+        Text(
+          '○',
+          style: TextStyle(color: color, fontWeight: FontWeight.w600),
+        ),
       const SizedBox(width: 4),
       Flexible(child: text),
     ],
+  );
+}
+
+typedef ChapterMenuCallback =
+    void Function(BuildContext context, int chapter, Offset anchor);
+
+void _showChapterMenu(
+  BuildContext context,
+  int chapter,
+  ChapterMenuCallback? show,
+) {
+  final box = context.findRenderObject() as RenderBox?;
+  if (box == null) return;
+  show?.call(
+    context,
+    chapter,
+    box.localToGlobal(Offset(box.size.width / 2, box.size.height)),
   );
 }
 
@@ -74,6 +110,7 @@ class ComicChaptersView extends StatefulWidget {
     required this.chapters,
     this.history,
     required this.readChapter,
+    this.onChapterMenu,
   });
 
   final ComicChapters chapters;
@@ -81,6 +118,8 @@ class ComicChaptersView extends StatefulWidget {
   final History? history;
 
   final void Function(int chapter) readChapter;
+
+  final ChapterMenuCallback? onChapterMenu;
 
   @override
   State<ComicChaptersView> createState() => _ComicChaptersViewState();
@@ -139,6 +178,7 @@ class _ComicChaptersViewState extends SettingsSaveState<ComicChaptersView> {
             chapters: widget.chapters,
             history: widget.history,
             readChapter: widget.readChapter,
+            onChapterMenu: widget.onChapterMenu,
             reverse: reverse,
             orderControl: orderControl,
           )
@@ -146,6 +186,7 @@ class _ComicChaptersViewState extends SettingsSaveState<ComicChaptersView> {
             chapters: widget.chapters,
             history: widget.history,
             readChapter: widget.readChapter,
+            onChapterMenu: widget.onChapterMenu,
             reverse: reverse,
             orderControl: orderControl,
           );
@@ -163,6 +204,7 @@ class _NormalComicChapters extends StatefulWidget {
     required this.chapters,
     this.history,
     required this.readChapter,
+    this.onChapterMenu,
     required this.reverse,
     required this.orderControl,
   });
@@ -174,6 +216,8 @@ class _NormalComicChapters extends StatefulWidget {
   final History? history;
 
   final void Function(int chapter) readChapter;
+
+  final ChapterMenuCallback? onChapterMenu;
 
   @override
   State<_NormalComicChapters> createState() => _NormalComicChaptersState();
@@ -247,41 +291,36 @@ class _NormalComicChaptersState extends State<_NormalComicChapters> {
                 }
                 var key = chapters.ids.elementAt(i);
                 var value = chapters[key]!;
-                bool visited =
-                    history?.readEpisode.contains((i + 1).toString()) ?? false;
-                final state = _einkChapterState(
-                  visited,
-                  history != null && history!.ep == i + 1,
-                );
+                final state = _chapterReadState(history, '${i + 1}');
+                final last = history != null && history!.ep == i + 1;
                 return Padding(
                   padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
                   child: Material(
-                    color: context.isEInk
-                        ? _einkChapterFill(context, state)
-                        : context.colorScheme.surfaceContainer,
+                    color: _chapterFill(
+                      context,
+                      last,
+                      context.colorScheme.surfaceContainer,
+                    ),
                     borderRadius: context.isEInk
                         ? null
                         : BorderRadius.circular(16),
                     shape: context.isEInk ? _einkChapterShape : null,
-                    child: ClickInkWell(
-                      onTap: () => widget.readChapter(i + 1),
-                      borderRadius: BorderRadius.circular(16),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        child: Center(
-                          child: context.isEInk
-                              ? _einkChapterLabel(context, value, state)
-                              : Text(
-                                  value,
-                                  maxLines: 1,
-                                  textAlign: TextAlign.center,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    color: visited
-                                        ? context.colorScheme.outline
-                                        : null,
-                                  ),
-                                ),
+                    child: Builder(
+                      builder: (tileContext) => ClickInkWell(
+                        onTap: () => widget.readChapter(i + 1),
+                        onLongPress: () => _showChapterMenu(
+                          tileContext,
+                          i + 1,
+                          widget.onChapterMenu,
+                        ),
+                        onSecondaryTapDown: (details) => widget.onChapterMenu
+                            ?.call(tileContext, i + 1, details.globalPosition),
+                        borderRadius: BorderRadius.circular(16),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          child: Center(
+                            child: _chapterLabel(context, value, state, last),
+                          ),
                         ),
                       ),
                     ),
@@ -321,6 +360,7 @@ class _GroupedComicChapters extends StatefulWidget {
     required this.chapters,
     this.history,
     required this.readChapter,
+    this.onChapterMenu,
     required this.reverse,
     required this.orderControl,
   });
@@ -332,6 +372,8 @@ class _GroupedComicChapters extends StatefulWidget {
   final History? history;
 
   final void Function(int chapter) readChapter;
+
+  final ChapterMenuCallback? onChapterMenu;
 
   @override
   State<_GroupedComicChapters> createState() => _GroupedComicChaptersState();
@@ -470,48 +512,51 @@ class _GroupedComicChaptersState extends State<_GroupedComicChapters>
                 }
                 String rawIndex = (chapterIndex + 1).toString();
                 String groupedIndex = "${index + 1}-${i + 1}";
-                bool visited = false;
+                final state = _chapterReadState(
+                  history,
+                  groupedIndex,
+                  legacyRawKey: rawIndex,
+                );
                 bool last = false;
                 if (history != null) {
-                  visited =
-                      history!.readEpisode.contains(groupedIndex) ||
-                      history!.readEpisode.contains(rawIndex);
                   // history.ep is relative to history.group; a missing group
                   // means ep is the raw index across all groups.
                   last = history!.group == null
                       ? history!.ep == chapterIndex + 1
                       : history!.group == index + 1 && history!.ep == i + 1;
                 }
-                final state = _einkChapterState(visited, last);
                 return Padding(
                   padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
                   child: Material(
-                    color: context.isEInk
-                        ? _einkChapterFill(context, state)
-                        : context.colorScheme.surfaceContainerLow,
+                    color: _chapterFill(
+                      context,
+                      last,
+                      context.colorScheme.surfaceContainerLow,
+                    ),
                     borderRadius: context.isEInk
                         ? null
                         : BorderRadius.circular(12),
                     shape: context.isEInk ? _einkChapterShape : null,
-                    child: ClickInkWell(
-                      onTap: () => widget.readChapter(chapterIndex + 1),
-                      borderRadius: BorderRadius.circular(12),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        child: Center(
-                          child: context.isEInk
-                              ? _einkChapterLabel(context, value, state)
-                              : Text(
-                                  value,
-                                  maxLines: 1,
-                                  textAlign: TextAlign.center,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    color: visited
-                                        ? context.colorScheme.outline
-                                        : null,
-                                  ),
-                                ),
+                    child: Builder(
+                      builder: (tileContext) => ClickInkWell(
+                        onTap: () => widget.readChapter(chapterIndex + 1),
+                        onLongPress: () => _showChapterMenu(
+                          tileContext,
+                          chapterIndex + 1,
+                          widget.onChapterMenu,
+                        ),
+                        onSecondaryTapDown: (details) =>
+                            widget.onChapterMenu?.call(
+                              tileContext,
+                              chapterIndex + 1,
+                              details.globalPosition,
+                            ),
+                        borderRadius: BorderRadius.circular(12),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          child: Center(
+                            child: _chapterLabel(context, value, state, last),
+                          ),
                         ),
                       ),
                     ),

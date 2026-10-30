@@ -74,6 +74,7 @@ void main() {
     bool includeSources = false,
     bool includeFavorites = false,
     bool includeDatabases = false,
+    bool includeLegacyHistory = false,
     String? sourceScript,
   }) {
     final metadata = File('${directory.path}/appdata.json')
@@ -107,6 +108,11 @@ void main() {
         _writeMarker(incoming, 'remote-$name');
         zip.addFile(name, incoming);
       }
+    }
+    if (includeLegacyHistory) {
+      final incoming = '${directory.path}/legacy-history.db';
+      _writeLegacyHistory(incoming);
+      zip.addFile('history.db', incoming);
     }
     zip.close();
     return file;
@@ -194,6 +200,30 @@ void main() {
     expect(appdata.settings['dataVersion'], 8);
     expect(appdata.searchHistory, ['remote']);
   });
+
+  test(
+    'importing a legacy history database migrates viewed chapters',
+    () async {
+      final history = HistoryManager();
+      await history.waitForAsyncWrites();
+      history.close();
+      await history.init();
+      try {
+        expect(
+          await importAppData(archive(8, includeLegacyHistory: true), true),
+          DataSyncCommitState.applied,
+        );
+        expect(history.isInitialized, isTrue);
+        final imported = history.getAll().single;
+        expect(imported.id, 'legacy-import');
+        expect(imported.readEpisode, {'1', '2-1'});
+        expect(imported.viewedEpisode, isEmpty);
+      } finally {
+        await history.waitForAsyncWrites();
+        history.close();
+      }
+    },
+  );
 
   test('forced sync import applies an unchanged embedded version', () async {
     expect(
@@ -1534,6 +1564,59 @@ void _writeMarker(String path, String value) {
     }
     db.execute('CREATE TABLE marker (value TEXT NOT NULL)');
     db.execute('INSERT INTO marker VALUES (?)', [value]);
+  } finally {
+    db.dispose();
+  }
+}
+
+void _writeLegacyHistory(String path) {
+  final db = sqlite3.open(path);
+  try {
+    db.execute('''
+      CREATE TABLE history (
+        id TEXT PRIMARY KEY,
+        title TEXT,
+        subtitle TEXT,
+        cover TEXT,
+        time INT,
+        type INT,
+        ep INT,
+        page INT,
+        readEpisode TEXT,
+        max_page INT,
+        max_chapter INT,
+        chapter_group INT,
+        chapter_title TEXT,
+        group_title TEXT,
+        read_duration_ms INTEGER NOT NULL DEFAULT 0
+      );
+    ''');
+    db.execute(
+      '''
+      INSERT INTO history (
+        id, title, subtitle, cover, time, type, ep, page, readEpisode,
+        max_page, max_chapter, chapter_group, chapter_title, group_title,
+        read_duration_ms
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+    ''',
+      [
+        'legacy-import',
+        'Legacy',
+        'Author',
+        'cover',
+        DateTime.now().millisecondsSinceEpoch,
+        0,
+        2,
+        8,
+        '1,2-1',
+        10,
+        4,
+        2,
+        'Chapter 2',
+        'Group 2',
+        12,
+      ],
+    );
   } finally {
     db.dispose();
   }

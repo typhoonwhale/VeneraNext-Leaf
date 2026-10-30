@@ -21,6 +21,7 @@ import 'package:venera_next/features/comic_widgets/comic_widgets.dart';
 import 'package:venera_next/features/comic_details/action_button.dart';
 import 'package:venera_next/features/comic_details/actions.dart';
 import 'package:venera_next/features/comic_details/chapters.dart';
+import 'package:venera_next/features/comic_details/chapter_menu.dart';
 import 'package:venera_next/features/comic_details/comments_preview.dart';
 import 'package:venera_next/features/comic_details/cover_viewer.dart';
 import 'package:venera_next/features/comic_details/thumbnails.dart';
@@ -805,6 +806,38 @@ class _ComicPageState extends LoadingState<ComicPage, ComicDetails>
     );
   }
 
+  void _showChapterMenu(BuildContext tileContext, int chapter, Offset anchor) {
+    if (isSavingChapterMark) return;
+    final position = comic.chapters!.positionAt(chapter);
+    final manager = HistoryScope.read(context);
+    contextMenus.show(
+      tileContext,
+      anchor,
+      chapterMarkMenu(
+        position: position,
+        history: manager.find(comic.id, comic.historyType),
+        onSelected: (action) {
+          final owner = context;
+          final target = comic;
+          unawaited(
+            saveChapterMark(() async {
+              final item = prepareChapterMark(
+                comic: target,
+                latest: manager.find(target.id, target.historyType),
+                position: position,
+                action: action,
+              );
+              await manager.addHistory(item);
+              if (!owner.mounted || !isComicActive(target)) return;
+              history = manager.find(target.id, target.historyType);
+              update();
+            }),
+          );
+        },
+      ),
+    );
+  }
+
   Widget buildChapters() {
     if (comic.chapters == null) {
       return const SliverPadding(padding: EdgeInsets.zero);
@@ -813,6 +846,7 @@ class _ComicPageState extends LoadingState<ComicPage, ComicDetails>
       chapters: comic.chapters!,
       history: history,
       readChapter: (chapter) => read(chapter),
+      onChapterMenu: _showChapterMenu,
     );
   }
 

@@ -40,6 +40,10 @@ class History implements Comic {
   /// 1-based.
   Set<String> readEpisode;
 
+  /// Chapters the reader has opened but has not marked as fully read.
+  /// Uses the same keys as [readEpisode].
+  Set<String> viewedEpisode;
+
   @override
   int? maxPage;
 
@@ -59,13 +63,14 @@ class History implements Comic {
     required this.page,
     required this.id,
     required this.readEpisode,
+    Set<String>? viewedEpisode,
     required this.maxPage,
     required this.readDurationMs,
     this.group,
     this.chapterTitle,
     this.groupTitle,
     this.maxChapter,
-  });
+  }) : viewedEpisode = viewedEpisode ?? <String>{};
 
   /// Detached values for a submitted storage operation, including read keys.
   History copy() => History(
@@ -78,6 +83,7 @@ class History implements Comic {
     page: page,
     id: id,
     readEpisode: Set.of(readEpisode),
+    viewedEpisode: Set.of(viewedEpisode),
     maxPage: maxPage,
     maxChapter: maxChapter,
     readDurationMs: readDurationMs,
@@ -92,6 +98,7 @@ class History implements Comic {
     required this.page,
     this.group,
     Set<String>? readChapters,
+    Set<String>? viewedChapters,
     DateTime? time,
     this.readDurationMs = 0,
   }) : type = model.historyType,
@@ -100,6 +107,7 @@ class History implements Comic {
        cover = model.cover,
        id = model.id,
        readEpisode = readChapters ?? <String>{},
+       viewedEpisode = viewedChapters ?? <String>{},
        time = time ?? DateTime.now();
 
   History.fromMap(Map<String, dynamic> map)
@@ -113,6 +121,9 @@ class History implements Comic {
       id = map["id"],
       readEpisode = Set<String>.from(
         (map["readEpisode"] as List<dynamic>?)?.toSet() ?? const <String>{},
+      ),
+      viewedEpisode = Set<String>.from(
+        (map["viewedEpisode"] as List<dynamic>?)?.toSet() ?? const <String>{},
       ),
       maxPage = map["max_page"],
       maxChapter = map['max_chapter'] as int?,

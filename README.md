@@ -1,24 +1,14 @@
 ## 本 fork 的定位：适配文石 BOOX Leaf5+
 
-**Leaf（VeneraNext-Leaf）是基于 [VeneraNext](https://github.com/CyrilPeng/Venera-Next) 的定制分支，核心目标是适配文石 BOOX Leaf5+ 的日常漫画阅读。后续功能取舍、界面布局与升级方案，应以这台设备的实际使用体验为依据。**
+**Leaf（VeneraNext-Leaf）基于 [VeneraNext](https://github.com/CyrilPeng/Venera-Next)，面向文石 BOOX Leaf5+ 的日常漫画阅读。** 保留上游漫画源、收藏、历史、本地阅读和导入导出接口；使用独立包名、固定签名 ARM64 Release，支持覆盖升级保留数据。
 
-本项目优先解决以下需求：
+**最新正式版：[Leaf 1.19.0 / Android ARM64](https://github.com/typhoonwhale/VeneraNext-Leaf/releases/tag/v1.19.0)**（versionCode 2502），包含独立阅读底栏、1.18.4 引入的应用内更新，以及默认开启的黑白墨水屏模式和减少动画。墨水屏模式可在“设置 → 外观”关闭，不改动漫画正文图片。1.18.2 及更早版本先手动覆盖安装，之后可在应用内更新。
 
-- **充分利用墨水屏阅读面积**：画廊正文与信息栏分区，信息不遮挡漫画；底栏紧凑、文字清晰，保留页码、时间、电量及可选的「书名｜章节名」。
-- **按真实设备导航方式适配**：目标设备使用手势导航，底部没有虚拟按键栏。底部留白由用户设置，不根据手势模式额外伪造安全区；系统实际遮挡、文字缩放和横竖屏行为需要结合实机验证，不能拿通用手机模拟值当作 Leaf5+ 参数。
-- **保持阅读与升级连续性**：保留上游漫画源、收藏、历史、本地阅读与导入导出能力；长期试用采用固定包名、固定签名的 ARM64 Release 包迭代，尽量通过覆盖安装保留数据。
-- **黑白墨水屏界面**：默认开启“墨水屏模式”，黑白高对比、减少动画，不改动漫画图片；可在“设置 → 外观”关闭。
-- **维持清晰的 fork 身份**：应用名为 Leaf，图标保留原主体并带 Leaf 标记；Android 更新默认连接 [本仓库](https://github.com/typhoonwhale/VeneraNext-Leaf)。
+正式版底栏为**横线 1 + 固定间隔 2 + 自然文字高度 + 底部留白 0–15（默认 4）**，字号 **9–13（默认 11）**；真实系统安全区另计，不伪造手势导航留白。历史实机记录确认竖屏日常阅读、数据导入及 1.18.4 → 1.19.0 应用内升级正常、数据保留；硬件刷新和耗电对照仍待实测。数值单位为 Flutter 逻辑像素。
 
-后续开发请先读 [Leaf 开发方案](docs/LEAF_DEVELOPMENT_PLAN.md) 与 [调研记录及 agent 接手入口](docs/research/README.md)，再核对当前分支、源码和设备状态。新调查统一追加到 `docs/research/`，记录日期、来源、结论和未验证项，避免反复推测或覆盖历史依据。
+**当前 checkout：**`feature/leaf-read-state` / 基线 `b416a69`（`1.19.1+251`）。本分支以 1.19.0 为基线，已实现 1.19.1 章节已读/看过规则并通过本地专项验证；当前改动尚未发布。开发先读[当前状态与分支说明](docs/LEAF_STATUS.md)、[开发方案](docs/LEAF_DEVELOPMENT_PLAN.md)、[构建说明](docs/LEAF_BUILD.md)和[调研索引](docs/research/README.md)。
 
-当前状态：独立底栏、标题和固定签名 Release 已实现并发布（1.18.2），使用者实机确认竖屏日常阅读、覆盖升级和数据导入正常。底栏结构：**横线1 + 固定间隔2 + 自然文字高度 + 底部留白0–15（默认4）**，字号 **9–13（默认11）**。底部留白独立于字号，另保留真实系统安全区；已通过相关自动验证。目前只验收竖屏使用。设计与渲染见[底栏分段布局](docs/research/2026-10-26-footer-spacing.md)。数值单位为 Flutter 逻辑像素。
-
-> 下方的 VeneraNext 介绍、徽章、截图和各平台下载链接属于上游项目。Leaf 的构建、包身份和升级规则见 [Leaf Android 构建说明](docs/LEAF_BUILD.md)。
-
-**Leaf 正式版下载：[1.19.0 / Android ARM64](https://github.com/typhoonwhale/VeneraNext-Leaf/releases/tag/v1.19.0)**。已有固定签名Leaf Release可覆盖安装；1.18.4起支持应用内下载并安装新版，从1.18.2及更早版本升级需手动覆盖安装一次。
-
-应用内更新直接下载、验包后交由Android确认安装。范围和验收见[方案](docs/LEAF_IN_APP_UPDATE_DESIGN.md)与[验证记录](docs/LEAF_IN_APP_UPDATE_VALIDATION.md)。
+> 下方 VeneraNext 介绍、徽章、截图和各平台下载链接属于上游项目；Leaf 当前只交付 Android ARM64。
 
 ---
 

@@ -1,6 +1,7 @@
 import 'package:venera_next/features/comic_source/comic_source_api.dart';
 import 'package:venera_next/features/history/history_api.dart';
 import 'page_layout.dart';
+import 'read_progress_tracker.dart';
 
 /// Map a loaded viewport to the existing persisted history coordinates.
 /// The caller gates loading and owns persistence scheduling.
@@ -12,6 +13,7 @@ void applyReaderHistoryProgress({
   required ComicChapters? chapters,
   required ReaderPageLayout layout,
   required DateTime time,
+  Iterable<ReaderReadVerdict> verdicts = const [],
 }) {
   history.page = layout.historyImage(page, imageCount);
   history.maxPage = imageCount;
@@ -33,13 +35,30 @@ void applyReaderHistoryProgress({
   }
   if (chapters?.isGrouped ?? false) {
     final position = chapters!.positionAt(chapter);
-    history.readEpisode.add(position.historyKey);
     history.ep = position.chapter;
     history.group = position.group;
   } else {
-    history.readEpisode.add(chapter.toString());
     history.ep = chapter;
     // Preserve the existing ungrouped update contract: do not rewrite group.
   }
   history.time = time;
+  applyReaderReadVerdicts(history, verdicts);
+}
+
+/// Also used by a visible tail/failed forward turn, which must not move ep/page.
+void applyReaderReadVerdicts(
+  History history,
+  Iterable<ReaderReadVerdict> verdicts,
+) {
+  for (final verdict in verdicts) {
+    if (verdict.completed) {
+      markChaptersRead(history, [verdict.key]);
+    } else if (!isChapterRead(
+      history,
+      verdict.key,
+      legacyRawKey: verdict.legacyRawKey,
+    )) {
+      history.viewedEpisode.add(verdict.key);
+    }
+  }
 }
