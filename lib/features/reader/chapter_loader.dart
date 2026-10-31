@@ -79,6 +79,9 @@ Future<List<String>> loadReaderChapterImages({
       'error': error.toString(),
     }, stack),
     localUnavailable: LocalComicFilesUnavailable.new,
+    emptyChapter: OperationFailure.message(
+      'No images were returned for this chapter. Please retry.'.tl,
+    ),
     sourceUnavailable: OperationFailure.message(
       'Comic source is unavailable'.tl,
       kind: FailureKind.unsupported,

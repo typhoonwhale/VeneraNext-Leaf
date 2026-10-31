@@ -4,11 +4,14 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:venera_next/features/reader/chapter_image_loader.dart';
 import 'package:venera_next/foundation/image_work.dart';
+import 'package:venera_next/foundation/operation_failure.dart';
+import 'package:venera_next/features/reader/reader_controller.dart';
 import 'package:venera_next/features/reader/waterfall_controller.dart';
 import 'package:venera_next/features/reader/waterfall_flow.dart';
 import 'package:venera_next/network/request_scope.dart';
 
 void main() {
+  final emptyChapter = OperationFailure.message('empty chapter');
   ChapterImageLoader loader({
     Future<List<String>> Function()? local,
     Future<List<String>> Function()? online,
@@ -20,6 +23,141 @@ void main() {
     onLocalFailure: failure ?? (_, _) {},
     localUnavailable: (path) => FileSystemException('repair', path),
     sourceUnavailable: StateError('source unavailable'),
+    emptyChapter: emptyChapter,
+  );
+
+  test('empty online chapters fail and never report local recovery', () async {
+    for (final localState in ['none', 'empty', 'missing']) {
+      var recovered = 0;
+      var images = <String>[];
+      final service = loader(
+        local: localState == 'none'
+            ? null
+            : () async {
+                if (localState == 'missing') {
+                  throw const FileSystemException('missing', '/book');
+                }
+                return [];
+              },
+        online: () async => images,
+      );
+      await expectLater(
+        service.load(onOnlineFallback: () => recovered++),
+        throwsA(same(emptyChapter)),
+      );
+      expect(recovered, 0);
+      images = ['retried'];
+      expect(await service.load(onOnlineFallback: () => recovered++), images);
+      expect(recovered, localState == 'none' ? 0 : 1);
+    }
+  });
+
+  test('cancelled empty online result remains cancellation', () async {
+    final pending = Completer<List<String>>();
+    final owner = RequestScope();
+    final result = loader(online: () => pending.future).load(scope: owner);
+    final checked = expectLater(result, throwsA(isA<RequestCancelled>()));
+    owner.cancel();
+    pending.complete([]);
+    await checked;
+    owner.dispose();
+  });
+
+  for (final oldImages in [
+    <String>[],
+    ['late page'],
+  ]) {
+    test(
+      'retired online result cannot affect a reopened reader: $oldImages',
+      () async {
+        ReaderController controller() => ReaderController(
+          pageCount: () => 1,
+          chapterCount: () => 1,
+          animationEnabled: () => false,
+          viewport: () => null,
+          onChanged: () {},
+          onPageChanged: () {},
+          onError: (error, stack) => fail('$error'),
+        );
+        final old = controller();
+        final current = controller();
+        final pending = Completer<List<String>>();
+        final started = Completer<void>();
+        final work = ImageWork();
+        final loading = old.loadContent(
+          old.beginContentLoad(),
+          imageWork: work,
+          beforeLoad: () async {},
+          loadImages: (scope) => loader(
+            online: () {
+              started.complete();
+              return pending.future;
+            },
+          ).load(scope: scope),
+          prepareMode: () async => fail('retired content must not prepare'),
+        );
+        await started.future;
+        old.dispose();
+        expect(
+          await current.loadContent(
+            current.beginContentLoad(),
+            beforeLoad: () async {},
+            loadImages: (scope) =>
+                loader(online: () async => ['current']).load(scope: scope),
+            prepareMode: () async {},
+          ),
+          ReaderContentLoadResult.ready,
+        );
+        pending.complete(oldImages);
+        expect(await loading, ReaderContentLoadResult.ignored);
+        expect(current.content.images, ['current']);
+        expect(current.content.error, isNull);
+        expect(old.content.images, isNull);
+        (await work.prepareForExit())();
+        await work.dispose();
+        current.dispose();
+      },
+    );
+  }
+
+  test(
+    'empty waterfall chapter preserves content until explicit retry',
+    () async {
+      var images = <String>[];
+      var calls = 0;
+      final work = ImageWork();
+      final controller =
+          WaterfallController(
+            maxChapter: 2,
+            imageWork: work,
+            load: (_, scope) => loader(
+              online: () async {
+                calls++;
+                return images;
+              },
+            ).load(scope: scope),
+            chapterId: (chapter) => '$chapter',
+            onChanged: () {},
+            onPreviousError: (_, _) => fail('unexpected previous error'),
+          )..initialize(
+            WaterfallChapterSegment(chapter: 1, eid: '1', images: ['first']),
+          );
+      await controller.ensureAfter(current: 1, threshold: 1);
+      await controller.ensureAfter(current: 1, threshold: 1);
+      expect(calls, 1);
+      expect(controller.afterError, emptyChapter.toString());
+      expect(controller.flow.lastChapter, 1);
+      expect(controller.flow.imageRefAt(1)!.imageKey, 'first');
+      images = ['second'];
+      controller.retryAfter();
+      await controller.ensureAfter(current: 1, threshold: 1);
+      expect(calls, 2);
+      expect(controller.afterError, isNull);
+      expect(controller.flow.lastChapter, 2);
+      expect(controller.flow.imageRefAt(1)!.imageKey, 'first');
+      await controller.dispose();
+      await work.dispose();
+    },
   );
 
   test(

@@ -31,6 +31,7 @@ class ReaderInformationFooter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final displayPage = maxPage < 1 ? 0 : page.clamp(1, maxPage);
     final safe = MediaQuery.paddingOf(context);
     final theme = Theme.of(context);
     final light = theme.brightness == Brightness.light;
@@ -110,10 +111,7 @@ class ReaderInformationFooter extends StatelessWidget {
                   if (showPage)
                     SizedBox(
                       width: math.min(pageWidth, bounds.maxWidth),
-                      child: Text(
-                        '${page.clamp(1, maxPage)}/$maxPage',
-                        style: style,
-                      ),
+                      child: Text('$displayPage/$maxPage', style: style),
                     ),
                   if (displayTitle.isNotEmpty)
                     Expanded(

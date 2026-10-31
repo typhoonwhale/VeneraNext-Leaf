@@ -13,6 +13,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:photo_view/photo_view.dart';
 import 'package:venera_next/components/message.dart';
+import 'package:venera_next/components/loading.dart';
 import 'package:venera_next/components/window_frame.dart';
 import 'package:venera_next/components/window_selection_task.dart';
 import 'package:venera_next/app_runtime/application_host.dart';
@@ -501,6 +502,90 @@ void main() {
       },
     );
   }
+
+  testWidgets(
+    'empty online chapter shows production Retry without committing zero-page history',
+    (tester) async {
+      final fixture = await _ReaderFixture.create(tester);
+      final manager = ComicSourceManager();
+      final empty = Completer<Res<List<String>>>();
+      final started = Completer<void>();
+      var calls = 0;
+      final image = 'file://${LocalManager().path}/book/one/1.png';
+      final source = _ReaderPagesSource((_, _) {
+        calls++;
+        if (calls == 1) {
+          started.complete();
+          return empty.future;
+        }
+        return Future.value(Res(List.filled(3, image)));
+      });
+      configureComicSourceRegistry(
+        all: manager.all,
+        find: (key) => key == 'replacement' ? source : manager.find(key),
+        fromIntKey: (key) => key == 42 ? source : manager.fromIntKey(key),
+        isEmpty: () => false,
+      );
+      try {
+        await fixture.mount(
+          tester,
+          pushed: false,
+          withWindow: false,
+          expectContent: false,
+          comicType: const _OtherComicType(),
+        );
+        await _pumpUntil(tester, () => started.isCompleted);
+        final reader = fixture.readerKey.currentState!;
+        // The production onCommitted callback consumes this flag only on success.
+        reader.controller.setJumpToLastPage(true);
+        empty.complete(const Res(<String>[]));
+        await _pumpUntil(tester, () => reader.controller.content.error != null);
+        expect(find.byType(ReaderImagesHost), findsOneWidget);
+        expect(find.byType(NetworkError), findsOneWidget);
+        expect(
+          find.text('No images were returned for this chapter. Please retry.'),
+          findsOneWidget,
+        );
+        expect(find.widgetWithText(FilledButton, 'Retry'), findsOneWidget);
+        expect(reader.images, isNull);
+        expect(reader.isLoading, isFalse);
+        expect(reader.jumpToLastPageOnLoad, isTrue);
+        expect(reader.contentReadyCalls, 0);
+        reader.updateHistory();
+        await tester.pump(const Duration(seconds: 3));
+        expect(fixture.history.progress, isEmpty);
+        expect(fixture.history.durations, isEmpty);
+        expect(tester.takeException(), isNull);
+
+        await tester.tap(find.widgetWithText(FilledButton, 'Retry'));
+        await _pumpUntil(tester, () => reader.contentReadyCalls == 1);
+        expect(calls, 2);
+        expect(reader.images, hasLength(3));
+        expect(reader.controller.content.error, isNull);
+        expect(reader.jumpToLastPageOnLoad, isFalse);
+        expect(reader.page, 3);
+        expect(find.byType(NetworkError), findsNothing);
+        await tester.pump(const Duration(seconds: 3));
+        expect(fixture.history.progress, isNotEmpty);
+        expect(
+          fixture.history.progress.every(
+            (entry) => entry.maxPage == 3 && entry.page > 0,
+          ),
+          isTrue,
+        );
+        expect(tester.takeException(), isNull);
+      } finally {
+        if (!empty.isCompleted) empty.complete(const Res(<String>[]));
+        await fixture.dispose(tester);
+        configureComicSourceRegistry(
+          all: manager.all,
+          find: manager.find,
+          fromIntKey: manager.fromIntKey,
+          isEmpty: () => manager.isEmpty,
+        );
+      }
+    },
+  );
 
   testWidgets(
     'source replacement reloads images while exit drains the original chapter',
@@ -5178,6 +5263,14 @@ class _TestReader extends Reader {
 }
 
 class _TestReaderState extends ReaderState {
+  int contentReadyCalls = 0;
+
+  @override
+  void onReaderContentReady() {
+    contentReadyCalls++;
+    super.onReaderContentReady();
+  }
+
   ComicLayoutProbe? layoutProbe;
   Future<void> Function()? onSaveSettings;
   int settingsSaves = 0;

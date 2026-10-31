@@ -429,7 +429,9 @@ class ReaderScaffoldState extends State<ReaderScaffold> {
     final progress = widget.progress;
     final toggleAutomaticReading = widget.onToggleAutomaticReading;
     final work = widget.imageWork;
-    final displayPage = progress.page.clamp(1, progress.maxPage);
+    final displayPage = progress.maxPage < 1
+        ? 0
+        : progress.page.clamp(1, progress.maxPage);
     var text = "E${progress.chapter} : P$displayPage";
     if (!widget.data.hasChapters) {
       text = "P$displayPage";
@@ -528,7 +530,7 @@ class ReaderScaffoldState extends State<ReaderScaffold> {
           children: [
             if (showPage)
               ReaderPageInfo(
-                page: progress.page,
+                page: progress.maxPage < 1 ? 0 : progress.page,
                 maxPage: progress.maxPage,
                 chapterTitle: widget.data.hasChapters
                     ? widget.data.chapterTitle ?? 'E${progress.chapter}'
