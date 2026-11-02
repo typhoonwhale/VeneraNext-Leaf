@@ -6,7 +6,7 @@
 
 - 设备：文石 BOOX Leaf5+（Android 13，手势导航，无底部虚拟按键栏）。使用第三方 Venera JavaScript 漫画源，主要阅读普通漫画、日漫。
 - 目标：阅读信息不遮挡漫画（独立底栏），持续完善墨水屏体验。KOOBONE 接入、Venera 源移植到 Mihon 不在范围内。
-- 已发布：Leaf 1.19.1 / versionCode 2522（tag `v1.19.1` 指向 `c61937a`），包含空章节错误处理与重试修复；Leaf5+ 已经 USB 覆盖升级。应用内更新自 1.18.4 提供，墨水屏模式自 1.19.0 提供。后续三项功能已通过 PR #6 合入 main（`2008382`），尚未发布。
+- 本版：Leaf 1.19.2+253 / ARM64 versionCode 2532，包含已读／看过、紧凑信息区和墨水屏遗漏补齐；发布状态与可下载资产以 [GitHub Releases](https://github.com/typhoonwhale/VeneraNext-Leaf/releases) 为准。上一正式版 Leaf 1.19.1+252 / versionCode 2522（tag `v1.19.1` 指向 `c61937a`）包含空章节错误处理与重试修复，也是上次 Leaf5+ 设备核验版本；其 USB 覆盖升级已通过。应用内更新自 1.18.4 提供，墨水屏模式自 1.19.0 提供。
 - 用户实机确认：同签名 Release 覆盖升级保留数据、从原版导入 `data.venera` 均正常；竖屏日常阅读正常。用户只竖屏使用，横屏不在当前验收范围。
 - 验证：PR #6 的 8 项检查全部成功，完整 Linux Flutter 为 5627 通过、151 跳过，Android ARM64 冒烟构建通过；合入 tree 与被测提交一致。信息区 7 项布局验证和合入后的 3 项截图验证通过，真实设备验收待补。[结果与截图](research/2026-11-02-integration-validation.md)。正式 1.19.1 的历史 CI 为 5543 通过、151 跳过，首次失败记录保留。
 - 墨水屏模式（黑白 UI、减少动画，路线图阶段 2/3）已在 1.19.0 发布（默认开启，可在“设置 → 外观”关闭）；组件索引与修改指南见 [LEAF_EINK_UI.md](LEAF_EINK_UI.md)，阶段规划见 [LEAF_EINK_ROADMAP.md](LEAF_EINK_ROADMAP.md)，官方 SDK 约束见 [LEAF_EINK_GUIDELINES.md](LEAF_EINK_GUIDELINES.md)。
@@ -20,7 +20,7 @@
 - `main` 为主线，正式版只能从 main 推 `v*` 标签由 CI 发布，构建与发布流程见 [LEAF_BUILD.md](LEAF_BUILD.md)。功能用独立 `feature/...` 分支开发。
 - `feature/leaf-reader-footer`（3eac32b）是早期开发分支，已合入 main，不再在其上开发。
 - `feature/leaf-1.19.1-integration` 从正式 1.19.1 建立，收进已读／看过、紧凑信息区和墨水屏补齐；已通过 [PR #6](https://github.com/typhoonwhale/VeneraNext-Leaf/pull/6) 合入 main（`2008382`）。新开发从核实过的最新 main 开始；早期 `feature/leaf-eink-adaptation@274b3db` 保留为历史调研分支。
-- “已读／看过”从 `feature/leaf-read-state@98694ef` 整合；D1 续读补偿、D2–D8 均已确认。主线包含实现并通过完整自动验证，正式 1.19.1 尚不包含；新功能的实机、升级和跨设备同步验收待补，后续版本待定。
+- “已读／看过”从 `feature/leaf-read-state@98694ef` 整合；D1 续读补偿、D2–D8 均已确认。本版 1.19.2+253 / versionCode 2532 包含该实现，主线已通过完整自动验证；新功能的实机、覆盖升级和跨设备同步验收待补。
 - 沿用现有 Flutter/Dart 工程、阅读器、JS 漫画源运行环境、设置继承与数据导入导出；新增设置带默认值，旧 `data.venera` 可进入现有导入流程。
 
 ## 3. 底栏设计（当前）
@@ -87,7 +87,6 @@
 - [ ] 新功能覆盖升级后的历史、收藏、源与设置保留；新旧数据库迁移已有自动验证，实机升级仍待补。
 - [ ] WebDAV 跨设备往返：已读／看过及续读位置的真实同步；旧 Venera 重写行可能丢失看过记录的兼容边界保持。
 - [ ] 墨水屏实机观感：紧凑信息区、收藏边框、对话框、禁用控件斜线与文字白边，以及 Hero／多帧图；补实际 DPI、字体缩放和应用显示配置。横屏不在当前验收范围。
-- [ ] 为包含新功能的后续版本确定版本号、递增构建号，完成固定签名打包验包与发布；正式 `v1.19.1` 标签及资产保持，不用旧 `2512` 测试包升级。
 - [ ] 新版应用内完整下载安装；1.19.1 下载有进度但慢、手动取消后改用 USB，未覆盖该次完整应用内链路。
 
 ### 后续问题、候选与暂缓项

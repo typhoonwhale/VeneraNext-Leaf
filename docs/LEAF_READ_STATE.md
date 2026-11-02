@@ -1,6 +1,6 @@
 # Leaf 章节状态：已读、看过与手动标记
 
-本功能最初在 `feature/leaf-read-state@98694ef` 基于 1.19.0 开发，随后统一整合并通过 [PR #6](https://github.com/typhoonwhale/VeneraNext-Leaf/pull/6) 合入 main（`2008382`），D1–D8 保持已确认语义。整合版 8 项 PR 检查全部成功，完整 Linux Flutter 为 5627 通过、151 跳过；[章节三态、手标菜单与验证记录](research/2026-11-02-integration-validation.md)已归档。真实续读、覆盖升级和 WebDAV 跨设备往返仍待验。下方 2026-10-30 的 443 项专项属于原分支历史结果。正式 1.19.1 / 2522 尚不包含本功能；旧2512为历史测试包，后续发布版本另定。最新结果见[状态说明](LEAF_STATUS.md)。
+本功能最初在 `feature/leaf-read-state@98694ef` 基于 1.19.0 开发，随后统一整合并通过 [PR #6](https://github.com/typhoonwhale/VeneraNext-Leaf/pull/6) 合入 main（`2008382`），D1–D8 保持已确认语义。本版 `1.19.2+253`（ARM64 versionCode `2532`）包含该功能；发布状态与可下载资产以 [GitHub Releases](https://github.com/typhoonwhale/VeneraNext-Leaf/releases) 为准。PR #6 的 8 项检查全部成功，完整 Linux Flutter 为 5627 通过、151 跳过；[章节三态、手标菜单与验证记录](research/2026-11-02-integration-validation.md)已归档。真实续读、覆盖升级和 WebDAV 跨设备往返仍待设备验证。下方 2026-10-30 的 443 项专项属于原分支历史结果。旧 `1.19.1+251 / 2512` 为历史测试包；上一正式版 `1.19.1+252 / 2522` 不包含本功能。最新结果见[状态说明](LEAF_STATUS.md)。
 
 ## 用户可见行为
 
@@ -52,4 +52,4 @@
 - 本机真实 ZIP/QuickJS FFI 依赖已由锁定源码准备，旧库迁移与真实快照/归档导入已通过；没有用 mock 替代这些归档操作。
 - 两路定向复核发现的 5 项 reader 边界和 1 项手标并发问题已修复并覆盖回归。未触发远端 CI，未实测 1.19.1 的设备手势、覆盖升级、跨设备同步或耗电。
 
-固定签名 Android ARM64 Release 测试包已构建并验包：`1.19.1+251`、versionCode `2512`、包名 `com.github.typhoonwhale.veneranext.leaf`；证书与既有 Leaf 一致，APK 归档完整性和单一 ARM64 ABI 检查通过。该包是已读/看过功能分支的旧测试构建，尚未安装到设备或发布，不是本次 `1.19.1+252 / 2522` 空章节修复版。
+固定签名 Android ARM64 Release 测试包曾构建并验包：`1.19.1+251`、versionCode `2512`、包名 `com.github.typhoonwhale.veneranext.leaf`；证书与既有 Leaf 一致，APK 归档完整性和单一 ARM64 ABI 检查通过。该包是已读／看过功能分支的历史测试构建，与上一正式版 `1.19.1+252 / 2522` 及本版 `1.19.2+253 / 2532` 区分。
