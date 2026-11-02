@@ -769,6 +769,9 @@ class ComicTile extends StatelessWidget {
         ?.work;
     showDialog<void>(
       context: comicTileContext,
+      animationStyle: MediaQuery.disableAnimationsOf(comicTileContext)
+          ? AnimationStyle.noAnimation
+          : null,
       builder: (_) {
         final dialog = _BlockComicDialog(
           words: words,

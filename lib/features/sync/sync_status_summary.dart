@@ -110,6 +110,9 @@ class SyncStatusSummary extends StatelessWidget {
                     if (controller.hasPendingChanges) {
                       final confirmed = await showDialog<bool>(
                         context: context,
+                        animationStyle: MediaQuery.disableAnimationsOf(context)
+                            ? AnimationStyle.noAnimation
+                            : null,
                         builder: (context) => AlertDialog(
                           title: Text('Overwrite local data?'.tl),
                           content: Text(

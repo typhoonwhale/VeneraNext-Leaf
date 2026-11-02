@@ -168,6 +168,9 @@ class _ComicArchivePageState extends State<ComicArchivePage> {
     if (targets.isEmpty) return;
     final confirmed = await showDialog<bool>(
       context: context,
+      animationStyle: MediaQuery.disableAnimationsOf(context)
+          ? AnimationStyle.noAnimation
+          : null,
       builder: (context) => ContentDialog(
         title: "Delete".tl,
         content: Text(
@@ -242,6 +245,9 @@ class _ComicArchivePageState extends State<ComicArchivePage> {
     });
     await showDialog(
       context: context,
+      animationStyle: MediaQuery.disableAnimationsOf(context)
+          ? AnimationStyle.noAnimation
+          : null,
       barrierDismissible: false,
       builder: (dialogContext) {
         return StatefulBuilder(

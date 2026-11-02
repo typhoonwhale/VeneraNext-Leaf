@@ -161,15 +161,23 @@ void main() {
       );
       expect(sizeStream.completer, same(paintStream.completer));
       var frames = 0;
+      final sizeFrame = Completer<void>();
+      final paintFrame = Completer<void>();
       final errors = <Object>[];
       listen(
         sizeStream,
-        onImage: (_) => frames++,
+        onImage: (_) {
+          frames++;
+          if (!sizeFrame.isCompleted) sizeFrame.complete();
+        },
         onError: (e, _) => errors.add(e),
       );
       listen(
         paintStream,
-        onImage: (_) => frames++,
+        onImage: (_) {
+          frames++;
+          if (!paintFrame.isCompleted) paintFrame.complete();
+        },
         onError: (e, _) => errors.add(e),
       );
       expect(source.loads, 1);
@@ -187,7 +195,12 @@ void main() {
       expect(source.loads, 1);
       expect(frames, 0);
       release();
-      await pumpEventQueue();
+      // Native decode can outlive any fixed number of event-queue pumps.
+      // This static PNG emits directly after decoding; join both consumers.
+      await Future.wait([
+        sizeFrame.future,
+        paintFrame.future,
+      ]).timeout(const Duration(seconds: 10));
       await _frame();
       expect(source.loads, 2);
       expect(frames, 2);

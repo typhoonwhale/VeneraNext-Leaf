@@ -25,6 +25,7 @@ import 'continuous_data.dart';
 import 'current_image.dart';
 import 'display_image_provider.dart';
 import 'reader_controller.dart';
+import 'read_progress_tracker.dart';
 import 'reader_viewport.dart';
 import 'package:venera_next/network/request_scope.dart';
 import 'chapter_swipe_indicator.dart';
@@ -104,6 +105,26 @@ class ContinuousModeState extends State<ReaderContinuousView>
   bool _positionUpdateScheduled = false;
   ScrollController? _scrollController;
   bool _disposed = false;
+  double? _lastReadOffset;
+  bool _suppressReadMovement = false;
+  int _readJumpGeneration = 0;
+
+  void _settleReadJump() {
+    final generation = ++_readJumpGeneration;
+    _suppressReadMovement = true;
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _disposed || generation != _readJumpGeneration) return;
+      onPositionChanged();
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _disposed || generation != _readJumpGeneration) return;
+        onPositionChanged();
+        _suppressReadMovement = false;
+      });
+      SchedulerBinding.instance.ensureVisualUpdate();
+    });
+    SchedulerBinding.instance.ensureVisualUpdate();
+  }
+
   Timer? _initialCacheTimer;
   Timer? _scrollActivityTimer;
   ScrollPosition? _smoothPosition;
@@ -262,7 +283,10 @@ class ContinuousModeState extends State<ReaderContinuousView>
     });
   }
 
-  void _setReaderLocation(WaterfallImageRef imageRef) {
+  void _setReaderLocation(
+    WaterfallImageRef imageRef, {
+    ReaderPositionCause? cause,
+  }) {
     var segment = _segmentOfChapter(imageRef.position.chapter);
     var chapterChanged = currentChapter != imageRef.position.chapter;
     if (segment != null && chapterChanged) {
@@ -277,7 +301,7 @@ class ContinuousModeState extends State<ReaderContinuousView>
       });
     }
     if (chapterChanged || currentPage != imageRef.position.imageNumber) {
-      navigation.reportPage(imageRef.position.imageNumber);
+      navigation.reportPage(imageRef.position.imageNumber, cause: cause);
     }
   }
 
@@ -312,6 +336,8 @@ class ContinuousModeState extends State<ReaderContinuousView>
     required bool toLastPage,
   }) async {
     final waterfall = _waterfall;
+    _readJumpGeneration++;
+    _suppressReadMovement = navigation.lastNavigationWasJump;
     final needsLoading = _segmentOfChapter(chapter) == null;
     final releaseLoading = _holdWaterfallLoading(needsLoading);
     _isRestoringPrependedSegmentPosition = false;
@@ -324,6 +350,10 @@ class ContinuousModeState extends State<ReaderContinuousView>
         revision == waterfall.revision;
     try {
       if (!await loading || !isCurrent()) {
+        if (isCurrent()) {
+          navigation.takePositionCause();
+          _settleReadJump();
+        }
         return;
       }
     } finally {
@@ -352,6 +382,7 @@ class ContinuousModeState extends State<ReaderContinuousView>
       SchedulerBinding.instance.addPostFrameCallback((_) {
         if (isCurrent()) {
           _isNavigatingWaterfallLocation = false;
+          _settleReadJump();
         }
       });
     });
@@ -530,6 +561,20 @@ class ContinuousModeState extends State<ReaderContinuousView>
       currentIndex: currentIndex,
     );
     if (page == null) return;
+    final offset = _scrollController?.hasClients == true
+        ? _scrollController!.offset
+        : null;
+    final moved =
+        offset != null && _lastReadOffset != null && offset != _lastReadOffset;
+    final forward =
+        moved &&
+        offset > _lastReadOffset! &&
+        !_suppressReadMovement &&
+        navigation.positionCause == ReaderPositionCause.user;
+    final readingCause = moved && !_suppressReadMovement
+        ? navigation.positionCause
+        : ReaderPositionCause.remap;
+    _lastReadOffset = offset;
     var imageRef = _imageRefAt(page);
     if (imageRef == null) return;
     if (crossChapter) {
@@ -537,11 +582,36 @@ class ContinuousModeState extends State<ReaderContinuousView>
           _isNavigatingWaterfallLocation) {
         return;
       }
-      _setReaderLocation(imageRef);
+      _setReaderLocation(imageRef, cause: readingCause);
       widget.onUpdate();
     } else if (page != currentPage) {
-      navigation.reportPage(page);
+      navigation.reportPage(page, cause: readingCause);
       widget.onUpdate();
+    }
+    final ranges = <int, (int, int, int)>{};
+    for (final image in visible.where((image) => !image.loading)) {
+      final ref = _imageRefAt(image.index);
+      if (ref == null) continue;
+      final chapter = ref.position.chapter;
+      final number = ref.position.imageNumber;
+      final count = crossChapter
+          ? _segmentOfChapter(chapter)?.images.length ?? 0
+          : images.length;
+      final previous = ranges[chapter];
+      ranges[chapter] = (
+        count,
+        math.min(previous?.$2 ?? number, number),
+        math.max(previous?.$3 ?? number, number),
+      );
+    }
+    for (final entry in ranges.entries) {
+      navigation.reportVisibleImages(
+        entry.key,
+        entry.value.$1,
+        entry.value.$2,
+        entry.value.$3,
+        forward: forward,
+      );
     }
     // Equal-sized short pages can keep the current page away from either edge.
     // Prefetch from the visible range instead of relying on page selection.
@@ -618,6 +688,7 @@ class ContinuousModeState extends State<ReaderContinuousView>
         math.max(0.0, (last.itemTrailingEdge - 1) * position.viewportDimension),
       );
       if (last.itemTrailingEdge <= 1.001) {
+        navigation.reportForwardPastEnd();
         if (crossChapter &&
             acrossChapters &&
             _waterfallFlow.lastChapter! < data.maxChapter) {
@@ -891,6 +962,7 @@ class ContinuousModeState extends State<ReaderContinuousView>
           _scrollController!.removeListener(onScroll);
         }
         _scrollController = scrollController;
+        _lastReadOffset = null;
         _smoothPosition = null;
         _smoothGeneration++;
         _futurePosition = null;
@@ -1056,6 +1128,20 @@ class ContinuousModeState extends State<ReaderContinuousView>
 
     widget = NotificationListener<ScrollNotification>(
       onNotification: (notification) {
+        if (notification is ScrollUpdateNotification &&
+            (notification.scrollDelta ?? 0) > 0 &&
+            notification.metrics.pixels >=
+                notification.metrics.maxScrollExtent &&
+            !_suppressReadMovement &&
+            !isZoomedIn) {
+          navigation.reportForwardPastEnd();
+        }
+        if (notification is OverscrollNotification &&
+            notification.overscroll > 0 &&
+            !_suppressReadMovement &&
+            !isZoomedIn) {
+          navigation.reportForwardPastEnd();
+        }
         if (notification is ScrollStartNotification) {
           delayedSetIsScrolling(true);
         } else if (notification is ScrollEndNotification) {
@@ -1151,6 +1237,8 @@ class ContinuousModeState extends State<ReaderContinuousView>
   Future<void> animateToPage(int page) async {
     if (_disposed || !mounted) return;
     final controller = navigation;
+    _readJumpGeneration++;
+    _suppressReadMovement = navigation.lastNavigationWasJump;
     var index = _waterfallIndexOfChapterPage(currentChapter, page) ?? page;
     if (MediaQuery.disableAnimationsOf(context)) {
       itemScrollController.jumpTo(index: index);
@@ -1164,7 +1252,10 @@ class ContinuousModeState extends State<ReaderContinuousView>
     if (_disposed || !mounted || !identical(navigation, controller)) return;
     // Keep the requested page pending until the final geometry is reported.
     await SchedulerBinding.instance.endOfFrame;
-    if (identical(navigation, controller)) onPositionChanged();
+    if (identical(navigation, controller)) {
+      onPositionChanged();
+      if (_suppressReadMovement) _settleReadJump();
+    }
   }
 
   @override
@@ -1230,6 +1321,9 @@ class ContinuousModeState extends State<ReaderContinuousView>
   @override
   void toPage(int page) {
     if (_disposed || !mounted) return;
+    _readJumpGeneration++;
+    _suppressReadMovement = navigation.lastNavigationWasJump;
+    if (_suppressReadMovement) _settleReadJump();
     var index = _waterfallIndexOfChapterPage(currentChapter, page) ?? page;
     itemScrollController.jumpTo(index: index);
     _futurePosition = null;

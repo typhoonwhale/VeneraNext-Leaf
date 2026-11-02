@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:venera_next/features/reader/reader_controller.dart';
+import 'package:venera_next/features/reader/read_progress_tracker.dart';
 import 'package:venera_next/foundation/image_work.dart';
 import 'package:venera_next/network/request_scope.dart';
 
@@ -48,6 +49,174 @@ void main() {
     );
   });
   tearDown(() => controller.dispose());
+
+  test('jump cause is present before synchronous navigation callback', () {
+    final causes = <ReaderPositionCause>[];
+    controller.dispose();
+    controller = ReaderController(
+      pageCount: () => 20,
+      chapterCount: () => 2,
+      animationEnabled: () => false,
+      viewport: () => view,
+      onChanged: () {},
+      onPageChanged: () {
+        causes.add(controller.takePositionCause());
+      },
+      onError: (_, _) {},
+    );
+    controller.replaceChapterImages(List.filled(20, 'image'));
+    controller.toPage(15, animated: false, jump: true);
+    controller.reportPage(15);
+    controller.reportPage(16);
+    expect(causes, [
+      ReaderPositionCause.jump,
+      ReaderPositionCause.user,
+      ReaderPositionCause.user,
+    ]);
+  });
+
+  test('old animation failure cannot clear the newer jump cause', () async {
+    controller.toPage(10, jump: true);
+    await pumpEventQueue();
+    controller.toPage(300, jump: true);
+    await pumpEventQueue();
+    expect(view.animations, hasLength(2));
+    view.animations.first.completeError(StateError('superseded animation'));
+    await pumpEventQueue();
+    expect(controller.positionCause, ReaderPositionCause.jump);
+    controller.reportPage(300);
+    expect(controller.takePositionCause(), ReaderPositionCause.jump);
+    view.animations.last.complete();
+    await pumpEventQueue();
+  });
+
+  test('rejected navigation cannot poison the next real page change', () {
+    expect(controller.toPage(301, jump: true), isFalse);
+    expect(controller.takePositionCause(), ReaderPositionCause.user);
+    expect(controller.toChapter(4, jump: true), isFalse);
+    expect(controller.takePositionCause(), ReaderPositionCause.user);
+  });
+
+  for (final jump in [false, true]) {
+    test('short chapter completion survives next load failure jump=$jump', () {
+      final tracker = ReaderProgressTracker();
+      var completed = false;
+      controller.dispose();
+      controller = ReaderController(
+        pageCount: () => 1,
+        chapterCount: () => 2,
+        animationEnabled: () => false,
+        viewport: () => view,
+        onChanged: () {},
+        onPageChanged: () {},
+        onError: (_, _) {},
+        onForwardPastEnd: () =>
+            completed |= tracker.forwardPastEnd()?.completed ?? false,
+      )..replaceChapterImages(['image']);
+      tracker.observe(
+        key: '1',
+        ordinal: 1,
+        imageCount: 1,
+        firstImage: 1,
+        lastImage: 1,
+        cause: ReaderPositionCause.user,
+      );
+      expect(controller.toChapter(2, jump: jump), isTrue);
+      final attempt = controller.beginContentLoad();
+      controller.failContentLoad(attempt, StateError('Next chapter failed'));
+      expect(completed, !jump);
+    });
+  }
+
+  test(
+    'backwards and nonadjacent chapter transitions do not report an end',
+    () {
+      var reports = 0;
+      controller.dispose();
+      controller = ReaderController(
+        pageCount: () => 1,
+        chapterCount: () => 3,
+        animationEnabled: () => false,
+        viewport: () => view,
+        onChanged: () {},
+        onPageChanged: () {},
+        onError: (_, _) {},
+        onForwardPastEnd: () => reports++,
+      )..replaceChapterImages(['image']);
+      expect(controller.toChapter(3), isTrue);
+      controller.replaceChapterImages(['third']);
+      expect(controller.toChapter(2), isTrue);
+      expect(reports, 0);
+    },
+  );
+
+  test('end callback disposal prevents a following chapter transition', () {
+    controller.dispose();
+    controller = ReaderController(
+      pageCount: () => 1,
+      chapterCount: () => 2,
+      animationEnabled: () => false,
+      viewport: () => view,
+      onChanged: () {},
+      onPageChanged: () {},
+      onError: (_, _) {},
+      onForwardPastEnd: () => controller.dispose(),
+    )..replaceChapterImages(['image']);
+    expect(controller.toChapter(2), isFalse);
+    expect(controller.state.chapter, 1);
+    expect(view.chapter, isNull);
+  });
+
+  test('jump cause survives chapter transition until new content is ready', () {
+    controller.replaceChapterImages(['old']);
+    expect(controller.contentChapter, 1);
+    controller.toChapter(2, jump: true);
+    expect(controller.state.chapter, 2);
+    expect(controller.contentChapter, 1);
+    expect(controller.positionCause, ReaderPositionCause.jump);
+    final attempt = controller.beginContentLoad();
+    controller.setContentImages(attempt, ['new']);
+    controller.completeContentLoad(attempt);
+    expect(controller.contentChapter, 2);
+    expect(controller.takePositionCause(), ReaderPositionCause.jump);
+  });
+
+  test('remap and cancelled animation do not retain stale jump intent', () {
+    controller.toPage(20, jump: true);
+    controller.resetAnimation();
+    controller.markRemap();
+    expect(controller.takePositionCause(), ReaderPositionCause.remap);
+    expect(controller.takePositionCause(), ReaderPositionCause.user);
+  });
+
+  test(
+    'forward past end excludes loading, empty content and rejected jumps',
+    () {
+      var reports = 0;
+      controller.dispose();
+      controller = ReaderController(
+        pageCount: () => 1,
+        chapterCount: () => 1,
+        animationEnabled: () => false,
+        viewport: () => view,
+        onChanged: () {},
+        onPageChanged: () {},
+        onError: (_, _) {},
+        onForwardPastEnd: () => reports++,
+      );
+      controller.replaceChapterImages([]);
+      controller.toPage(2);
+      expect(reports, 0);
+      controller.replaceChapterImages(['one']);
+      controller.toPage(2, jump: true);
+      expect(reports, 0);
+      controller.toPage(2);
+      expect(reports, 1);
+      controller.beginContentLoad();
+      controller.toPage(2);
+      expect(reports, 1);
+    },
+  );
 
   for (final phase in ['before', 'images', 'mode']) {
     test(

@@ -1,3 +1,4 @@
+import 'package:venera_next/foundation/eink_theme.dart';
 import 'package:venera_next/features/favorites/favorites_scope.dart';
 import 'dart:async';
 
@@ -237,7 +238,7 @@ Future<void> _showFavoriteMetadataDialog({
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const SizedBox(height: 4),
-                      LinearProgressIndicator(
+                      EInkLinearProgressIndicator(
                         value: total == null
                             ? null
                             : total == 0

@@ -185,6 +185,9 @@ class _SearchResultPageState extends State<SearchResultPage> {
           var previousSourceKey = sourceKey;
           await showDialog(
             context: context,
+            animationStyle: MediaQuery.disableAnimationsOf(context)
+                ? AnimationStyle.noAnimation
+                : null,
             useRootNavigator: true,
             builder: (context) {
               return _SearchSettingsDialog(state: this);

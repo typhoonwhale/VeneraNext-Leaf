@@ -274,6 +274,9 @@ class _WebdavSettingState extends State<_WebdavSetting> {
                     onPressed: () {
                       showDialog(
                         context: context,
+                        animationStyle: MediaQuery.disableAnimationsOf(context)
+                            ? AnimationStyle.noAnimation
+                            : null,
                         builder: (_) => AlertDialog(
                           title: Text("Skip Setting Fields".tl),
                           content: Column(

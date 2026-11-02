@@ -83,6 +83,9 @@ class _ReaderModeSettingsState extends SettingsSaveState<ReaderModeSettings> {
     };
     final selected = await showDialog<String>(
       context: context,
+      animationStyle: MediaQuery.disableAnimationsOf(context)
+          ? AnimationStyle.noAnimation
+          : null,
       builder: (context) => SimpleDialog(
         title: Text(title),
         children: options.entries.map((option) {

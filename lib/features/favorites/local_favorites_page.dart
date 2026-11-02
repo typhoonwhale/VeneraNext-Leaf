@@ -535,6 +535,9 @@ class _LocalFavoritesPageState extends State<LocalFavoritesPage> {
                     final request = ++_filterRequest;
                     showDialog(
                       context: context,
+                      animationStyle: MediaQuery.disableAnimationsOf(context)
+                          ? AnimationStyle.noAnimation
+                          : null,
                       builder: (context) {
                         return _LocalFavoritesFilterDialog(
                           initReadFilterSelect: readFilterSelect,

@@ -496,6 +496,12 @@ class ComicListState extends State<ComicList> {
                   String value = '';
                   showDialog(
                     context: appNavigation.rootContext,
+                    animationStyle:
+                        MediaQuery.disableAnimationsOf(
+                          appNavigation.rootContext,
+                        )
+                        ? AnimationStyle.noAnimation
+                        : null,
                     builder: (context) {
                       return ContentDialog(
                         title: "Jump to page".tl,

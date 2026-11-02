@@ -332,6 +332,9 @@ class _DownloadTaskTileState extends State<_DownloadTaskTile> {
   void _showErrorDetails(String message) {
     showDialog<void>(
       context: context,
+      animationStyle: MediaQuery.disableAnimationsOf(context)
+          ? AnimationStyle.noAnimation
+          : null,
       builder: (context) => AlertDialog(
         title: Text('Download error'.tl),
         scrollable: true,

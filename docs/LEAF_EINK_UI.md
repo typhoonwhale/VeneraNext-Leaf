@@ -4,6 +4,10 @@
 
 视觉验收统一开启应用墨水屏模式。Leaf5+ 已留存原尺寸 1264 × 1680 实机截图；后续对照需同时记录实际 DPI、字体缩放与应用显示配置，使用同一尺寸、倍率和方向。设备离线的 Flutter 渲染必须标作布局模拟，并注明使用的字体和缩放，不能记为实机通过。截图不包含墨水屏面板的刷新残影，面板观感仍需实机观察。
 
+## 1.19.1 开发分支增量
+
+章节格子已将“读状态”和“上次读到”分开：黑底仍标示续读位置，白色粗勾/空心圆同时表示已读/看过；粗勾造型保持 14px、2.5px。新增长按和右键手动标记，详见[章节状态说明](LEAF_READ_STATE.md)。下文原机制与行号保留 1.19.0 基线，新章节代码以当前源码为准；已读功能尚未发布；正式 1.19.1 仅含空章节修复。
+
 ## 1. 概述
 
 墨水屏模式是应用内的一个外观开关：黑白高对比主题 + 减少动画。入口在「设置 → 外观 → 墨水屏模式」，**默认开启**（`lib/foundation/application_preferences.dart:95`）。关闭后恢复原有彩色主题和动画，`theme_mode`、`color` 两个已有偏好不被改写。
@@ -317,9 +321,16 @@
 
 ## 8. 已知遗漏与后续方向
 
-- 图片收藏页和缩略图网格的封面未加黑边直角处理（`lib/features/image_favorites/` 下 `AnimatedImage` 使用点，如 `image_favorites_item.dart:231`、`image_favorites_gallery_page.dart:275`）。
-- 约 33 处直接调用的 `showDialog`（`lib/features/**`、`lib/components/js_ui.dart` 等）没有传 `animationStyle`，形状和遮罩走主题，开合时长仍依赖系统 `transition_animation_scale`（5% 缩放后一两帧）。统一做法是仿 `lib/components/message.dart:222` 传 `AnimationStyle.noAnimation`，或抽公共封装。
-- `LinearProgressIndicator`（不确定进度时会循环动画）仍直接使用，如 `lib/features/reader/exit_guard.dart:226`、`lib/features/comic_source/source_repository_page.dart:587`、`lib/components/window_frame.dart:514`，未处理。
+2026-11-02 整合补齐（尚未发布）：
+
+- 图片收藏的条目缩略图和图库网格均使用常态黑边直角，图库底部说明条采用同样的方角；普通模式的圆角和选择行为保持。
+- 32 个直接 `showDialog` 均有减少动画策略（本轮补 29 处），5 个裸 `DialogRoute` 同步补齐；`ResourceDialogRoute` 在构造器统一处理。依据 `MediaQuery.disableAnimationsOf(context)` 选择 `AnimationStyle.noAnimation`，普通模式保留既有转场。
+- 新增与圆形包装对应的 `EInkLinearProgressIndicator`（`lib/foundation/eink_theme.dart`），补齐 10 个未知／混合总量的线性进度调用及 1 个裸圆形进度。未知总量显示静态半条／半环，已知值继续随数据更新；下载、更新、归档等恒确定进度保持原组件。退出保存和桌面关闭遮罩已有 `TickerMode`，未重复修改。
+- `ContentDialog` 在减少动画时直接布局内容，普通模式仍用 200ms `AnimatedSize`。回归曾复现零时长 `AnimatedSize` 在动态标题更新时的布局断言；直接布局避免该问题。
+- 紧凑信息区、以上修正及禁用控件斜线／文字白边仍需 Leaf5+ 实机观感确认。自动行为回归及模拟截图不等同面板验收；所有视觉测试使用墨水屏模式。
+
+仍保留的边界：
+
 - 禁用 Slider 的已填充/未填充分别为黑/白，与启用态同一规则；禁用 Checkbox 选中为黑底白勾，与启用态外观接近，靠旁边文字和所在行的禁用样式区分。
 - 白边副本只对可见子树做 `einkHaloSafe` 检查：自己构建子树的 `StatelessWidget`（如 `FilledButton.icon` 的内部 child）看不到内部，靠副本 ticker 静音兜底；若其内部含进度圈，副本会以静态形式叠在下面。
 - Hero 在路由时长为 0 时按推断没有飞行帧，未实测；多帧动图在 `disableAnimations` 下按 Flutter 行为停在首帧，未实测。
@@ -327,7 +338,7 @@
 - 耗电对照未做，按路线图在同条件下阅读 60 分钟对比。
 - 用户已确认：去掉水波纹后点击反馈足够；描边加粗到 2/3 后不再偏细。若以后觉得过重，可以把 `outlineVariant` 改为深灰 `#404040`（`lib/foundation/eink_theme.dart:277`），或调小 `EInkStyle.strokeWidth`。
 
-## 9. 实机验证记录
+## 9. 第一版实机验证记录（历史）
 
 设备：Leaf5+，测试包版本码 2402 → 2412。
 
@@ -336,7 +347,7 @@
 - 设备系统 `transition_animation_scale` 为 0，关闭墨水屏模式时页面跳转同样只有 2–3 帧。墨水屏模式的价值在于不再依赖系统设置，并停掉系统管不到的循环动画。
 - 关闭开关后原彩色主题完整恢复；重新打开、强制重启后状态保持；覆盖升级后数据保留。
 - 用户实机反馈驱动的调整：标签、刷新按钮、升序/降序选中态的遗漏补齐；加粗描边和字重；封面改直角加黑边；章节格子改黑白；按钮描边和胶囊形统一；侧边面板改直角。
-- 用户反馈已读章节全部黑底太乱，改为“上次读到黑底，其他已读加 ✓”；已读的判定规则仍是上游的“打开即记录”，计划在后续版本单独调整。
+- 用户反馈已读章节全部黑底太乱，改为“上次读到黑底，其他已读加 ✓”；当时的已读判定沿用上游“打开即记录”；本轮已整合新的已读／看过规则，见 [章节状态说明](LEAF_READ_STATE.md)，尚未发布。
 - 字体自带的 ✓ 在设备上偏细，用户在细勾、图标库对勾、2.5px 和 3px 手画勾、黑圆白勾的预览中选定 2.5px 手画粗勾。
 - 禁用控件样式：先后试过灰框灰字，改为黑框 + 45° 斜线 + 黑字描白边（用户在 2/3/4/5/6px 预览中选定 3px）；设备上禁用的“主题模式/主题颜色”下拉框和“下载选中”按钮待实机确认斜线观感（未实机验证）。
 - “阅读/继续”主操作保持黑底白字（`filledButtonTheme`），“下载”等次要按钮为白底描边。

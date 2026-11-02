@@ -6,6 +6,7 @@ import 'package:sqlite3/sqlite3.dart';
 import 'package:venera_next/features/comic_source/source_transaction_journal.dart';
 import 'package:venera_next/features/favorites/favorites.dart';
 import 'package:venera_next/features/history/history.dart';
+import 'package:venera_next/features/history/history_repository.dart';
 import 'package:venera_next/features/sync/app_data_transfer.dart';
 import 'package:venera_next/foundation/app.dart';
 import 'package:venera_next/foundation/appdata.dart';
@@ -56,6 +57,7 @@ void main() {
             page: 7,
             id: 'queued',
             readEpisode: {'1'},
+            viewedEpisode: {'2-3'},
             maxPage: 10,
             maxChapter: 3,
             readDurationMs: 0,
@@ -115,6 +117,11 @@ void main() {
             ]).single['max_chapter'],
             3,
           );
+          final restored = HistoryRepository(
+            exported,
+          ).find('queued', ComicType.local.value)!;
+          expect(restored.readEpisode, {'1'});
+          expect(restored.viewedEpisode, {'2-3'});
           expect(
             exported.select('PRAGMA integrity_check;').single.values.single,
             'ok',

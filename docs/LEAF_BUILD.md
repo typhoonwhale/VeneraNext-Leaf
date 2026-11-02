@@ -1,6 +1,7 @@
 # VeneraNext Leaf Android 构建
 
-本文记录 Leaf Android 包的身份、更新和签名边界，以及可复现的本地构建入口。Leaf 基于 VeneraNext v1.18.1 源码。1.18.2 / 2402 由本机固定签名构建后手动上传 GitHub Release；配置签名 secrets 后，推送 `v*` 标签由 CI 构建并发布。
+核对：2026-10-31。当前正式版为 [Leaf 1.19.1 / Android ARM64](https://github.com/typhoonwhale/VeneraNext-Leaf/releases/tag/v1.19.1)（versionCode 2522），仅含空章节修复，不含“已读/看过”规则；固定签名与包身份沿用，官方 APK 为 23,475,927 字节，SHA-256 `6236a48cd265406ecaa3fee66ceb890d7e836da59d3367d39b589efdb2f54b96`。当前整合分支为 `feature/leaf-1.19.1-integration`，从正式 1.19.1 建立并暂保留 `1.19.1+252` 元数据；它增加未发布功能，不可仅凭相同版本号把本地构建当作官方资产。下次发布需另定版本并递增构建号。旧2512为历史已读功能测试包，不是当前升级包。
+Leaf5+ 已通过 USB `adb install -r` 从 1.19.0 / 2502 覆盖升级，安装 APK 与官方资产哈希一致，数据比对通过。应用内检查与更新提示已显示；下载约 2 分钟到 11% / 2.5 MB 后手动取消，没有报错，因此该版本的应用内下载安装链路未完整验收。真实阅读冒烟已通过；本轮设备导出副本已清理，设备保留正式版 1.19.1 并停在主页；其他版本、分支和验证范围见[当前状态](LEAF_STATUS.md)。
 
 ## Android 身份与隔离
 
@@ -18,7 +19,7 @@ Android 使用保留上游主体、右下方带高对比 `Leaf` 标记的图标�
 
 Android 更新来源默认为 `typhoonwhale/VeneraNext-Leaf`。“关于”页手动检查和更新提示均使用该仓库；“启动时检查更新”沿用原有设置，默认关闭，用户可自行打开。旧备份只能改变该开关，不能将更新来源改回上游。其他平台仍使用 VeneraNext 上游更新渠道。
 
-可通过构建参数 `LEAF_ANDROID_RELEASE_REPOSITORY` 覆盖默认仓库；配置值必须是 `owner/repository`，且不能指向 `CyrilPeng/venera-next`（大小写不敏感）。显式传空值可关闭 Android 应用更新查询。1.18.3开发分支新增应用内下载并调用系统安装器，规则见[应用内更新方案](LEAF_IN_APP_UPDATE_DESIGN.md)。资产需来自所选仓库且包含SHA-256摘要；校验包名、签名、版本及ARM64后才能安装。Debug与Release身份不同，Debug只提供手动发布页入口。已发布1.18.2仍需从发布页手动下载。
+可通过构建参数 `LEAF_ANDROID_RELEASE_REPOSITORY` 覆盖默认仓库；配置值必须是 `owner/repository`，且不能指向 `CyrilPeng/venera-next`（大小写不敏感）。显式传空值可关闭 Android 应用更新查询。1.18.4 起已正式提供应用内下载、验包及系统安装会话，规则见[应用内更新方案](LEAF_IN_APP_UPDATE_DESIGN.md)。资产需来自所选仓库且包含SHA-256摘要；校验包名、签名、版本及ARM64后才能安装。Debug与Release身份不同，Debug只提供手动发布页入口。从 1.18.2 及更早版本升级需先手动覆盖安装；1.18.4 → 1.19.0 应用内升级已有实机记录。
 
 Leaf Release 必须使用一把固定、长期保管并离线备份的自有 keystore。上游 GitHub Secrets 不会提供给 fork，不能拿上游密钥，也不能每次临时生成新密钥。没有有效 `android/key.properties` 和对应 keystore 时，Gradle Release 任务和 GitHub Release 构建都会明确失败；CI 的 Debug 构建不代表可升级发布包。首次生成后不得重新生成或随意轮换 keystore，否则会破坏已安装 Leaf 与后续 APK 的覆盖升级关系。
 
@@ -31,7 +32,7 @@ keyAlias=<key alias>
 keyPassword=<key password>
 ```
 
-若配置 GitHub Actions，仓库维护者需要自行准备 `ANDROID_KEYSTORE`（固定 keystore 文件的 Base64 内容）与 `ANDROID_KEY_PROPERTIES`（上述属性文本）两个 secrets。本次经用户授权已在本机创建固定 Leaf Release 签名，alias 为 leaf-release；主文件保存在上述 Git 忽略路径，并在本机工具目录保留权限受限的同内容副本，尚待用户离线备份。证书 SHA-256 为 ddf1ca6f03578cd9b41470670cd3a21637772ea9e3ceab4f6d9ea9c0e8d5e909。CI 发布需把这两个值配置为仓库 secrets（见“Leaf 正式发布”）；Debug 仍使用 Android 自动生成的测试签名。
+GitHub Actions 发布使用已配置的 `ANDROID_KEYSTORE`（固定 keystore 文件的 Base64 内容）与 `ANDROID_KEY_PROPERTIES`（上述属性文本）两个 secrets。早期已在本机创建固定 Leaf Release 签名，alias 为 leaf-release；主文件保存在上述 Git 忽略路径，并在本机工具目录保留权限受限的同内容副本，尚待用户离线备份。证书 SHA-256 为 ddf1ca6f03578cd9b41470670cd3a21637772ea9e3ceab4f6d9ea9c0e8d5e909。仓库已配置这两个 secrets，后续维护时必须保留同一签名（见“Leaf 正式发布”）；Debug 仍使用 Android 自动生成的测试签名。
 
 ## 构建环境
 
@@ -86,6 +87,10 @@ apksigner verify --print-certs build/app/outputs/apk/release/VeneraNext-Leaf-*-a
 
 升级时 applicationId、keystore、key alias 和签名证书必须与前一版一致，且 `versionCode` 必须增加。发布前应由维护者对照上一版记录的证书 SHA-256 指纹；仅仅成功生成 APK 不足以证明它可覆盖升级。
 
+## 本分支本地构建（2026-10-30）
+
+已按下方固定签名流程生成 `1.19.1+251` ARM64 Release 测试包，versionCode `2512`。这是已读/看过功能分支的旧测试构建，不是本次 `1.19.1+252 / 2522` 空章节修复版；包名、签名证书、内置版本、单一 ARM64 ABI 与 ZIP 完整性已核验，尚未安装或发布。构建期间 Kotlin daemon 无法写入沙箱外标记文件，编译器回退后构建成功，未因此改变源码或签名配置。
+
 ## 验证入口
 
 Leaf 身份和签名配置静态检查：
@@ -119,7 +124,7 @@ Leaf仅维护Android ARM64产物；工作流职责见下表。正式发布流程
 4. CI 自动校验标签与元数据、质量检查、固定签名构建，用 `apksigner` 核对证书 SHA-256 为 `ddf1ca6f03578cd9b41470670cd3a21637772ea9e3ceab4f6d9ea9c0e8d5e909`，核对 `SHA256SUMS.txt` 后创建 Release 并上传 APK 与摘要；`-rc` 等含 `-` 的标签发布为预发布。
 5. 正式版发布成功后，CI 自动删除同版本（`v<version>-*`）的预发布 Release 及其标签，包括只有标签没有 Release 的情况；不会触碰正式版或其他版本，清理失败只告警，不影响已发布的正式版。预发布发布时不清理。
 
-首次使用前，在仓库 Settings → Secrets and variables → Actions 中配置：
+仓库已配置下列发布 secrets；仅在迁移到新仓库时需要配置：
 
 - `ANDROID_KEYSTORE`：固定 keystore 文件的 Base64 内容。
 - `ANDROID_KEY_PROPERTIES`：`android/key.properties` 的原文。

@@ -35,6 +35,9 @@ Future<bool?> showSourceActionDialog({
   late final DialogRoute<bool> route;
   route = DialogRoute<bool>(
     context: context,
+    animationStyle: MediaQuery.disableAnimationsOf(context)
+        ? AnimationStyle.noAnimation
+        : null,
     builder: (context) => DialogResourceScope(
       onDispose: () => complete(null),
       child: builder(context, (value) {

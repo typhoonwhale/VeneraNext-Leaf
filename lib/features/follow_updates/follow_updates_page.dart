@@ -517,6 +517,9 @@ class _FollowUpdatesPageState extends State<FollowUpdatesPage> {
     final runtime = _runtime!;
     final route = DialogRoute<void>(
       context: context,
+      animationStyle: MediaQuery.disableAnimationsOf(context)
+          ? AnimationStyle.noAnimation
+          : null,
       builder: (_) => FollowUpdatesFolderDialog(
         runtime: runtime,
         createCheck: widget.createCheck,

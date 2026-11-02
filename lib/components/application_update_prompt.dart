@@ -179,6 +179,9 @@ class ApplicationUpdatePrompt {
       if (!context.mounted || !_active) return;
       final dialog = DialogRoute<void>(
         context: context,
+        animationStyle: MediaQuery.disableAnimationsOf(context)
+            ? AnimationStyle.noAnimation
+            : null,
         builder: (context) => AlertDialog(
           title: Text('New version available'.tl),
           content: Text(
@@ -269,6 +272,9 @@ class ApplicationUpdatePrompt {
     final candidate = release;
     final dialog = DialogRoute<void>(
       context: context,
+      animationStyle: MediaQuery.disableAnimationsOf(context)
+          ? AnimationStyle.noAnimation
+          : null,
       barrierDismissible: false,
       builder: (context) => ApplicationUpdateDialog(
         download: controller,

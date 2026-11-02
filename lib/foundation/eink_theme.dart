@@ -53,6 +53,27 @@ class EInkProgressIndicator extends StatelessWidget {
   }
 }
 
+/// Linear counterpart to [EInkProgressIndicator]. Known progress is preserved.
+class EInkLinearProgressIndicator extends StatelessWidget {
+  const EInkLinearProgressIndicator({
+    super.key,
+    this.value,
+    this.backgroundColor,
+    this.semanticsLabel,
+  });
+
+  final double? value;
+  final Color? backgroundColor;
+  final String? semanticsLabel;
+
+  @override
+  Widget build(BuildContext context) => LinearProgressIndicator(
+    value: value ?? (MediaQuery.disableAnimationsOf(context) ? 0.5 : null),
+    backgroundColor: backgroundColor,
+    semanticsLabel: semanticsLabel,
+  );
+}
+
 /// Sets [MediaQueryData.disableAnimations] below it while [enabled]. The
 /// wrapper is always in the tree, so flipping [enabled] keeps the state of
 /// everything underneath; only this widget depends on the MediaQuery.

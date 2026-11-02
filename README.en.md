@@ -1,16 +1,14 @@
 ## This fork: BOOX Leaf5+ adaptation
 
-**Leaf (VeneraNext-Leaf) adapts VeneraNext for daily comic reading on the BOOX Leaf5+.** Priorities are a compact information footer that does not cover comic pages, readable E-Ink presentation (an E-Ink mode with a black-and-white interface and reduced motion, on by default and switchable under Settings → Appearance), gesture navigation without an artificial bottom gap, and data-preserving updates using a stable Android package ID and signing key.
+**Leaf (VeneraNext-Leaf) adapts [VeneraNext](https://github.com/CyrilPeng/Venera-Next) for daily comic reading on the BOOX Leaf5+.** It uses a compact information footer, a stable Android package ID and signing key, and preserves the upstream comic-source and data-import interfaces.
 
-Start with the [Leaf development plan](docs/LEAF_DEVELOPMENT_PLAN.md), [research and agent handoff index](docs/research/README.md), and [Android build guide](docs/LEAF_BUILD.md) (maintained in Chinese). Record future device investigations in `docs/research/`, distinguishing official documentation, user reports, code observations, and unverified assumptions.
+**Latest Leaf release: [1.19.1 / Android ARM64](https://github.com/typhoonwhale/VeneraNext-Leaf/releases/tag/v1.19.1)** (versionCode 2522). This release contains only the empty-chapter fix, not the read/unread feature. It retains in-app updates introduced in 1.18.4 and the black-and-white E-Ink mode with reduced motion released in 1.19.0. Existing signed Leaf releases can be updated in place; 1.18.2 and earlier require a manual installation first.
 
-The footer uses a 1 logical-pixel divider, a fixed 2-pixel gap, natural text height, and adjustable bottom spacing (0–15, default 4), plus actual system safe-area insets. Font size (9–13, default 11) changes only the text region. See the [layout record and renders](docs/research/2026-10-26-footer-spacing.md).
+The released footer uses a 1 logical-pixel divider, a fixed 2-pixel gap, natural text height, and adjustable bottom spacing (0–15, default 4), plus actual system insets. Font size is 9–13 (default 11). Historical device records confirm portrait reading and the 1.18.4 → 1.19.0 in-app upgrade with data retained; power consumption and hardware refresh remain unverified.
+
+**Current integration:** `feature/leaf-1.19.1-integration` starts from the released 1.19.1 (`c61937a`) and combines read/viewed chapter state, compact comic information, and remaining E-Ink thumbnail/dialog/loading fixes. These changes are not released; version metadata remains at the `1.19.1+252` baseline pending a future release. The old `2512` feature test APK is not the current upgrade package. See [current status](docs/LEAF_STATUS.md), the [development plan](docs/LEAF_DEVELOPMENT_PLAN.md), [build guide](docs/LEAF_BUILD.md), and [research index](docs/research/README.md).
 
 The VeneraNext badges, screenshots, platform descriptions and download links below are retained upstream references; they do not describe Leaf release availability or device validation status.
-
-**Download Leaf: [1.19.0 / Android ARM64](https://github.com/typhoonwhale/VeneraNext-Leaf/releases/tag/v1.19.0).** Existing Leaf Release builds with the same signing key can be updated in place. Starting with 1.18.4, Leaf downloads and installs new versions in the app; upgrading from 1.18.2 or earlier requires one manual install.
-
-In-app updates download and verify the package, then hand it to Android for installation confirmation. See the [design](docs/LEAF_IN_APP_UPDATE_DESIGN.md) and [validation record](docs/LEAF_IN_APP_UPDATE_VALIDATION.md).
 
 ---
 

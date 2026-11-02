@@ -21,6 +21,7 @@ History historyItem(String id) => History(
   subtitle: 'Author',
   cover: 'cover',
   readEpisode: {'2'},
+  viewedEpisode: {'2-2'},
   readDurationMs: 0,
 );
 ImageFavoritesComic imageItem(String id) => ImageFavoritesComic(
@@ -85,8 +86,10 @@ void main() {
       attached.addReadDuration(historyItem('duration-new'), 20);
       expect(attached.find('same', 1)!.title, 'Imported');
       expect(attached.find('same', 1)!.page, 9);
+      expect(attached.find('same', 1)!.viewedEpisode, {'2-2'});
       expect(attached.find('same', 1)!.maxChapter, 7);
       expect(attached.find('duration-new', 1)!.maxChapter, 5);
+      expect(attached.find('duration-new', 1)!.viewedEpisode, {'2-2'});
       expect(attached.getTotalReadDurationMs(), 70);
       expect(attached.countWithReadDuration(), 2);
       expect(attached.getAllByReadDuration().map((item) => item.id), [
@@ -119,7 +122,12 @@ void main() {
         db
             .select('PRAGMA $quoted.table_info(history);')
             .map((row) => row['name']),
-        containsAll(['chapter_group', 'max_chapter', 'read_duration_ms']),
+        containsAll([
+          'chapter_group',
+          'max_chapter',
+          'read_duration_ms',
+          'viewedEpisode',
+        ]),
       );
     },
   );

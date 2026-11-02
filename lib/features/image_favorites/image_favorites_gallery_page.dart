@@ -248,10 +248,11 @@ class _ImageFavoritesGalleryPageState extends State<ImageFavoritesGalleryPage> {
             goPhotoView(image);
           }
         },
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: context.einkCoverRadius(BorderRadius.circular(8)),
         child: Container(
+          foregroundDecoration: BoxDecoration(border: context.einkBorder()),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: context.einkCoverRadius(BorderRadius.circular(8)),
             border: isSelected
                 ? Border.all(
                     color: Theme.of(context).colorScheme.primary,
@@ -267,7 +268,9 @@ class _ImageFavoritesGalleryPageState extends State<ImageFavoritesGalleryPage> {
             children: [
               Container(
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: context.einkCoverRadius(
+                    BorderRadius.circular(8),
+                  ),
                   color: Theme.of(context).colorScheme.secondaryContainer,
                 ),
                 clipBehavior: Clip.antiAlias,
@@ -312,9 +315,11 @@ class _ImageFavoritesGalleryPageState extends State<ImageFavoritesGalleryPage> {
                 bottom: 0,
                 child: Container(
                   decoration: BoxDecoration(
-                    borderRadius: const BorderRadius.only(
-                      bottomLeft: Radius.circular(8),
-                      bottomRight: Radius.circular(8),
+                    borderRadius: context.einkCoverRadius(
+                      const BorderRadius.only(
+                        bottomLeft: Radius.circular(8),
+                        bottomRight: Radius.circular(8),
+                      ),
                     ),
                     color: context.isEInk
                         ? Theme.of(context).colorScheme.surface

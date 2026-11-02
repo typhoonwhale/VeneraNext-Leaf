@@ -1,3 +1,4 @@
+import 'package:venera_next/foundation/eink_theme.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:venera_next/components/button.dart';
@@ -203,7 +204,7 @@ class _NetworkFavoriteImportDialogState
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            LinearProgressIndicator(
+            EInkLinearProgressIndicator(
               value: committed != null
                   ? 1
                   : error != null || cancelled

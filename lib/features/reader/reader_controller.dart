@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'read_progress_tracker.dart';
 
 import 'package:dio/dio.dart' show CancelToken, DioException;
 import 'package:venera_next/network/request_scope.dart';
@@ -35,7 +36,8 @@ class ReaderContentState {
 
 /// Handle for one content load; only its owner may commit its result.
 class ReaderContentLoad {
-  ReaderContentLoad._();
+  ReaderContentLoad._(this.chapter);
+  final int chapter;
   final scope = RequestScope();
   bool _started = false;
   bool _finished = false;
@@ -58,6 +60,8 @@ class ReaderController {
     required this.onChanged,
     required this.onPageChanged,
     required this.onError,
+    this.onForwardPastEnd,
+    this.onVisibleImages,
   });
 
   final int Function() pageCount;
@@ -67,6 +71,46 @@ class ReaderController {
   final void Function() onChanged;
   final void Function() onPageChanged;
   final void Function(Object, StackTrace) onError;
+  final void Function()? onForwardPastEnd;
+  final void Function(
+    int chapter,
+    int count,
+    int first,
+    int last,
+    bool forward,
+  )?
+  onVisibleImages;
+  int? contentChapter;
+  ReaderPositionCause _positionCause = ReaderPositionCause.user;
+  ReaderPositionCause get positionCause => _positionCause;
+  bool lastNavigationWasJump = false;
+  ReaderPositionCause takePositionCause() {
+    final cause = _positionCause;
+    _positionCause = ReaderPositionCause.user;
+    return cause;
+  }
+
+  void markRemap() => _positionCause = ReaderPositionCause.remap;
+  void reportForwardPastEnd() {
+    if (!_disposed &&
+        !content.isLoading &&
+        contentChapter == _chapter &&
+        content.images?.isNotEmpty == true) {
+      onForwardPastEnd?.call();
+    }
+  }
+
+  void reportVisibleImages(
+    int chapter,
+    int count,
+    int first,
+    int last, {
+    required bool forward,
+  }) {
+    if (!_disposed && !content.isLoading) {
+      onVisibleImages?.call(chapter, count, first, last, forward);
+    }
+  }
 
   ReaderContentState _content = const ReaderContentState();
   ReaderContentState get content => _content;
@@ -75,7 +119,7 @@ class ReaderController {
   ReaderContentLoad beginContentLoad() {
     if (_disposed) throw StateError('ReaderController is disposed');
     _cancelContentLoad();
-    final attempt = _contentLoad = ReaderContentLoad._();
+    final attempt = _contentLoad = ReaderContentLoad._(_chapter);
     _content = ReaderContentState(images: _content.images, isLoading: true);
     return attempt;
   }
@@ -158,6 +202,7 @@ class ReaderController {
     attempt._finished = true;
     attempt.scope.dispose();
     _content = ReaderContentState(images: _content.images);
+    contentChapter = attempt.chapter;
     return true;
   }
 
@@ -165,6 +210,7 @@ class ReaderController {
     if (!_accepts(attempt)) return false;
     attempt._finished = true;
     attempt.scope.dispose();
+    _positionCause = ReaderPositionCause.user;
     _content = ReaderContentState(
       images: _content.images,
       error: error.toString(),
@@ -173,7 +219,10 @@ class ReaderController {
   }
 
   void cancelContentLoad(ReaderContentLoad attempt) {
-    if (identical(_contentLoad, attempt)) _cancelContentLoad();
+    if (identical(_contentLoad, attempt)) {
+      _cancelContentLoad();
+      _positionCause = ReaderPositionCause.user;
+    }
   }
 
   void _cancelContentLoad() {
@@ -193,6 +242,7 @@ class ReaderController {
     if (_disposed) return;
     _cancelContentLoad();
     _content = ReaderContentState(images: List.unmodifiable(images));
+    contentChapter = _chapter;
   }
 
   int _page = 1;
@@ -240,27 +290,37 @@ class ReaderController {
   }
 
   /// Viewport callbacks from a superseded animation cannot change the target.
-  void reportPage(int page) {
+  void reportPage(int page, {ReaderPositionCause? cause}) {
     if (_pendingPage != null && page != _pendingPage) return;
+    if (cause != null && _positionCause == ReaderPositionCause.user) {
+      _positionCause = cause;
+    }
     setPage(page);
   }
 
   void resetAnimation() {
     _generation++;
+    lastNavigationWasJump = false;
+    _positionCause = ReaderPositionCause.user;
     _pendingPage = null;
     _snapshot = null;
   }
 
-  bool toPage(int page, {bool animated = true}) {
+  bool toPage(int page, {bool animated = true, bool jump = false}) {
     if (_disposed) return false;
     final view = viewport();
     if (view == null || content.isLoading) return false;
     final count = pageCount();
-    if (page < 1 || page > count) return false;
+    if (page < 1 || page > count) {
+      if (!jump && page == count + 1 && _page == count) reportForwardPastEnd();
+      return false;
+    }
     if (page == _page && page != 1 && page != count && _pendingPage == null) {
       return false;
     }
     resetAnimation();
+    lastNavigationWasJump = jump;
+    _positionCause = jump ? ReaderPositionCause.jump : ReaderPositionCause.user;
     if (animated && animationEnabled()) {
       _pendingPage = page;
       _snapshot = null;
@@ -279,6 +339,9 @@ class ReaderController {
           (_) => finish(),
           onError: (Object error, StackTrace stack) {
             if (!_disposed) onError(error, stack);
+            if (!_disposed && generation == _generation) {
+              _positionCause = ReaderPositionCause.user;
+            }
             finish();
           },
         ),
@@ -292,13 +355,20 @@ class ReaderController {
     return true;
   }
 
-  bool toChapter(int chapter, {bool toLastPage = false}) {
+  bool toChapter(int chapter, {bool toLastPage = false, bool jump = false}) {
     if (_disposed ||
         content.isLoading ||
         chapter < 1 ||
         chapter > chapterCount()) {
       return false;
     }
+    if (!jump && chapter == _chapter + 1) {
+      reportForwardPastEnd();
+      if (_disposed) return false;
+    }
+    resetAnimation();
+    lastNavigationWasJump = jump;
+    _positionCause = jump ? ReaderPositionCause.jump : ReaderPositionCause.user;
     if (viewport()?.toChapter(chapter, toLastPage: toLastPage) ?? false) {
       return true;
     }

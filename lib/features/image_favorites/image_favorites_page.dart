@@ -1,3 +1,4 @@
+import 'package:venera_next/foundation/eink_theme.dart';
 import 'package:venera_next/features/history/history_scope.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -338,7 +339,7 @@ class _ImageFavoritesPageState extends State<ImageFavoritesPage> {
             ),
           ),
         if (_loading || _deleting)
-          const SliverToBoxAdapter(child: LinearProgressIndicator()),
+          const SliverToBoxAdapter(child: EInkLinearProgressIndicator()),
         if (_loadError != null)
           SliverToBoxAdapter(
             child: TextButton.icon(
@@ -394,6 +395,9 @@ class _ImageFavoritesPageState extends State<ImageFavoritesPage> {
   void sort() {
     showDialog(
       context: context,
+      animationStyle: MediaQuery.disableAnimationsOf(context)
+          ? AnimationStyle.noAnimation
+          : null,
       builder: (context) {
         return _ImageFavoritesDialog(
           initSortType: sortType,
