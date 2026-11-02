@@ -6,7 +6,7 @@
 
 正式版底栏为**横线 1 + 固定间隔 2 + 自然文字高度 + 底部留白 0–15（默认 4）**，字号 **9–13（默认 11）**；真实系统安全区另计，不伪造手势导航留白。历史实机记录确认竖屏日常阅读、数据导入及 1.18.4 → 1.19.0 应用内升级正常、数据保留；硬件刷新和耗电对照仍待实测。数值单位为 Flutter 逻辑像素。
 
-**本轮整合：**从正式 1.19.1（`c61937a`）建立 `feature/leaf-1.19.1-integration`，合入章节已读／看过、紧凑信息区，并补齐墨水屏缩略图、对话框与加载动画遗漏；完整验证通过后一次性合入 main。新功能尚未发布，版本元数据暂保留基线 `1.19.1+252`；旧 `2512` 功能测试包不是当前升级包。开发先读[当前状态](docs/LEAF_STATUS.md)、[开发方案](docs/LEAF_DEVELOPMENT_PLAN.md)、[构建说明](docs/LEAF_BUILD.md)和[调研索引](docs/research/README.md)。
+**主线进度（2026-11-02）：**章节已读／看过、紧凑信息区和墨水屏缩略图／对话框／加载动画补齐，已通过 [PR #6](https://github.com/typhoonwhale/VeneraNext-Leaf/pull/6) 合入 main（`2008382`）。8 项 PR 检查成功，完整 Linux Flutter 为 5627 通过、151 跳过；[验证结果与墨水屏模拟截图](docs/research/2026-11-02-integration-validation.md)已记录。新功能尚未发布或安装到 Leaf5+，版本元数据暂保留基线 `1.19.1+252`；旧 `2512` 功能测试包不是当前升级包。开发先读[当前状态](docs/LEAF_STATUS.md)、[剩余待办](docs/LEAF_DEVELOPMENT_PLAN.md#7-待办与验证)、[构建说明](docs/LEAF_BUILD.md)和[调研索引](docs/research/README.md)。
 
 > 下方 VeneraNext 介绍、徽章、截图和各平台下载链接属于上游项目；Leaf 当前只交付 Android ARM64。
 

@@ -1,0 +1,143 @@
+{
+  "testedCommit": "2e1a56c4717972bf74a75ad30d650dcc14e02191",
+  "mergedCommit": "20083825f81be60c41ab91a6da38471e46857061",
+  "codeTree": "d670c8094e04d914c4e7caf9c5daf71fbeded0c3",
+  "physicalReference": [
+    1264,
+    1680
+  ],
+  "assumedDpr": 2.25,
+  "normalTextScale": 1,
+  "extraCases": {
+    "info-narrow.png": {
+      "widthDp": 280
+    },
+    "info-long-tags.png": {
+      "widthDp": 280
+    },
+    "info-large-font.png": {
+      "textScale": 2
+    }
+  },
+  "font": "STHeiti Light (local substitute; not the device font)",
+  "einkMode": true,
+  "reducedMotion": true,
+  "capture": "Flutter production widgets / exact production buildInfo excerpt, with in-memory sample data; not APK or device capture",
+  "reusedInformationImages": 7,
+  "newWidgetImages": 9,
+  "newWidgetTestsPassed": 3,
+  "files": [
+    {
+      "file": "info-after.png",
+      "group": "information",
+      "width": 1264,
+      "height": 207,
+      "sha256": "b94fb104780b8fea6fb417c49e5799075c105c70bb0d901ed9f3668996abc68d"
+    },
+    {
+      "file": "info-all-metadata.png",
+      "group": "information",
+      "width": 1264,
+      "height": 342,
+      "sha256": "5fe36d643847191da4629bbdae69718ea4a3ba0529b20805fa747f5da4d169b7"
+    },
+    {
+      "file": "info-before.png",
+      "group": "information",
+      "width": 1264,
+      "height": 387,
+      "sha256": "b08e37cf967285d4571ccd086db2ebb32e8e12c7ca9b9d3be6a821bc916e529c"
+    },
+    {
+      "file": "info-large-font.png",
+      "group": "information",
+      "width": 1264,
+      "height": 414,
+      "sha256": "20330698f60b2c08f982fe4e7897f656f36ffe0d367e3ad8b8d6da86a5a49ad0"
+    },
+    {
+      "file": "info-long-tags.png",
+      "group": "information",
+      "width": 630,
+      "height": 392,
+      "sha256": "f9f138f3804d1d0a8ce73fd51882258200e6677aa8d88b9da242ae2b726c336e"
+    },
+    {
+      "file": "info-narrow.png",
+      "group": "information",
+      "width": 630,
+      "height": 270,
+      "sha256": "dad5b1a87d98892f345d93d69705d564fdc18cbd2a7006b01d3a54b3ece7200d"
+    },
+    {
+      "file": "info-update-only.png",
+      "group": "information",
+      "width": 1264,
+      "height": 189,
+      "sha256": "02916f522e4e8e9f67f4ac9aefca36937144df8326a49d14bc5789b70b3253f3"
+    },
+    {
+      "file": "chapters-after-manual-read.png",
+      "group": "widgets",
+      "width": 1264,
+      "height": 576,
+      "sha256": "7144b4b9777a6b9cabd9fe182d3f1201d2363b01b0457d388bc674745e343d8d"
+    },
+    {
+      "file": "chapters-menu-full.png",
+      "group": "widgets",
+      "width": 1264,
+      "height": 1680,
+      "sha256": "dd09b49eb8f3106f29234cac521e56c3bbd1ae7e62363b244883f58b058b0777"
+    },
+    {
+      "file": "chapters-states-full.png",
+      "group": "widgets",
+      "width": 1264,
+      "height": 1680,
+      "sha256": "8d89df51d180c49f85afd64a625eafa70b1768114d5215a6d04116ef34d3a01a"
+    },
+    {
+      "file": "chapters-states.png",
+      "group": "widgets",
+      "width": 1264,
+      "height": 576,
+      "sha256": "1a6503bec59b68faa569dae914ecd00fdcf1fe2a282c98e63683acfd2a8d59ee"
+    },
+    {
+      "file": "favorite-gallery-full.png",
+      "group": "widgets",
+      "width": 1264,
+      "height": 1680,
+      "sha256": "9a54a6c4c45d2c5dc17ab4c573db4d8e1d87f90cc6e0c0952f2c4be15ff03efd"
+    },
+    {
+      "file": "favorite-gallery-selected-full.png",
+      "group": "widgets",
+      "width": 1264,
+      "height": 1680,
+      "sha256": "b3e51bc52e80fcd529744d84c6aaf49aaaf13280db2866c5d7bc716e4a2b02e1"
+    },
+    {
+      "file": "favorite-item.png",
+      "group": "widgets",
+      "width": 1264,
+      "height": 566,
+      "sha256": "567703fce269e3e0b582ce6b606907d615020713f9b16f9c8a42ce53e3b94232"
+    },
+    {
+      "file": "loading-progress-80-full.png",
+      "group": "widgets",
+      "width": 1264,
+      "height": 1680,
+      "sha256": "7e51ecf979d57f794053b1d06cd2a84628aff0c5c906669d5e1d7f8981348aae"
+    },
+    {
+      "file": "loading-unknown-full.png",
+      "group": "widgets",
+      "width": 1264,
+      "height": 1680,
+      "sha256": "d4940bc180bf273c242bce0eaeb0429885d47813d6c8b78e0673723780078223"
+    }
+  ]
+}
