@@ -930,7 +930,10 @@ class _Controller extends Fake implements ReaderImageViewController {
   bool toChapter(int chapter, {bool toLastPage = false}) => false;
 }
 
-class _History extends Fake implements History {}
+class _History extends Fake implements History {
+  @override
+  int get page => 0;
+}
 
 class _Favorites extends ChangeNotifier implements LocalFavoritesManager {
   @override

@@ -1,3 +1,4 @@
+import 'package:venera_next/foundation/eink_theme.dart';
 import 'dart:async';
 import 'source_failure.dart';
 import 'package:venera_next/components/settings_save_state.dart';
@@ -487,7 +488,8 @@ class _SourceImportDialogState extends SettingsSaveState<SourceImportDialog> {
                         ),
                       ),
                     ),
-                  if (_busy || savingSettings) const LinearProgressIndicator(),
+                  if (_busy || savingSettings)
+                    const EInkLinearProgressIndicator(),
                 ],
               ),
             ),

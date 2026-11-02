@@ -40,6 +40,9 @@ class _KeywordBlockingSettingsState
     final target = _target;
     showDialog<void>(
       context: context,
+      animationStyle: MediaQuery.disableAnimationsOf(context)
+          ? AnimationStyle.noAnimation
+          : null,
       builder: (_) => _AddKeywordDialog(target: target),
     );
   }

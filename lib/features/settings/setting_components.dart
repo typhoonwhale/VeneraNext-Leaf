@@ -371,6 +371,9 @@ class _DoubleLineSelectSettingsState
               onPressed: () {
                 showDialog(
                   context: context,
+                  animationStyle: MediaQuery.disableAnimationsOf(context)
+                      ? AnimationStyle.noAnimation
+                      : null,
                   builder: (context) {
                     return ContentDialog(
                       title: "Help".tl,
@@ -540,6 +543,9 @@ class _EndSelectorSelectSettingState
                 onPressed: () {
                   showDialog(
                     context: context,
+                    animationStyle: MediaQuery.disableAnimationsOf(context)
+                        ? AnimationStyle.noAnimation
+                        : null,
                     builder: (context) {
                       return ContentDialog(
                         title: "Help".tl,
@@ -870,6 +876,9 @@ class _MultiPagesFilterState
     var selected = <String>[];
     showDialog(
       context: context,
+      animationStyle: MediaQuery.disableAnimationsOf(context)
+          ? AnimationStyle.noAnimation
+          : null,
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setState) {

@@ -1,3 +1,4 @@
+import 'package:venera_next/foundation/eink_theme.dart';
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -45,6 +46,9 @@ Future<void> showPdfImportTasksDialog({
   final manager = tasks ?? PdfImportTasks.instance;
   return showDialog<void>(
     context: context,
+    animationStyle: MediaQuery.disableAnimationsOf(context)
+        ? AnimationStyle.noAnimation
+        : null,
     builder: (context) => ListenableBuilder(
       listenable: manager,
       builder: (context, _) => ContentDialog(
@@ -121,6 +125,9 @@ Future<PdfImportBatchResult?> showPdfImportDialog({
   final navigator = Navigator.of(context, rootNavigator: true);
   final route = DialogRoute<void>(
     context: context,
+    animationStyle: MediaQuery.disableAnimationsOf(context)
+        ? AnimationStyle.noAnimation
+        : null,
     builder: (context) => DialogResourceScope(
       onDispose: () {
         if (!disposed.isCompleted) disposed.complete();
@@ -229,7 +236,7 @@ class PdfImportDialog extends StatelessWidget {
 
   Widget _buildProgress() {
     final progress = task.progress;
-    if (progress == null) return const LinearProgressIndicator();
+    if (progress == null) return const EInkLinearProgressIndicator();
     final pageCount = progress.pageCount;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -262,7 +269,7 @@ class PdfImportDialog extends StatelessWidget {
                 }),
         ),
         const SizedBox(height: 8),
-        LinearProgressIndicator(
+        EInkLinearProgressIndicator(
           value: pageCount == null || pageCount == 0
               ? null
               : progress.currentPage / pageCount,

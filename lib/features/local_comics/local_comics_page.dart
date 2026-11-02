@@ -1,3 +1,4 @@
+import 'package:venera_next/foundation/eink_theme.dart';
 import 'import_export/comic_export_service.dart';
 import 'package:venera_next/components/window_selection_task.dart';
 import 'package:venera_next/foundation/selection_operation.dart';
@@ -95,6 +96,9 @@ class _LocalComicsPageState extends State<LocalComicsPage> {
   void sort() {
     showDialog(
       context: context,
+      animationStyle: MediaQuery.disableAnimationsOf(context)
+          ? AnimationStyle.noAnimation
+          : null,
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setState) {
@@ -511,6 +515,9 @@ class _LocalComicsPageState extends State<LocalComicsPage> {
     LocalComicBatchDeleteResult? deleted;
     await showDialog(
       context: appNavigation.rootContext,
+      animationStyle: MediaQuery.disableAnimationsOf(appNavigation.rootContext)
+          ? AnimationStyle.noAnimation
+          : null,
       builder: (context) {
         bool removeFavoriteAndHistory = true;
         // Only moving the folders aside and committing the records is
@@ -564,7 +571,7 @@ class _LocalComicsPageState extends State<LocalComicsPage> {
                       ListTile(
                         leading: const SizedBox.square(
                           dimension: 24,
-                          child: CircularProgressIndicator(strokeWidth: 2),
+                          child: EInkProgressIndicator(strokeWidth: 2),
                         ),
                         title: Text("Deleting...".tl),
                       )

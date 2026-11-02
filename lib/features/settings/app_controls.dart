@@ -122,6 +122,9 @@ class CacheLimitSetting extends StatelessWidget {
       actionTitle: 'Set'.tl,
       callback: () => showDialog<void>(
         context: context,
+        animationStyle: MediaQuery.disableAnimationsOf(context)
+            ? AnimationStyle.noAnimation
+            : null,
         builder: (_) => const _CacheLimitDialog(),
       ),
     ),

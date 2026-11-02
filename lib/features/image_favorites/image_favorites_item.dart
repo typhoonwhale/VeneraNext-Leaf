@@ -1,3 +1,4 @@
+import 'package:venera_next/foundation/eink_theme.dart';
 import 'package:venera_next/features/history/image_favorites.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -206,12 +207,12 @@ class _ImageFavoritesItemState extends State<ImageFavoritesItem>
       onLongPress: () {
         goPhotoView(image);
       },
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: context.einkCoverRadius(BorderRadius.circular(8)),
       child: Container(
         width: 98,
         height: 128,
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: context.einkCoverRadius(BorderRadius.circular(8)),
           color: isSelected
               ? Theme.of(context).colorScheme.primaryContainer
               : null,
@@ -221,8 +222,9 @@ class _ImageFavoritesItemState extends State<ImageFavoritesItem>
           children: [
             Container(
               height: 128,
+              foregroundDecoration: BoxDecoration(border: context.einkBorder()),
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: context.einkCoverRadius(BorderRadius.circular(8)),
                 color: Theme.of(context).colorScheme.secondaryContainer,
               ),
               clipBehavior: Clip.antiAlias,

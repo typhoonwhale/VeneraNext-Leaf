@@ -72,6 +72,9 @@ class _SourceScriptEditorState extends State<SourceScriptEditor> {
     confirmingExit = true;
     final discard = await showDialog<bool>(
       context: context,
+      animationStyle: MediaQuery.disableAnimationsOf(context)
+          ? AnimationStyle.noAnimation
+          : null,
       builder: (context) => AlertDialog(
         title: Text('Discard unsaved changes?'.tl),
         actions: [

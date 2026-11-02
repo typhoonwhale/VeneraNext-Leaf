@@ -1,3 +1,4 @@
+import 'package:venera_next/foundation/eink_theme.dart';
 import 'package:venera_next/features/favorites/favorites_scope.dart';
 import 'package:venera_next/foundation/global_preference_store.dart';
 import 'package:venera_next/foundation/application_preferences.dart';
@@ -229,7 +230,7 @@ class _FollowUpdatesFolderDialogState
               if (_preparation != null && !savingSettings) ...[
                 const SizedBox(height: 16),
                 Text('Updating comics...'.tl),
-                LinearProgressIndicator(value: _progress),
+                EInkLinearProgressIndicator(value: _progress),
               ],
               if (_preparationError != null) Text(_preparationError.toString()),
             ],

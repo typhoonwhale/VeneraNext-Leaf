@@ -271,7 +271,7 @@ class ResourceDialogRoute<T> extends DialogRoute<T> {
     super.barrierColor,
     super.barrierDismissible,
     required this.onDispose,
-  });
+  }) : super(animationStyle: _dialogAnimationStyle(context));
 
   final VoidCallback onDispose;
 
@@ -426,7 +426,7 @@ LoadingDialogController showLoadingDialog(
           };
           return ContentDialog(
             title: controller._message ?? 'Loading'.tl,
-            content: LinearProgressIndicator(
+            content: EInkLinearProgressIndicator(
               value: controller._progress,
               backgroundColor: context.colorScheme.surfaceContainer,
             ).paddingHorizontal(16).paddingVertical(16),
@@ -528,6 +528,20 @@ class ContentDialog extends StatelessWidget {
         ],
       ),
     );
+    final dialogContent = IntrinsicWidth(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: 600,
+          minWidth: math.min(400, context.width - 16),
+        ),
+        child: MediaQuery.removePadding(
+          removeTop: true,
+          removeBottom: true,
+          context: context,
+          child: content,
+        ),
+      ),
+    );
     return Dialog(
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
@@ -546,24 +560,13 @@ class ContentDialog extends StatelessWidget {
       elevation: context.isEInk ? 0 : 2,
       shadowColor: context.colorScheme.shadow,
       backgroundColor: context.colorScheme.surface,
-      child: AnimatedSize(
-        duration: const Duration(milliseconds: 200),
-        alignment: Alignment.topCenter,
-        child: IntrinsicWidth(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxWidth: 600,
-              minWidth: math.min(400, context.width - 16),
+      child: MediaQuery.disableAnimationsOf(context)
+          ? dialogContent
+          : AnimatedSize(
+              duration: const Duration(milliseconds: 200),
+              alignment: Alignment.topCenter,
+              child: dialogContent,
             ),
-            child: MediaQuery.removePadding(
-              removeTop: true,
-              removeBottom: true,
-              context: context,
-              child: content,
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

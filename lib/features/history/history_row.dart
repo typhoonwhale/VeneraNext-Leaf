@@ -13,7 +13,14 @@ History historyFromRow(Row row) => History(
   page: row['page'],
   id: row['id'],
   readEpisode: Set<String>.from(
-    (row['readEpisode'] as String).split(',').where((entry) => entry != ''),
+    (row['readEpisode'] as String?)?.split(',').where((entry) => entry != '') ??
+        const <String>[],
+  ),
+  viewedEpisode: Set<String>.from(
+    (row['viewedEpisode'] as String?)
+            ?.split(',')
+            .where((entry) => entry != '') ??
+        const <String>[],
   ),
   maxPage: row['max_page'],
   maxChapter: row['max_chapter'],

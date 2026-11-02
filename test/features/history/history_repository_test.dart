@@ -63,6 +63,42 @@ void main() {
     },
   );
 
+  test('viewed chapters survive repository writes and legacy replacements', () {
+    final value = item()..viewedEpisode = {'3', '2-1'};
+    repository.writeProgress(value);
+    expect(repository.find(value.id, 0)!.viewedEpisode, {'3', '2-1'});
+
+    repository.addReadDuration(
+      item()
+        ..id = 'duration-viewed'
+        ..viewedEpisode = {'4'},
+      25,
+    );
+    expect(repository.find('duration-viewed', 0)!.viewedEpisode, {'4'});
+
+    value
+      ..page = 9
+      ..viewedEpisode = {'5'};
+    repository.writeProgress(value);
+    expect(repository.find(value.id, 0)!.viewedEpisode, {'5'});
+    repository.importHistory(value..title = 'Imported');
+    expect(repository.find(value.id, 0)!.viewedEpisode, {'5'});
+
+    // An older Leaf UPDATE lists only columns known to that version.
+    db.execute(
+      "UPDATE history SET page = 10, readEpisode = '1,2-2' WHERE id = 'shared' AND type = 0",
+    );
+    expect(repository.find(value.id, 0)!.viewedEpisode, {'5'});
+
+    // Venera's REPLACE omits the nullable column, so the new value is NULL.
+    db.execute("""
+      INSERT OR REPLACE INTO history
+        (id, title, subtitle, cover, time, type, ep, page, readEpisode, max_page)
+      VALUES ('shared', 'Book', 'Author', 'cover', 1000, 0, 2, 3, '1,2-2', 10)
+    """);
+    expect(repository.find(value.id, 0)!.viewedEpisode, isEmpty);
+  });
+
   test('metadata updates only supplied fields on the requested source', () {
     repository.writeProgress(item());
     repository.writeProgress(item(type: 1));
@@ -282,6 +318,11 @@ void main() {
       final legacy = repository.find('old', 0)!;
       expect(legacy.page, 8);
       expect(legacy.readEpisode, {'1', '2'});
+      expect(legacy.viewedEpisode, isEmpty);
+      expect(
+        db.select('PRAGMA table_info("history")').map((row) => row['name']),
+        contains('viewedEpisode'),
+      );
       expect(legacy.group, isNull);
       expect(legacy.maxChapter, isNull);
       expect(legacy.readDurationMs, 0);
@@ -298,7 +339,7 @@ void main() {
     () {
       repository.writeProgress(item()..group = 2);
       db.execute(
-        "UPDATE history SET readEpisode = ',1,,2-2,1,', max_page = NULL, read_duration_ms = 7.6",
+        "UPDATE history SET readEpisode = ',1,,2-2,1,', viewedEpisode = ',3,,2-1,3,', max_page = NULL, read_duration_ms = 7.6",
       );
       final restored = historyFromRow(
         db.select('SELECT * FROM history').single,
@@ -314,7 +355,13 @@ void main() {
       expect(restored.group, 2);
       expect(restored.maxPage, isNull);
       expect(restored.readEpisode, {'1', '2-2'});
+      expect(restored.viewedEpisode, {'3', '2-1'});
       expect(restored.readDurationMs, 8);
+
+      db.execute('UPDATE history SET readEpisode = NULL, viewedEpisode = NULL');
+      final nullReadStates = repository.getAll().single;
+      expect(nullReadStates.readEpisode, isEmpty);
+      expect(nullReadStates.viewedEpisode, isEmpty);
     },
   );
 

@@ -372,6 +372,9 @@ class _BodyState extends State<_Body> with SingleTickerProviderStateMixin {
       if (prepared.draft case final draft?) {
         await showDialog<void>(
           context: context,
+          animationStyle: MediaQuery.disableAnimationsOf(context)
+              ? AnimationStyle.noAnimation
+              : null,
           builder: (_) => SourceScriptReloadDialog(
             read: () => files.read(draft),
             onSave: session.save,
@@ -455,6 +458,9 @@ class _BodyState extends State<_Body> with SingleTickerProviderStateMixin {
 
   Future<void> _addSource() => showDialog<void>(
     context: context,
+    animationStyle: MediaQuery.disableAnimationsOf(context)
+        ? AnimationStyle.noAnimation
+        : null,
     barrierDismissible: false,
     builder: (_) => const SourceImportDialog(),
   );
@@ -866,6 +872,9 @@ class _SliverComicSourceState extends SettingsSaveState<_SliverComicSource> {
                 if (!acceptsSettingsChanges || !_current(target)) return;
                 await showDialog<void>(
                   context: context,
+                  animationStyle: MediaQuery.disableAnimationsOf(context)
+                      ? AnimationStyle.noAnimation
+                      : null,
                   barrierDismissible: false,
                   builder: (_) => _SourceSettingInput(
                     source: target,

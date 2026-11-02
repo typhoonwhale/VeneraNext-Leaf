@@ -85,7 +85,7 @@ void main() {
     await _show(tester, _normal, _history(3, {'1', '3', '4', '5'}), eink: true);
     expect(_isBlack(_cell(tester, 'Ch3')), isTrue);
     expect(_blackCells(tester, titles), 1);
-    expect(find.byType(EInkCheckMark), findsNWidgets(3));
+    expect(find.byType(EInkCheckMark), findsNWidgets(4));
     for (final t in ['Ch1', 'Ch4', 'Ch5']) {
       final m = _cell(tester, t);
       expect(m.color, Colors.white);
@@ -119,7 +119,7 @@ void main() {
       _history(2, {'1', '2'}),
       eink: true,
     );
-    expect(find.byType(EInkCheckMark), findsOneWidget);
+    expect(find.byType(EInkCheckMark), findsNWidgets(2));
     expect(tester.takeException(), isNull);
   });
 
@@ -148,20 +148,25 @@ void main() {
     expect(_blackCells(tester, ['A1', 'A2', 'A3']), 0);
   });
 
-  testWidgets('normal mode keeps outline text and no checkmark', (
-    tester,
-  ) async {
-    final theme = await _show(
-      tester,
-      _normal,
-      _history(3, {'3', '4'}),
-      eink: false,
-    );
-    expect(find.byType(EInkCheckMark), findsNothing);
-    Color? color(String t) => tester.widget<Text>(find.text(t)).style?.color;
-    expect(color('Ch3'), theme.colorScheme.outline);
-    expect(color('Ch4'), theme.colorScheme.outline);
-    expect(color('Ch1'), isNull);
-    expect(_blackCells(tester, titles), 0);
-  });
+  testWidgets(
+    'normal mode highlights last chapter and keeps other read text outline',
+    (tester) async {
+      final theme = await _show(
+        tester,
+        _normal,
+        _history(3, {'3', '4'}),
+        eink: false,
+      );
+      expect(find.byType(EInkCheckMark), findsNothing);
+      Color? color(String t) => tester.widget<Text>(find.text(t)).style?.color;
+      expect(color('✓ Ch3'), theme.colorScheme.onSecondaryContainer);
+      expect(
+        _cell(tester, '✓ Ch3').color,
+        theme.colorScheme.secondaryContainer,
+      );
+      expect(color('✓ Ch4'), theme.colorScheme.outline);
+      expect(color('Ch1'), isNull);
+      expect(_blackCells(tester, ['Ch1', 'Ch2', '✓ Ch3', '✓ Ch4', 'Ch5']), 0);
+    },
+  );
 }

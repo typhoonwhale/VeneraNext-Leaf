@@ -174,6 +174,9 @@ class _LocalComicsSummaryState extends State<LocalComicsSummary> {
     showDialog(
       barrierDismissible: false,
       context: appNavigation.rootContext,
+      animationStyle: MediaQuery.disableAnimationsOf(appNavigation.rootContext)
+          ? AnimationStyle.noAnimation
+          : null,
       builder: (context) {
         return const _ImportComicsWidget();
       },

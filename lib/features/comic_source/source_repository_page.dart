@@ -1,3 +1,4 @@
+import 'package:venera_next/foundation/eink_theme.dart';
 import 'package:venera_next/foundation/operation_failure.dart';
 import 'dart:async';
 import 'source_failure.dart';
@@ -140,6 +141,9 @@ class SourceRepositoriesPanel extends StatelessWidget {
     SourceRepository? repository,
   ]) => showDialog<void>(
     context: context,
+    animationStyle: MediaQuery.disableAnimationsOf(context)
+        ? AnimationStyle.noAnimation
+        : null,
     barrierDismissible: false,
     builder: (_) =>
         _RepositoryEditor(repository: repository, createClient: createClient),
@@ -151,6 +155,9 @@ class SourceRepositoriesPanel extends StatelessWidget {
   ) async {
     await showDialog<void>(
       context: context,
+      animationStyle: MediaQuery.disableAnimationsOf(context)
+          ? AnimationStyle.noAnimation
+          : null,
       barrierDismissible: false,
       builder: (_) => _RepositoryActionDialog(
         title: 'Remove repository'.tl,
@@ -290,7 +297,7 @@ class _RepositoryEditorState extends SettingsSaveState<_RepositoryEditor> {
             if (saving)
               Padding(
                 padding: const EdgeInsets.only(top: 16),
-                child: LinearProgressIndicator(
+                child: EInkLinearProgressIndicator(
                   semanticsLabel: 'Validating repository'.tl,
                 ),
               ),
@@ -485,6 +492,9 @@ class _SourceRepositoryCatalogPageState
       final repository = widget.repository;
       await showDialog<void>(
         context: context,
+        animationStyle: MediaQuery.disableAnimationsOf(context)
+            ? AnimationStyle.noAnimation
+            : null,
         barrierDismissible: false,
         builder: (_) => _RepositoryActionDialog(
           title: 'Link repository'.tl,
@@ -584,7 +594,7 @@ class _SourceRepositoryCatalogPageState
                       label: Text('Refresh list'.tl),
                     ),
                   ),
-                  if (loading) const LinearProgressIndicator(),
+                  if (loading) const EInkLinearProgressIndicator(),
                   if (error != null)
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 12),
@@ -739,6 +749,9 @@ Future<void> showSourceOriginPicker(
 ) async {
   final repository = await showDialog<SourceRepository>(
     context: context,
+    animationStyle: MediaQuery.disableAnimationsOf(context)
+        ? AnimationStyle.noAnimation
+        : null,
     builder: (_) => _SourceOriginPicker(source: source),
   );
   if (repository == null || !context.mounted) return;
