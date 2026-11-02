@@ -1,6 +1,8 @@
 # Leaf 墨水屏 UI 组件索引与修改指南
 
-更新：2026-10-29。随 1.19.0 发布。本文行号以 1.19.0 发布提交为准，改动后请同步。阶段与耗电约束见[开发路线图](LEAF_EINK_ROADMAP.md)，官方 SDK 约束见[核心约束](LEAF_EINK_GUIDELINES.md)。
+更新：2026-11-02，补充信息区紧凑布局与视觉验收约定。墨水屏模式随 1.19.0 发布；除本次标签条目外，历史行号以 1.19.0 发布提交为准。阶段与耗电约束见[开发路线图](LEAF_EINK_ROADMAP.md)，官方 SDK 约束见[核心约束](LEAF_EINK_GUIDELINES.md)。
+
+视觉验收统一开启应用墨水屏模式。Leaf5+ 已留存原尺寸 1264 × 1680 实机截图；后续对照需同时记录实际 DPI、字体缩放与应用显示配置，使用同一尺寸、倍率和方向。设备离线的 Flutter 渲染必须标作布局模拟，并注明使用的字体和缩放，不能记为实机通过。截图不包含墨水屏面板的刷新残影，面板观感仍需实机观察。
 
 ## 1. 概述
 
@@ -187,8 +189,8 @@
 |---|---|---|---|
 | 详情页封面 | 直角、2 黑边、无阴影；骨架屏封面同样 | 分支 | `lib/features/comic_details/comic_page.dart:365-369,1042-1044` |
 | 来源名文字 | `einkSmallText` | 分支 | `lib/features/comic_details/comic_page.dart:409` |
-| 信息区标签（可点击） | 白底（`useBackgroundColor`）+ 2 描边 | 分支 | `lib/features/comic_details/comic_page.dart:637,651-660` |
-| 信息区键名（不可点击） | 2 描边 | 分支 | `lib/features/comic_details/comic_page.dart:699` |
+| 信息区标签（可点击） | 白底 + 2 描边，圆角 6、横向内距 8、纵向内距 4；字号与点击功能保留 | 分支 | `lib/features/comic_details/comic_page.dart` 的 `buildInfo/buildTag` |
+| 信息区键名与静态值 | 无框文字；更新时间等字段合并为“键名：值”，与标签共用可换行区域，宽度足够时同行 | 分支 | `lib/features/comic_details/comic_page.dart` 的 `buildInfo` |
 | “下载”/“阅读”/“继续”按钮 | 走 `filledButtonTheme`：“下载”（tonal）白底黑描边；“阅读/继续”（filled）黑底白字 | 主题 | `lib/features/comic_details/comic_page.dart:492-516` |
 | 操作按钮行（收藏、评论等） | 2 黑描边代替 0.6 浅灰描边 | 分支 | `lib/features/comic_details/action_button.dart:59` |
 | 评论头像框 | 2 描边 | 分支 | `lib/features/comic_details/comments_page.dart:389` |

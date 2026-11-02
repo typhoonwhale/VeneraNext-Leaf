@@ -607,7 +607,7 @@ class _ComicPageState extends LoadingState<ComicPage, ComicDetails>
     if (comic.tags.isEmpty &&
         comic.uploader == null &&
         comic.uploadTime == null &&
-        comic.uploadTime == null &&
+        comic.updateTime == null &&
         comic.maxPage == null) {
       return const SliverPadding(padding: EdgeInsets.zero);
     }
@@ -620,6 +620,10 @@ class _ComicPageState extends LoadingState<ComicPage, ComicDetails>
       void Function(BuildContext context)? onLongPress,
       bool isTitle = false,
     }) {
+      if (context.isEInk && onTap == null) {
+        return Text(isTitle ? '$text：' : text);
+      }
+
       Color color;
       if (isTitle) {
         const colors = [
@@ -639,9 +643,11 @@ class _ComicPageState extends LoadingState<ComicPage, ComicDetails>
         color = context.colorScheme.surfaceContainerLow;
       }
 
-      final borderRadius = BorderRadius.circular(12);
+      final borderRadius = BorderRadius.circular(context.isEInk ? 6 : 12);
 
-      const padding = EdgeInsets.symmetric(horizontal: 16, vertical: 6);
+      final padding = context.isEInk
+          ? const EdgeInsets.symmetric(horizontal: 8, vertical: 4)
+          : const EdgeInsets.symmetric(horizontal: 16, vertical: 6);
 
       if (onTap != null) {
         return Builder(
@@ -733,6 +739,73 @@ class _ComicPageState extends LoadingState<ComicPage, ComicDetails>
 
     bool enableTranslation =
         appLocale.languageCode == 'zh' && comicSource.enableTagsTranslate;
+
+    if (context.isEInk) {
+      return SliverLazyToBoxAdapter(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Information'.tl,
+              style: Theme.of(context).textTheme.bodyLarge,
+            ).paddingHorizontal(16).paddingVertical(8),
+            if (comic.stars != null)
+              Row(
+                children: [
+                  StarRating(value: comic.stars!, size: 24, onTap: starRating),
+                  const SizedBox(width: 8),
+                  Text(comic.stars!.toStringAsFixed(2)),
+                ],
+              ).paddingLeft(16).paddingBottom(8),
+            Wrap(
+              spacing: 12,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                for (var e in comic.tags.entries)
+                  if (e.value.isNotEmpty)
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        buildTag(
+                          text: e.key.ts(comicSource.key),
+                          isTitle: true,
+                        ),
+                        for (var tag in e.value)
+                          buildTag(
+                            text: enableTranslation
+                                ? TagsTranslation.translationTagWithNamespace(
+                                    tag,
+                                    e.key.toLowerCase(),
+                                  )
+                                : tag,
+                            onTap: isReadOnlyComicInfoNamespace(e.key)
+                                ? null
+                                : () => onTapTag(tag, e.key),
+                            onLongPress: isReadOnlyComicInfoNamespace(e.key)
+                                ? null
+                                : (tagContext) =>
+                                      onLongPressTag(tag, e.key, tagContext),
+                          ),
+                      ],
+                    ),
+                if (comic.uploader != null)
+                  Text('${'Uploader'.tl}：${comic.uploader!}'),
+                if (comic.uploadTime != null)
+                  Text('${'Upload Time'.tl}：${formatTime(comic.uploadTime!)}'),
+                if (comic.updateTime != null)
+                  Text('${'Update Time'.tl}：${formatTime(comic.updateTime!)}'),
+                if (comic.maxPage != null)
+                  Text('${'Pages'.tl}：${comic.maxPage}'),
+              ],
+            ).paddingHorizontal(16).paddingBottom(8),
+            const Divider(),
+          ],
+        ),
+      );
+    }
 
     return SliverLazyToBoxAdapter(
       child: Column(
