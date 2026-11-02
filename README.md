@@ -2,11 +2,11 @@
 
 **Leaf（VeneraNext-Leaf）基于 [VeneraNext](https://github.com/CyrilPeng/Venera-Next)，面向文石 BOOX Leaf5+ 的日常漫画阅读。** 保留上游漫画源、收藏、历史、本地阅读和导入导出接口；使用独立包名、固定签名 ARM64 Release，支持覆盖升级保留数据。
 
-**最新正式版：[Leaf 1.19.1 / Android ARM64](https://github.com/typhoonwhale/VeneraNext-Leaf/releases/tag/v1.19.1)**（versionCode 2522），本次仅含空章节修复，不含“已读/看过”规则；保留 1.18.4 引入的应用内更新，以及 1.19.0 发布的黑白墨水屏模式和减少动画（默认开启，可在“设置 → 外观”关闭）。固定签名 Leaf Release 可覆盖安装；1.18.2 及更早版本先手动覆盖安装，之后可在应用内更新。
+**本版：Leaf 1.19.2+253 / Android ARM64（versionCode 2532）**，包含章节已读／看过、紧凑信息区和墨水屏遗漏补齐；发布状态与可下载资产以 [GitHub Releases](https://github.com/typhoonwhale/VeneraNext-Leaf/releases) 为准。上一正式版 [Leaf 1.19.1+252 / Android ARM64](https://github.com/typhoonwhale/VeneraNext-Leaf/releases/tag/v1.19.1)（versionCode 2522）仅含空章节修复，也是上次 Leaf5+ 设备核验版本。应用内更新自 1.18.4 提供，黑白墨水屏模式和减少动画自 1.19.0 提供（默认开启，可在“设置 → 外观”关闭）。固定签名 Leaf Release 可覆盖安装；1.18.2 及更早版本先手动覆盖安装，之后可在应用内更新。
 
 正式版底栏为**横线 1 + 固定间隔 2 + 自然文字高度 + 底部留白 0–15（默认 4）**，字号 **9–13（默认 11）**；真实系统安全区另计，不伪造手势导航留白。历史实机记录确认竖屏日常阅读、数据导入及 1.18.4 → 1.19.0 应用内升级正常、数据保留；硬件刷新和耗电对照仍待实测。数值单位为 Flutter 逻辑像素。
 
-**主线进度（2026-11-02）：**章节已读／看过、紧凑信息区和墨水屏缩略图／对话框／加载动画补齐，已通过 [PR #6](https://github.com/typhoonwhale/VeneraNext-Leaf/pull/6) 合入 main（`2008382`）。8 项 PR 检查成功，完整 Linux Flutter 为 5627 通过、151 跳过；[验证结果与墨水屏模拟截图](docs/research/2026-11-02-integration-validation.md)已记录。新功能尚未发布或安装到 Leaf5+，版本元数据暂保留基线 `1.19.1+252`；旧 `2512` 功能测试包不是当前升级包。开发先读[当前状态](docs/LEAF_STATUS.md)、[剩余待办](docs/LEAF_DEVELOPMENT_PLAN.md#7-待办与验证)、[构建说明](docs/LEAF_BUILD.md)和[调研索引](docs/research/README.md)。
+**整合验证（2026-11-02）：**章节已读／看过、紧凑信息区和墨水屏缩略图／对话框／加载动画补齐，已通过 [PR #6](https://github.com/typhoonwhale/VeneraNext-Leaf/pull/6) 合入 main（`2008382`）。8 项 PR 检查成功，完整 Linux Flutter 为 5627 通过、151 跳过；[验证结果与墨水屏模拟截图](docs/research/2026-11-02-integration-validation.md)已记录。本次没有进行设备、覆盖升级或 WebDAV 同步验证；上次核验设备仍为 1.19.1 / 2522。旧 `1.19.1+251 / 2512` 是历史功能测试包，不是本版升级包。开发先读[当前状态](docs/LEAF_STATUS.md)、[剩余待办](docs/LEAF_DEVELOPMENT_PLAN.md#7-待办与验证)、[构建说明](docs/LEAF_BUILD.md)和[调研索引](docs/research/README.md)。
 
 > 下方 VeneraNext 介绍、徽章、截图和各平台下载链接属于上游项目；Leaf 当前只交付 Android ARM64。
 

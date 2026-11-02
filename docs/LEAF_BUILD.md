@@ -1,7 +1,7 @@
 # VeneraNext Leaf Android 构建
 
-核对：2026-11-02。当前正式版为 [Leaf 1.19.1 / Android ARM64](https://github.com/typhoonwhale/VeneraNext-Leaf/releases/tag/v1.19.1)（versionCode 2522），仅含空章节修复，不含“已读/看过”规则；固定签名与包身份沿用，官方 APK 为 23,475,927 字节，SHA-256 `6236a48cd265406ecaa3fee66ceb890d7e836da59d3367d39b589efdb2f54b96`。后续整合已随 PR #6 合入 main（`2008382`），通过 Android ARM64 冒烟构建，但仍保留 `1.19.1+252` 元数据；主线包含未发布功能，不可仅凭相同版本号把本地构建当作官方资产。下次发布需另定版本并递增构建号。旧2512为历史已读功能测试包，不是当前升级包。
-Leaf5+ 已通过 USB `adb install -r` 从 1.19.0 / 2502 覆盖升级，安装 APK 与官方资产哈希一致，数据比对通过。应用内检查与更新提示已显示；下载约 2 分钟到 11% / 2.5 MB 后手动取消，没有报错，因此该版本的应用内下载安装链路未完整验收。真实阅读冒烟已通过；本轮设备导出副本已清理，设备保留正式版 1.19.1 并停在主页；其他版本、分支和验证范围见[当前状态](LEAF_STATUS.md)。
+核对：2026-11-02。上一正式版为 [Leaf 1.19.1+252 / Android ARM64](https://github.com/typhoonwhale/VeneraNext-Leaf/releases/tag/v1.19.1)（versionCode 2522），仅含空章节修复，也是上次 Leaf5+ 设备核验版本；固定签名与包身份沿用，该正式 APK 为 23,475,927 字节，SHA-256 `6236a48cd265406ecaa3fee66ceb890d7e836da59d3367d39b589efdb2f54b96`。本版定为 Leaf 1.19.2+253 / ARM64 versionCode 2532，包含 PR #6 合入的已读／看过、紧凑信息区和墨水屏遗漏补齐。PR #6 的 8 项检查成功，Android ARM64 冒烟构建通过；发布状态与可下载资产以 [GitHub Releases](https://github.com/typhoonwhale/VeneraNext-Leaf/releases) 为准。版本发布信息不代表这些新功能已通过设备验证。旧 `1.19.1+251 / 2512` 是历史功能测试包，不是本版升级基线。
+Leaf5+ 上次已通过 USB `adb install -r` 从 1.19.0 / 2502 覆盖升级到 1.19.1 / 2522，安装 APK 与当时官方资产哈希一致，数据比对通过。该版应用内检查与更新提示已显示；下载约 2 分钟到 11% / 2.5 MB 后手动取消，没有报错，因此完整应用内下载安装链路未验收。真实阅读冒烟已通过；设备和其他版本、分支及验证范围见[当前状态](LEAF_STATUS.md)。
 
 ## Android 身份与隔离
 
