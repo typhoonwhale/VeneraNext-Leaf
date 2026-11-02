@@ -77,10 +77,7 @@ Widget _chapterLabel(
       if (state == _ChapterReadState.read)
         EInkCheckMark(color: color!)
       else
-        Text(
-          '○',
-          style: TextStyle(color: color, fontWeight: FontWeight.w600),
-        ),
+        EInkViewedMark(color: color!),
       const SizedBox(width: 4),
       Flexible(child: text),
     ],
