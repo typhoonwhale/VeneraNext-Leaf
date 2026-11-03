@@ -1,6 +1,11 @@
 name: "代码分析"
 on:
   workflow_call:
+    inputs:
+      full_ci:
+        description: Force full validation for reusable release callers
+        type: boolean
+        default: true
   pull_request:
   push:
     branches:
@@ -14,7 +19,25 @@ permissions:
   contents: read
 
 jobs:
+  changes:
+    name: 质量变更范围
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      full_ci: ${{ steps.scope.outputs.full_ci }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: 检测纯文档变更
+        id: scope
+        env:
+          FORCE_FULL: ${{ inputs.full_ci || false }}
+        run: python3 .github/scripts/ci_scope.py
+
   rhttp-native:
+    needs: changes
+    if: ${{ needs.changes.outputs.full_ci == 'true' }}
     name: Rhttp 原生回调生命周期
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -36,6 +59,8 @@ jobs:
           retention-days: 1
 
   analyze:
+    needs: changes
+    if: ${{ needs.changes.outputs.full_ci == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -84,8 +109,9 @@ jobs:
       - run: flutter analyze --fatal-infos --fatal-warnings
 
   flutter-tests:
+    needs: [changes, rhttp-native]
+    if: ${{ needs.changes.outputs.full_ci == 'true' }}
     name: Flutter 测试与覆盖率
-    needs: rhttp-native
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
@@ -118,3 +144,16 @@ jobs:
           path: coverage/lcov.info
           if-no-files-found: error
           retention-days: 14
+
+  quality_gate:
+    name: 质量检查门禁
+    needs: [changes, analyze, rhttp-native, flutter-tests]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - name: 汇总质量检查结果
+        env:
+          CI_NEEDS: ${{ toJSON(needs) }}
+        run: python3 .github/scripts/ci_gate.py analyze rhttp-native flutter-tests
