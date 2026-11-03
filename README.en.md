@@ -8,6 +8,8 @@ The released footer uses a 1 logical-pixel divider, a fixed 2-pixel gap, natural
 
 **Feature status (2026-11-03):** The viewed-state circle fix is implemented on a separate branch. Its 55 regression checks, static analysis, formatting checks, and Leaf5+ Android system screenshot comparison passed; it has not been merged into main or release/leaf-1.19.3. The device runs official 1.19.2 / 2532, with Leaf Activity at 350 dpi and fontScale 0.85. ADB system screenshots do not represent panel grayscale or ghosting. See [current status](docs/LEAF_STATUS.md), the [development plan](docs/LEAF_DEVELOPMENT_PLAN.md#7-待办与验证), [1.19.3 preparation and main gates](docs/LEAF_1_19_3_PREPARATION.md), and the [build guide](docs/LEAF_BUILD.md).
 
+**Before development:** Read the [branch and feature documentation policy](docs/LEAF_BRANCH_WORKFLOW.md). Create each feature branch from the current branch, integrate it into the next release preparation branch, then merge that release branch into main through a PR. Maintain feature scope, implemented behavior, and remaining work at both integration stages.
+
 > The VeneraNext introduction, badges, screenshots, platform descriptions and download links below are retained upstream references. Leaf currently delivers Android ARM64 only.
 
 ---

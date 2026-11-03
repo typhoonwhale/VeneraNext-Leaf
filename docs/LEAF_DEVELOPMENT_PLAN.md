@@ -16,9 +16,9 @@
 - 上游：https://github.com/CyrilPeng/Venera-Next ，基线 `v1.18.1` / `087147a7810039398f4eed3bcc794b576f92c46b`。
 - 本项目：https://github.com/typhoonwhale/VeneraNext-Leaf（`origin`，fork 自上游；上游远端为 `upstream`）。
 - 暂不跟进上游新版本；需要某项修复时再单独评估。
-- `main` 是长期主线，正式发布从 main 上的提交打 `v*` 标签；功能开发使用独立 `feature/...` 分支并通过 PR 合入。
+- `main` 是长期主线，正式发布从 main 上的提交打 `v*` 标签；新增功能及功能修复必须先从当前分支新建独立分支，合入下一小版本预备分支后，再由预备分支通过 PR 合入 main；创建分支与整合时的功能／待办要求见[分支规范](LEAF_BRANCH_WORKFLOW.md)。
 - `release/leaf-1.19.3@bc6b8d6` 从 `main@09b0bd5` 建立，仅准备文档，版本元数据仍为 1.19.2+253；看过圆圈修复在独立 `fix/leaf-viewed-marker@2fb53b4` 分支，尚未合入 main 或发布分支。详情见[准备记录](LEAF_1_19_3_PREPARATION.md)。
-- 早期 `feature/leaf-reader-footer` 已合入 main；`feature/leaf-1.19.1-integration` 的整合通过 [PR #6](https://github.com/typhoonwhale/VeneraNext-Leaf/pull/6) 合入 main（`2008382`）。新开发从核实过的最新 main 开始。
+- 早期 `feature/leaf-reader-footer` 已合入 main；`feature/leaf-1.19.1-integration` 的整合通过 [PR #6](https://github.com/typhoonwhale/VeneraNext-Leaf/pull/6) 合入 main（`2008382`）。新功能从当前分支已核实的 HEAD 新建分支；缺少下一小版本预备分支时，另从最新 main 建立预备分支。
 - 沿用现有 Flutter/Dart 工程、阅读器、JS 漫画源运行环境、设置继承与数据导入导出；新增设置应有明确默认值，旧 `data.venera` 可进入现有导入流程。
 
 ## 3. 底栏设计（当前）
@@ -79,7 +79,7 @@
 
 ### 已实现，待合入
 
-- 看过状态圆圈修复已保存在 `fix/leaf-viewed-marker@2fb53b4`，55 项回归、全仓静态分析、格式检查及 Leaf5+ 设备系统截图对照通过；尚未合入 main 或 `release/leaf-1.19.3`。通过 PR 纳入 main 的状态见[准备记录](LEAF_1_19_3_PREPARATION.md)。
+- 看过状态圆圈修复已保存在 `fix/leaf-viewed-marker@2fb53b4`，55 项回归、全仓静态分析、格式检查及 Leaf5+ 设备系统截图对照通过；尚未合入 main 或 `release/leaf-1.19.3`。后续先收进预备分支并汇总文档，再由预备分支通过 PR 纳入 main；状态见[准备记录](LEAF_1_19_3_PREPARATION.md)。
 
 ### 后续候选
 
@@ -97,14 +97,17 @@
 
 ## 8. 继续开发
 
-`main` 是长期权威主线，功能开发从核实过的最新 main 建立分支并通过 PR 合入。纯文档改动使用轻量文档门禁，代码或 CI 改动执行完整核心 CI；门禁范围见[准备记录](LEAF_1_19_3_PREPARATION.md)。墨水屏候选见 [LEAF_EINK_ROADMAP.md](LEAF_EINK_ROADMAP.md)，机型依据与调研入口见[调研目录](research/README.md)。调研目录不是可构建工程。
+`main` 是长期权威主线。开始开发前必须阅读[分支与功能文档规范](LEAF_BRANCH_WORKFLOW.md)：从当前分支新建功能分支，确认下一小版本预备分支存在，并立即编写功能范围与待办。功能合入预备分支时同步汇总已实现内容与剩余待办，再由预备分支通过 PR 合入 main。纯文档改动使用轻量文档门禁，代码或 CI 改动执行完整核心 CI；门禁范围见[准备记录](LEAF_1_19_3_PREPARATION.md)。墨水屏候选见 [LEAF_EINK_ROADMAP.md](LEAF_EINK_ROADMAP.md)，机型依据与调研入口见[调研目录](research/README.md)。调研目录不是可构建工程。
 
 ```sh
 git clone https://github.com/typhoonwhale/VeneraNext-Leaf.git
 cd VeneraNext-Leaf
 git remote add upstream https://github.com/CyrilPeng/Venera-Next.git
-git switch main
+git status
+git branch --show-current
+git rev-parse HEAD
 git switch -c feature/<主题>
+# 随即检查或建立下一小版本预备分支，并初始化功能文档；详见分支规范。
 ```
 
 已有 checkout 时先看 `git status`、`git remote -v` 和当前分支，不重复 clone 或覆盖本地改动。每次开发后更新本文件的状态和待办。

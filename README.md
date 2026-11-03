@@ -8,6 +8,8 @@
 
 **当前功能状态（2026-11-03）：** 看过状态圆圈修复已在独立分支实现，55 项回归、静态分析、格式检查和 Leaf5+ 设备系统截图对照通过；尚未合入 main 或 release/leaf-1.19.3。设备运行正式 1.19.2 / 2532，Leaf Activity 为 350 dpi、fontScale 0.85；ADB 系统截图不代表墨水屏面板的灰阶或残影。详见[当前状态](docs/LEAF_STATUS.md)、[开发计划与待办](docs/LEAF_DEVELOPMENT_PLAN.md#7-待办与验证)、[1.19.3 准备和 main 门禁](docs/LEAF_1_19_3_PREPARATION.md)及[构建说明](docs/LEAF_BUILD.md)。
 
+**开发必读：** [分支与功能文档规范](docs/LEAF_BRANCH_WORKFLOW.md)。每个新功能从当前分支新建功能分支，先整合到下一小版本预备分支，再由预备分支通过 PR 合入 main；功能范围、已实现内容和待办必须随分支同步维护。
+
 > 下方 VeneraNext 介绍、徽章、截图和各平台下载链接属于上游项目；Leaf 当前只交付 Android ARM64。
 
 ---
