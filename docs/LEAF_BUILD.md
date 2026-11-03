@@ -1,7 +1,10 @@
 # VeneraNext Leaf Android 构建
 
-核对：2026-11-02。上一正式版为 [Leaf 1.19.1+252 / Android ARM64](https://github.com/typhoonwhale/VeneraNext-Leaf/releases/tag/v1.19.1)（versionCode 2522），仅含空章节修复，也是上次 Leaf5+ 设备核验版本；固定签名与包身份沿用，该正式 APK 为 23,475,927 字节，SHA-256 `6236a48cd265406ecaa3fee66ceb890d7e836da59d3367d39b589efdb2f54b96`。本版定为 Leaf 1.19.2+253 / ARM64 versionCode 2532，包含 PR #6 合入的已读／看过、紧凑信息区和墨水屏遗漏补齐。PR #6 的 8 项检查成功，Android ARM64 冒烟构建通过；发布状态与可下载资产以 [GitHub Releases](https://github.com/typhoonwhale/VeneraNext-Leaf/releases) 为准。版本发布信息不代表这些新功能已通过设备验证。旧 `1.19.1+251 / 2512` 是历史功能测试包，不是本版升级基线。
-Leaf5+ 上次已通过 USB `adb install -r` 从 1.19.0 / 2502 覆盖升级到 1.19.1 / 2522，安装 APK 与当时官方资产哈希一致，数据比对通过。该版应用内检查与更新提示已显示；下载约 2 分钟到 11% / 2.5 MB 后手动取消，没有报错，因此完整应用内下载安装链路未验收。真实阅读冒烟已通过；设备和其他版本、分支及验证范围见[当前状态](LEAF_STATUS.md)。
+当前状态（2026-11-03）：正式版及 Leaf5+ 设备版本为 1.19.2+253 / ARM64 versionCode 2532。`main` 是长期权威主线；`release/leaf-1.19.3@bc6b8d6` 仅为文档准备分支，未改源码或版本元数据。圆圈修复分支与状态见[当前状态](LEAF_STATUS.md)和[准备记录](LEAF_1_19_3_PREPARATION.md)。
+
+## 1.19.2 发布记录
+
+2026-11-02 发布准备时的上一正式版为 [Leaf 1.19.1+252 / Android ARM64](https://github.com/typhoonwhale/VeneraNext-Leaf/releases/tag/v1.19.1)（versionCode 2522），仅含空章节修复。固定签名与包身份沿用，该正式 APK 为 23,475,927 字节，SHA-256 `6236a48cd265406ecaa3fee66ceb890d7e836da59d3367d39b589efdb2f54b96`。当时准备的 Leaf 1.19.2+253 / ARM64 versionCode 2532 包含 PR #6 合入的已读／看过、紧凑信息区和墨水屏遗漏补齐；发布状态以 [GitHub Releases](https://github.com/typhoonwhale/VeneraNext-Leaf/releases) 为准。旧 `1.19.1+251 / 2512` 是历史功能测试包，不是正式版本升级基线。
 
 ## Android 身份与隔离
 
@@ -119,7 +122,7 @@ AGP 增量更新 APK 时可能保留旧 ZIP 条目占用的空闲区域。若文
 Leaf仅维护Android ARM64产物；工作流职责见下表。正式发布流程：
 
 1. 修改 `CHANGELOG.md`（新增 `## v<version>` 一节）、`pubspec.yaml` 和 `release.json`，保持版本一致。
-2. 提交到 main。正式版标签（不含 `-`）指向的提交必须已在 `origin/main` 上，否则 `Release_Metadata` 失败，不会构建和发布；手动运行不受此限制。
+2. 通过 PR 和 main 保护要求的 CI 后合入 main，不直接推送主线。正式版标签（不含 `-`）指向的提交必须已在 `origin/main` 上，否则 `Release_Metadata` 失败，不会构建和发布；手动运行不受此限制。
 3. 推送 `v*` 标签，格式为 `v1.2.3` 或 `v1.2.3-rc.1`。`-rc` 等预发布标签可在功能分支上发布，不受 main 限制。
 4. CI 自动校验标签与元数据、质量检查、固定签名构建，用 `apksigner` 核对证书 SHA-256 为 `ddf1ca6f03578cd9b41470670cd3a21637772ea9e3ceab4f6d9ea9c0e8d5e909`，核对 `SHA256SUMS.txt` 后创建 Release 并上传 APK 与摘要；`-rc` 等含 `-` 的标签发布为预发布。
 5. 正式版发布成功后，CI 自动删除同版本（`v<version>-*`）的预发布 Release 及其标签，包括只有标签没有 Release 的情况；不会触碰正式版或其他版本，清理失败只告警，不影响已发布的正式版。预发布发布时不清理。
@@ -135,7 +138,15 @@ Leaf仅维护Android ARM64产物；工作流职责见下表。正式发布流程
 
 使用发布API回读 `releases/latest` 确认新版本与APK资产，再通过实际版本比较函数检查旧版本会提示更新、新版本不会自我提示。设备须分别能访问GitHub API和资产下载域名。首次安装承载应用内更新功能的版本仍需手动覆盖安装，之后可在应用中下载并交给Android确认；安装结果不明确时保留唯一候选包并提供发布页回退。
 
+## PR 与 main CI
+
+`main` 只能通过 PR 合入。PR 和 `main` push 保留现有自动 CI 触发及聚合门禁。分支保护保留原有全部必需检查，并新增质量检查与依赖安全聚合门禁；文档轻量路径只跳过昂贵作业，不绕过 PR、分支保护或聚合门禁。管理员同样遵守规则，禁止强推和删除 `main`，合并前解决 PR 讨论；单人维护时必需批准人数为 0，但仍必须使用 PR。
+
+纯文档改动仅限变更完全落在根目录 `README.md`、`README.en.md`、`docs/` 下的 Markdown 文件或 `doc/` 下的 Markdown 文件。图片和 `CHANGELOG.md` 变更均执行全检；`CHANGELOG.md` 会打包进应用。纯文档门禁跳过 Flutter、Rust、Android 和依赖扫描，仍执行范围检查并汇总门禁状态；代码、混合改动、CI 配置、发布标签、手动与定时运行执行全检。范围检测失败或应运行的检查被跳过时，门禁失败。具体配置与实际必需检查以仓库工作流及 branch protection 为准。
+
 ## Leaf 工作流维护范围
+
+下表列出各工作流的职责。纯文档变更仍运行范围检查和聚合门禁，只跳过昂贵的应用分析与构建作业；代码及强制全检按完整职责运行。
 
 | 入口 | 行为 |
 |---|---|
