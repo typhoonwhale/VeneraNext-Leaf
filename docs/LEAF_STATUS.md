@@ -34,4 +34,4 @@ Leaf Activity 实测配置为 350 dpi、fontScale 0.85。设备目前运行正�
 
 ## 开发入口
 
-`main` 通过 PR 合入；纯文档改动走轻量文档门禁，其他改动按核心 CI 验证。主线保护和路径范围见[准备记录](LEAF_1_19_3_PREPARATION.md)。开发计划、功能清单和构建说明见[开发入口](LEAF_DEVELOPMENT_PLAN.md)与[构建说明](LEAF_BUILD.md)。
+开发前必须阅读[分支与功能文档规范](LEAF_BRANCH_WORKFLOW.md)。新功能从当前分支新建分支并初始化功能／待办，先整合进下一小版本预备分支并汇总文档，再由预备分支通过 PR 合入 main；纯文档维护可直接发 PR 到 main 并走轻量门禁，其他改动按核心 CI 验证。主线保护和路径范围见[准备记录](LEAF_1_19_3_PREPARATION.md)。开发计划、功能清单和构建说明见[开发入口](LEAF_DEVELOPMENT_PLAN.md)与[构建说明](LEAF_BUILD.md)。
