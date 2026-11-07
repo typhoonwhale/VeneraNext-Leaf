@@ -1,28 +1,25 @@
 # VeneraNext Leaf：当前状态与开发入口
 
-更新：2026-11-03。正式版仍为 1.19.2+253 / ARM64 versionCode 2532；当前准备分支及决策见 [LEAF_STATUS.md](LEAF_STATUS.md) 和 [1.19.3 预备说明](LEAF_1_19_3_PREPARATION.md)。
+更新：2026-11-03。`main` 是长期权威主线；正式版与 Leaf5+ 设备当前版本均为 1.19.2+253 / ARM64 versionCode 2532。当前状态见 [LEAF_STATUS.md](LEAF_STATUS.md)，准备分支与主线门禁见 [LEAF_1_19_3_PREPARATION.md](LEAF_1_19_3_PREPARATION.md)。
 
 ## 1. 目标与状态
 
 - 设备：文石 BOOX Leaf5+（Android 13，手势导航，无底部虚拟按键栏）。使用第三方 Venera JavaScript 漫画源，主要阅读普通漫画、日漫。
-- 目标：阅读信息不遮挡漫画（独立底栏），持续完善墨水屏体验。KOOBONE 接入、Venera 源移植到 Mihon 不在范围内。
-- 正式版：Leaf 1.19.2+253 / ARM64 versionCode 2532，包含已读／看过、紧凑信息区和墨水屏遗漏补齐；发布状态与可下载资产以 [GitHub Releases](https://github.com/typhoonwhale/VeneraNext-Leaf/releases) 为准。`release/leaf-1.19.3` 从 `origin/main@09b0bd51be451930094fabfbfcf19afb7b2c3cb6` 建立，目前仅更新准备文档，版本元数据保持 1.19.2+253。上一正式版 Leaf 1.19.1+252 / versionCode 2522（tag `v1.19.1` 指向 `c61937a`）包含空章节错误处理与重试修复；其 USB 覆盖升级为历史结果。应用内更新自 1.18.4 提供，墨水屏模式自 1.19.0 提供。
-- 用户此前确认同签名 Release 覆盖升级保留数据、从原版导入 `data.venera` 均正常，竖屏日常阅读正常；这些历史结果不代表 1.19.3 已做过专项验收。用户只竖屏使用，横屏不在当前验收范围。
-- 验证：PR #6 的 8 项检查全部成功，完整 Linux Flutter 为 5627 通过、151 跳过，Android ARM64 冒烟构建通过；合入 tree 与被测提交一致。信息区 7 项布局验证和合入后的 3 项截图验证通过；整合期未完成额外专项实机验收，现按用户决定取消这些专项。[结果与截图](research/2026-11-02-integration-validation.md)。正式 1.19.1 的历史 CI 为 5543 通过、151 跳过，首次失败记录保留。
-- 墨水屏模式（黑白 UI、减少动画，路线图阶段 2/3）已在 1.19.0 发布（默认开启，可在“设置 → 外观”关闭）；组件索引与修改指南见 [LEAF_EINK_UI.md](LEAF_EINK_UI.md)，阶段规划见 [LEAF_EINK_ROADMAP.md](LEAF_EINK_ROADMAP.md)，官方 SDK 约束见 [LEAF_EINK_GUIDELINES.md](LEAF_EINK_GUIDELINES.md)。
-- 应用内更新已在 1.18.4 发布，设计与验收见 [LEAF_IN_APP_UPDATE_DESIGN.md](LEAF_IN_APP_UPDATE_DESIGN.md)、[LEAF_IN_APP_UPDATE_VALIDATION.md](LEAF_IN_APP_UPDATE_VALIDATION.md)。
+- 目标：阅读信息不遮挡漫画，持续完善墨水屏体验，同时保留漫画原图。KOOBONE 接入、Venera 源移植到 Mihon 和漫画灰度转换均不在范围内。
+- 正式版：Leaf 1.19.2+253 / ARM64 versionCode 2532，包含章节已读／看过、紧凑信息区和墨水屏 UI／动画补齐；发布资产以 [GitHub Releases](https://github.com/typhoonwhale/VeneraNext-Leaf/releases) 为准。上一正式版 Leaf 1.19.1+252 / versionCode 2522（`v1.19.1`，基线 `c61937a`）包含空章节错误处理与重试修复。
+- 应用内更新自 1.18.4 提供；墨水屏模式自 1.19.0 提供。底栏和实现细节见第 3 节。
+- 墨水屏组件索引与修改指南见 [LEAF_EINK_UI.md](LEAF_EINK_UI.md)，阶段规划见 [LEAF_EINK_ROADMAP.md](LEAF_EINK_ROADMAP.md)，SDK 约束见 [LEAF_EINK_GUIDELINES.md](LEAF_EINK_GUIDELINES.md)。
+- 应用内更新设计与已有覆盖记录见 [LEAF_IN_APP_UPDATE_DESIGN.md](LEAF_IN_APP_UPDATE_DESIGN.md) 和 [LEAF_IN_APP_UPDATE_VALIDATION.md](LEAF_IN_APP_UPDATE_VALIDATION.md)。
 
 ## 2. 基线与分支
 
 - 上游：https://github.com/CyrilPeng/Venera-Next ，基线 `v1.18.1` / `087147a7810039398f4eed3bcc794b576f92c46b`。
-- 本项目：https://github.com/typhoonwhale/VeneraNext-Leaf （`origin`，fork 自上游，上游为 `upstream`）。
-- 暂不跟进上游新版本；需要上游某项修复时再单独评估。
-- `main` 为主线，正式版只能从 main 推 `v*` 标签由 CI 发布，构建与发布流程见 [LEAF_BUILD.md](LEAF_BUILD.md)。功能用独立 `feature/...` 分支开发。
-- `release/leaf-1.19.3` 以 `origin/main@09b0bd51be451930094fabfbfcf19afb7b2c3cb6` 为准备基线；`fix/leaf-viewed-marker@2fb53b4` 已另存远端，圆圈修复待纳入准备分支，两个分支均保留。main 的保护规则已启用并回读核实，具体约定见[预备说明](LEAF_1_19_3_PREPARATION.md)。
-- `feature/leaf-reader-footer`（3eac32b）是早期开发分支，已合入 main，不再在其上开发。
-- `feature/leaf-1.19.1-integration` 从正式 1.19.1 建立，收进已读／看过、紧凑信息区和墨水屏补齐；已通过 [PR #6](https://github.com/typhoonwhale/VeneraNext-Leaf/pull/6) 合入 main（`2008382`）。新开发从核实过的最新 main 开始；早期 `feature/leaf-eink-adaptation@274b3db` 保留为历史调研分支。
-- “已读／看过”从 `feature/leaf-read-state@98694ef` 整合；D1 续读补偿、D2–D8 均已确认。本版 1.19.2+253 / versionCode 2532 包含该实现，主线已通过完整自动验证。用户决定不再对已读／看过、其他墨水屏、升级数据保留、应用内完整升级和 WebDAV 往返做专项验收；日常使用暂未发现问题，这不代表专项测试通过。
-- 沿用现有 Flutter/Dart 工程、阅读器、JS 漫画源运行环境、设置继承与数据导入导出；新增设置带默认值，旧 `data.venera` 可进入现有导入流程。
+- 本项目：https://github.com/typhoonwhale/VeneraNext-Leaf（`origin`，fork 自上游；上游远端为 `upstream`）。
+- 暂不跟进上游新版本；需要某项修复时再单独评估。
+- `main` 是长期主线，正式发布从 main 上的提交打 `v*` 标签；新增功能及功能修复必须先从当前分支新建独立分支，合入下一小版本预备分支后，再由预备分支通过 PR 合入 main；创建分支与整合时的功能／待办要求见[分支规范](LEAF_BRANCH_WORKFLOW.md)。
+- `release/leaf-1.19.3@bc6b8d6` 从 `main@09b0bd5` 建立，仅准备文档，版本元数据仍为 1.19.2+253；看过圆圈修复在独立 `fix/leaf-viewed-marker@2fb53b4` 分支，尚未合入 main 或发布分支。详情见[准备记录](LEAF_1_19_3_PREPARATION.md)。
+- 早期 `feature/leaf-reader-footer` 已合入 main；`feature/leaf-1.19.1-integration` 的整合通过 [PR #6](https://github.com/typhoonwhale/VeneraNext-Leaf/pull/6) 合入 main（`2008382`）。新功能从当前分支已核实的 HEAD 新建分支；缺少下一小版本预备分支时，另从最新 main 建立预备分支。
+- 沿用现有 Flutter/Dart 工程、阅读器、JS 漫画源运行环境、设置继承与数据导入导出；新增设置应有明确默认值，旧 `data.venera` 可进入现有导入流程。
 
 ## 3. 底栏设计（当前）
 
@@ -75,41 +72,46 @@
 
 ## 7. 待办与验证
 
-### 已完成
+### 已发布
 
-- [x] 正式 1.19.1 空章节修复已发布；Leaf5+ 同签名 USB 覆盖升级、数据保留和阅读冒烟通过。此前原版 `data.venera` 导入与竖屏日常阅读已有实机确认；这些历史结果不替代新功能验收。
-- [x] 已读／看过、紧凑信息区、墨水屏遗漏补齐统一整合，并通过 PR #6 一次性合 main。
-- [x] 最终整合内容的 8 项 PR CI 成功，Flutter 5627 通过、151 跳过，Android ARM64 冒烟通过；独立评审及相关本地验证通过。
-- [x] 7 种信息区布局模拟和 3 项章节／收藏／加载框定向验证通过，16 张模拟图已归档；截图均使用墨水屏模式，参数和替代字体明确标注。
+- Leaf 1.19.2+253 / ARM64 versionCode 2532 已发布；包含已读／看过、紧凑信息区及墨水屏 UI／动画遗漏补齐。
+- PR #6 的历史验证、布局模拟和定向截图见[整合验收记录](research/2026-11-02-integration-validation.md)。
 
-### 当前 1.19.3 准备
+### 已实现，待合入
 
-- [ ] 将 `fix/leaf-viewed-marker@2fb53b4` 的看过圆圈修复纳入 `release/leaf-1.19.3`。独立分支的 55 项回归、静态分析、格式检查和 Leaf5+ 实机对照已通过；这些结果属于源分支，不能写成准备分支验收结果。完成情况见[预备说明](LEAF_1_19_3_PREPARATION.md)。
+- 看过状态圆圈修复已保存在 `fix/leaf-viewed-marker@2fb53b4`，55 项回归、全仓静态分析、格式检查及 Leaf5+ 设备系统截图对照通过；尚未合入 main 或 `release/leaf-1.19.3`。后续先收进预备分支并汇总文档，再由预备分支通过 PR 纳入 main；状态见[准备记录](LEAF_1_19_3_PREPARATION.md)。
 
-### 用户决定不再专项验收
+### 实现中
 
-- 已读／看过专项实机；其他墨水屏专项实机；升级数据保留、应用内完整升级、WebDAV 跨设备往返。日常使用暂未发现问题。以上是用户决定，不是专项测试通过结论，也不作为当前准备分支待办。
+- 瓜子章节往前翻回后显示空章节：停止用 HEAD 校验网络缓存，分支 `fix/leaf-chapter-cache-head`，见[功能文档](features/leaf-chapter-cache-head.md)。
 
-### 后续问题、候选与暂缓项
+### 后续候选
 
-- [ ] 应用内更新剩余异常组合：旧快照、恢复中异常退出、压缩包不同状态跨升级、分段损坏／缓存回收／清理失败、安装失败及后台／迟到回调，具体已有覆盖见[验收表](LEAF_IN_APP_UPDATE_VALIDATION.md#历史发布与实机覆盖截至-2026-10-30)。这是后续候选，不属于本轮已取消的应用内完整升级专项。
-- [ ] 下载慢的改进候选：现有 30 秒网络超时放宽、下载镜像均未实施；本次慢下载没有超时报错证据，原因尚未确认。
-- [ ] 瓜子源：再次出现原偶发错误时采集 Network／Reader 日志、章节和源版本；首次网络／解析失败原因未知，客户端空结果处理已发布。错误页 1/1 占位显示另待处理。
-- [ ] 字形视觉对齐暂缓：模拟图日期数字看起来略高；中文和日期位于同一个 Text，共用基线。先核对 Leaf5+ 实际字体，再决定是否需要调整；当前不加固定偏移。
-- [ ] 硬件与能耗：SDK 手动全刷最小实验、同条件 60 分钟耗电对照；自动刷新仅在 SDK 实机通过且仍有残影需求时考虑。
+以下为低优先级候选，不作为当前发布门槛：
 
-这些后续候选按实际需求安排，不把所有历史异常组合、硬件实验和耗电研究自动扩大为本轮整合的发布门槛。旧分支是否清理另行决定，不自动删除。
+- 瓜子源首次空结果的网络／解析原因仍未知；错误页 1/1 占位显示可后续处理。
+- 应用内更新剩余异常组合保留为按需候选，已有覆盖见[更新验收记录](LEAF_IN_APP_UPDATE_VALIDATION.md#历史发布与实机覆盖截至-2026-10-30)，不另设当前专项验收。
+- 下载慢的原因尚未确认；放宽超时或增加下载镜像尚未实施。
+- 墨水屏 SDK 手动刷新和同条件耗电对照可按后续需求评估；自动刷新须先通过手动刷新实机验证。
+- 日期字形对齐暂缓，先核对 Leaf5+ 字体，不加入固定偏移。
+
+### 用户取消的专项验收
+
+已读／看过专项实机、其他墨水屏专项、升级数据保留、应用内完整升级及 WebDAV 往返专项已取消。日常使用暂未发现问题；这不表示专项测试通过，也不作为待办或发布门槛。
 
 ## 8. 继续开发
 
-main 为主线，墨水屏进度看 [LEAF_EINK_ROADMAP.md](LEAF_EINK_ROADMAP.md)，机型依据与调研入口见[调研目录](research/README.md)。仓库的 main 保护规则已启用：main 只能经 PR 合入，合并门禁与管理规则见[预备说明](LEAF_1_19_3_PREPARATION.md)。不重新创建阅读器项目，调研目录不是可构建工程。
+`main` 是长期权威主线。开始开发前必须阅读[分支与功能文档规范](LEAF_BRANCH_WORKFLOW.md)：从当前分支新建功能分支，确认下一小版本预备分支存在，并立即编写功能范围与待办。功能合入预备分支时同步汇总已实现内容与剩余待办，再由预备分支通过 PR 合入 main。纯文档改动使用轻量文档门禁，代码或 CI 改动执行完整核心 CI；门禁范围见[准备记录](LEAF_1_19_3_PREPARATION.md)。墨水屏候选见 [LEAF_EINK_ROADMAP.md](LEAF_EINK_ROADMAP.md)，机型依据与调研入口见[调研目录](research/README.md)。调研目录不是可构建工程。
 
 ```sh
 git clone https://github.com/typhoonwhale/VeneraNext-Leaf.git
 cd VeneraNext-Leaf
 git remote add upstream https://github.com/CyrilPeng/Venera-Next.git
-git switch main
+git status
+git branch --show-current
+git rev-parse HEAD
 git switch -c feature/<主题>
+# 随即检查或建立下一小版本预备分支，并初始化功能文档；详见分支规范。
 ```
 
 已有 checkout 时先看 `git status`、`git remote -v` 和当前分支，不重复 clone 或覆盖本地改动。每次开发后更新本文件的状态和待办。

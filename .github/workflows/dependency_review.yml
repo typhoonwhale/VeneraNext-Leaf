@@ -17,9 +17,24 @@ permissions:
   contents: read
 
 jobs:
+  changes:
+    name: 依赖变更范围
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      full_ci: ${{ steps.scope.outputs.full_ci }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: 检测纯文档变更
+        id: scope
+        run: python3 .github/scripts/ci_scope.py
+
   dependency_review:
+    needs: changes
+    if: ${{ needs.changes.outputs.full_ci == 'true' && github.event_name == 'pull_request' }}
     name: 依赖安全审查
-    if: ${{ github.event_name == 'pull_request' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -35,6 +50,8 @@ jobs:
           show-patched-versions: true
 
   rust_audit:
+    needs: changes
+    if: ${{ needs.changes.outputs.full_ci == 'true' }}
     name: Rust 锁定依赖漏洞扫描
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -56,3 +73,16 @@ jobs:
           path: build/security/rust-audit.log
           if-no-files-found: ignore
           retention-days: 14
+
+  dependency_gate:
+    name: 依赖安全门禁
+    needs: [changes, dependency_review, rust_audit]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - name: 汇总依赖检查结果
+        env:
+          CI_NEEDS: ${{ toJSON(needs) }}
+        run: python3 .github/scripts/ci_gate.py dependency_review rust_audit

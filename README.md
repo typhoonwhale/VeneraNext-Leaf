@@ -2,11 +2,13 @@
 
 **Leaf（VeneraNext-Leaf）基于 [VeneraNext](https://github.com/CyrilPeng/Venera-Next)，面向文石 BOOX Leaf5+ 的日常漫画阅读。** 保留上游漫画源、收藏、历史、本地阅读和导入导出接口；使用独立包名、固定签名 ARM64 Release，支持覆盖升级保留数据。
 
-**本版：Leaf 1.19.2+253 / Android ARM64（versionCode 2532）**，包含章节已读／看过、紧凑信息区和墨水屏遗漏补齐；发布状态与可下载资产以 [GitHub Releases](https://github.com/typhoonwhale/VeneraNext-Leaf/releases) 为准。上一正式版 [Leaf 1.19.1+252 / Android ARM64](https://github.com/typhoonwhale/VeneraNext-Leaf/releases/tag/v1.19.1)（versionCode 2522）仅含空章节修复，也是上次 Leaf5+ 设备核验版本。应用内更新自 1.18.4 提供，黑白墨水屏模式和减少动画自 1.19.0 提供（默认开启，可在“设置 → 外观”关闭）。固定签名 Leaf Release 可覆盖安装；1.18.2 及更早版本先手动覆盖安装，之后可在应用内更新。
+**当前正式版与设备版本：Leaf 1.19.2+253 / Android ARM64（versionCode 2532）**，包含章节已读／看过、紧凑信息区和墨水屏 UI／动画补齐；发布状态与下载资产见 [GitHub Releases](https://github.com/typhoonwhale/VeneraNext-Leaf/releases)。应用内更新自 1.18.4 提供，墨水屏模式自 1.19.0 提供。固定签名 Leaf Release 可覆盖安装；1.18.2 及更早版本先手动覆盖安装，之后可在应用内更新。
 
-正式版底栏为**横线 1 + 固定间隔 2 + 自然文字高度 + 底部留白 0–15（默认 4）**，字号 **9–13（默认 11）**；真实系统安全区另计，不伪造手势导航留白。历史实机记录确认竖屏日常阅读、数据导入及 1.18.4 → 1.19.0 应用内升级正常、数据保留；硬件刷新和耗电对照仍待实测。数值单位为 Flutter 逻辑像素。
+正式版底栏为**横线 1 + 固定间隔 2 + 自然文字高度 + 底部留白 0–15（默认 4）**，字号 **9–13（默认 11）**；真实系统安全区另计。单位为 Flutter 逻辑像素。
 
-**整合验证（2026-11-02）：**章节已读／看过、紧凑信息区和墨水屏缩略图／对话框／加载动画补齐，已通过 [PR #6](https://github.com/typhoonwhale/VeneraNext-Leaf/pull/6) 合入 main（`2008382`）。8 项 PR 检查成功，完整 Linux Flutter 为 5627 通过、151 跳过；[验证结果与墨水屏模拟截图](docs/research/2026-11-02-integration-validation.md)已记录。本次没有进行设备、覆盖升级或 WebDAV 同步验证；上次核验设备仍为 1.19.1 / 2522。旧 `1.19.1+251 / 2512` 是历史功能测试包，不是本版升级包。开发先读[当前状态](docs/LEAF_STATUS.md)、[剩余待办](docs/LEAF_DEVELOPMENT_PLAN.md#7-待办与验证)、[构建说明](docs/LEAF_BUILD.md)和[调研索引](docs/research/README.md)。
+**当前功能状态（2026-11-03）：** 看过状态圆圈修复已在独立分支实现，55 项回归、静态分析、格式检查和 Leaf5+ 设备系统截图对照通过；尚未合入 main 或 release/leaf-1.19.3。设备运行正式 1.19.2 / 2532，Leaf Activity 为 350 dpi、fontScale 0.85；ADB 系统截图不代表墨水屏面板的灰阶或残影。详见[当前状态](docs/LEAF_STATUS.md)、[开发计划与待办](docs/LEAF_DEVELOPMENT_PLAN.md#7-待办与验证)、[1.19.3 准备和 main 门禁](docs/LEAF_1_19_3_PREPARATION.md)及[构建说明](docs/LEAF_BUILD.md)。
+
+**开发必读：** [分支与功能文档规范](docs/LEAF_BRANCH_WORKFLOW.md)。每个新功能从当前分支新建功能分支，先整合到下一小版本预备分支，再由预备分支通过 PR 合入 main；功能范围、已实现内容和待办必须随分支同步维护。
 
 > 下方 VeneraNext 介绍、徽章、截图和各平台下载链接属于上游项目；Leaf 当前只交付 Android ARM64。
 

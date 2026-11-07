@@ -100,20 +100,6 @@ class LeafWorkflowTests(unittest.TestCase):
                 if not success:
                     self.assertIn('::error::', result.stdout + result.stderr)
 
-    def test_pr_gate_allows_skips_but_rejects_build_failures(self):
-        script = step_script('pr_build.yml', '汇总平台构建结果')
-        for changes, android, success in [
-            ('success', 'success', True), ('success', 'skipped', True),
-            ('failure', 'skipped', False), ('success', 'failure', False),
-            ('success', 'cancelled', False),
-        ]:
-            with self.subTest(changes=changes, android=android):
-                result = subprocess.run(
-                    ['bash', '-e', '-c', script], capture_output=True, text=True,
-                    env={**os.environ, 'CHANGES_RESULT': changes, 'ANDROID_RESULT': android},
-                )
-                self.assertEqual(result.returncode == 0, success, result.stderr)
-
     def test_formal_release_tag_must_be_on_main(self):
         script = step_script('main.yml', '校验正式版标签位于 main')
 
