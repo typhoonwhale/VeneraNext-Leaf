@@ -3,7 +3,7 @@
 - 功能分支：fix/leaf-chapter-cache-head
 - 创建基线：origin/main@4e848a445013989bcd9dcb8d1aa1560e6cd1d722
 - 目标预备分支：release/leaf-1.19.3
-- 状态：实现中（代码与单元测试已完成，待 Leaf5+ 实测）
+- 状态：待整合
 
 ## 功能与范围
 
@@ -32,10 +32,14 @@
 - [x] 移除 `NetworkCache` 拦截器中的 HEAD 校验
 - [x] 调整缓存回归测试
 - [x] 静态分析、格式和架构检查
-- [ ] Leaf5+ Debug 包实测
+- [x] Leaf5+ Debug 包实测
 - [ ] 整合至预备分支并更新版本功能与待办汇总
 
 ## 验证与边界
 
 - 本地：`cache_revalidation_test.dart`、`cache_test.dart`、`app_dio_test.dart` 共 20 项通过；`flutter analyze --fatal-infos lib test` 无问题；改动文件 `dart format` 无变化；架构依赖检查通过。`test/network/` 全目录另有 19 项 `image_config_ownership_test.dart` 因本机缺 Rust 原生库失败，改动前基线同样失败。完整 Linux CI 以 PR 检查为准。
-- Leaf5+ 实测：待执行。
+- Leaf5+ 实测（2026-11-07，Android 13）：Mac 上的受控服务器模拟瓜子行为，即缓存超过 20 秒后变为 STALE，此时收到 HEAD 会存成空正文。分别安装修复前（`4e848a4`）和修复后（`9919295`）的 ARM64 Debug 包（`.leaf.debug`，独立数据区），使用画廊左右翻页：打开第 2 章，翻进第 3 章，停留 25 秒后翻回第 2 章。
+  - 修复前：先发 HEAD（STALE），随后的 GET 返回 HIT、0 字节，屏幕显示“本章未返回任何图片，请重试。”；点击重试，GET 仍返回 0 字节，错误依旧。
+  - 修复后：只发一次 GET（STALE，281 字节），没有 HEAD，第 2 章最后一页正常显示 3/3。
+  - 两组 logcat 和应用日志均未出现 `Invalid argument`、`Unhandled`、`EXCEPTION CAUGHT` 或 `FATAL`。测试结束后已卸载 Debug 包，正式包仍为 1.19.2 / 2532。
+- 未验证：真实瓜子网络下修复版的长期表现，以及 Release 覆盖升级。被其他客户端写坏的服务器缓存仍会导致短时空章节，这种情况不在本修复范围内。
