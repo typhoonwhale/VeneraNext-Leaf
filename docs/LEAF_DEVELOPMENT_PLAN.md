@@ -17,7 +17,7 @@
 - 本项目：https://github.com/typhoonwhale/VeneraNext-Leaf（`origin`，fork 自上游；上游远端为 `upstream`）。
 - 暂不跟进上游新版本；需要某项修复时再单独评估。
 - `main` 是长期主线，正式发布从 main 上的提交打 `v*` 标签；新增功能及功能修复必须先从当前分支新建独立分支，合入下一小版本预备分支后，再由预备分支通过 PR 合入 main；创建分支与整合时的功能／待办要求见[分支规范](LEAF_BRANCH_WORKFLOW.md)。
-- `release/leaf-1.19.3@bc6b8d6` 从 `main@09b0bd5` 建立，仅准备文档，版本元数据仍为 1.19.2+253；看过圆圈修复在独立 `fix/leaf-viewed-marker@2fb53b4` 分支，尚未合入 main 或发布分支。详情见[准备记录](LEAF_1_19_3_PREPARATION.md)。
+- `release/leaf-1.19.3` 从 `main@09b0bd5` 建立，已整合看过圆圈修复和缓存 HEAD 修复，版本元数据仍为 1.19.2+253；尚未合入 main 或发布。详情见[准备记录](LEAF_1_19_3_PREPARATION.md)。
 - 早期 `feature/leaf-reader-footer` 已合入 main；`feature/leaf-1.19.1-integration` 的整合通过 [PR #6](https://github.com/typhoonwhale/VeneraNext-Leaf/pull/6) 合入 main（`2008382`）。新功能从当前分支已核实的 HEAD 新建分支；缺少下一小版本预备分支时，另从最新 main 建立预备分支。
 - 沿用现有 Flutter/Dart 工程、阅读器、JS 漫画源运行环境、设置继承与数据导入导出；新增设置应有明确默认值，旧 `data.venera` 可进入现有导入流程。
 
@@ -77,19 +77,15 @@
 - Leaf 1.19.2+253 / ARM64 versionCode 2532 已发布；包含已读／看过、紧凑信息区及墨水屏 UI／动画遗漏补齐。
 - PR #6 的历史验证、布局模拟和定向截图见[整合验收记录](research/2026-11-02-integration-validation.md)。
 
-### 已实现，待合入
+### 已整合到预备分支，待合入 main
 
-- 看过状态圆圈修复已保存在 `fix/leaf-viewed-marker@2fb53b4`，55 项回归、全仓静态分析、格式检查及 Leaf5+ 设备系统截图对照通过；尚未合入 main 或 `release/leaf-1.19.3`。后续先收进预备分支并汇总文档，再由预备分支通过 PR 纳入 main；状态见[准备记录](LEAF_1_19_3_PREPARATION.md)。
-
-### 实现中
-
-- 瓜子章节往前翻回后显示空章节：停止用 HEAD 校验网络缓存，分支 `fix/leaf-chapter-cache-head`，见[功能文档](features/leaf-chapter-cache-head.md)。
+- 看过状态圆圈修复（`fix/leaf-viewed-marker@2fb53b4`）与瓜子章节往前翻回后显示空章节的缓存修复（`fix/leaf-chapter-cache-head@e662b3f`，[功能文档](features/leaf-chapter-cache-head.md)）已整合进 `release/leaf-1.19.3`。功能分支与整合后的验证、剩余待办见[准备记录](LEAF_1_19_3_PREPARATION.md)。
 
 ### 后续候选
 
 以下为低优先级候选，不作为当前发布门槛：
 
-- 瓜子源首次空结果的网络／解析原因仍未知；错误页 1/1 占位显示可后续处理。
+- 瓜子服务器缓存若被其他客户端写成空正文，仍可能短时返回空章节，需源脚本带随机参数重试；错误页 1/1 占位显示可后续处理。
 - 应用内更新剩余异常组合保留为按需候选，已有覆盖见[更新验收记录](LEAF_IN_APP_UPDATE_VALIDATION.md#历史发布与实机覆盖截至-2026-10-30)，不另设当前专项验收。
 - 下载慢的原因尚未确认；放宽超时或增加下载镜像尚未实施。
 - 墨水屏 SDK 手动刷新和同条件耗电对照可按后续需求评估；自动刷新须先通过手动刷新实机验证。
