@@ -665,3 +665,38 @@ class _CheckMarkPainter extends CustomPainter {
   @override
   bool shouldRepaint(_CheckMarkPainter old) => old.color != color;
 }
+
+/// A fixed-size hollow circle; the font glyph is too small on E-Ink.
+class EInkViewedMark extends StatelessWidget {
+  const EInkViewedMark({super.key, this.color = Colors.black});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => CustomPaint(
+    size: const Size.square(EInkStyle.checkMarkSize),
+    painter: _ViewedMarkPainter(color),
+  );
+}
+
+class _ViewedMarkPainter extends CustomPainter {
+  const _ViewedMarkPainter(this.color);
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const width = EInkStyle.checkMarkStrokeWidth;
+    canvas.drawCircle(
+      Offset(size.width / 2, size.height / 2),
+      (size.shortestSide - width) / 2,
+      Paint()
+        ..color = color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = width,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_ViewedMarkPainter old) => old.color != color;
+}

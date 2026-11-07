@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -113,13 +115,13 @@ void main() {
                   expect(check.color, last == 1 ? Colors.white : Colors.black);
                 }
                 if (eink && i == 1) {
-                  final circle = tester.widget<Text>(
-                    find.descendant(of: cellFinder, matching: find.text('○')),
+                  final circle = tester.widget<EInkViewedMark>(
+                    find.descendant(
+                      of: cellFinder,
+                      matching: find.byType(EInkViewedMark),
+                    ),
                   );
-                  expect(
-                    circle.style?.color,
-                    last == 2 ? Colors.white : Colors.black,
-                  );
+                  expect(circle.color, last == 2 ? Colors.white : Colors.black);
                 }
               }
               final firstX = tester.getTopLeft(find.text(labels.first));
@@ -137,6 +139,73 @@ void main() {
       }
     }
   }
+
+  testWidgets('E-Ink viewed marker stays 14dp and hollow at 0.85 text scale', (
+    tester,
+  ) async {
+    final theme = getTheme(
+      Colors.blue,
+      null,
+      null,
+      Brightness.light,
+      eink: true,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: theme,
+        home: Builder(
+          builder: (context) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: const TextScaler.linear(0.85)),
+            child: Scaffold(
+              body: CustomScrollView(
+                slivers: [
+                  ComicChaptersView(
+                    chapters: normal,
+                    history: historyFor(grouped: false, last: 3),
+                    readChapter: (_) {},
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final markFinder = find.byType(EInkViewedMark);
+    expect(markFinder, findsOneWidget);
+    expect(tester.getSize(markFinder), const Size.square(14));
+
+    final painter = tester
+        .widget<CustomPaint>(
+          find.descendant(of: markFinder, matching: find.byType(CustomPaint)),
+        )
+        .painter!;
+    final recorder = ui.PictureRecorder();
+    final canvas = ui.Canvas(recorder)
+      ..drawColor(Colors.white, ui.BlendMode.src);
+    painter.paint(canvas, const Size.square(14));
+    final picture = recorder.endRecording();
+    try {
+      final image = (await tester.runAsync(() => picture.toImage(14, 14)))!;
+      try {
+        final pixels = (await tester.runAsync(
+          () => image.toByteData(format: ui.ImageByteFormat.rawRgba),
+        ))!;
+        int red(int x, int y) => pixels.getUint8((y * 14 + x) * 4);
+
+        expect(red(7, 7), 255);
+        expect(red(7, 0), lessThan(32));
+        expect(red(7, 2), lessThan(255));
+      } finally {
+        image.dispose();
+      }
+    } finally {
+      picture.dispose();
+    }
+  });
 
   testWidgets(
     'manual mark creates history and redraws without a resume highlight',
