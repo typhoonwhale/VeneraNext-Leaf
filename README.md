@@ -2,11 +2,11 @@
 
 **Leaf（VeneraNext-Leaf）基于 [VeneraNext](https://github.com/CyrilPeng/Venera-Next)，面向文石 BOOX Leaf5+ 的日常漫画阅读。** 保留上游漫画源、收藏、历史、本地阅读和导入导出接口；使用独立包名、固定签名 ARM64 Release，支持覆盖升级保留数据。
 
-**当前正式版与设备版本：Leaf 1.19.2+253 / Android ARM64（versionCode 2532）**，包含章节已读／看过、紧凑信息区和墨水屏 UI／动画补齐；发布状态与下载资产见 [GitHub Releases](https://github.com/typhoonwhale/VeneraNext-Leaf/releases)。应用内更新自 1.18.4 提供，墨水屏模式自 1.19.0 提供。固定签名 Leaf Release 可覆盖安装；1.18.2 及更早版本先手动覆盖安装，之后可在应用内更新。
+**本版：Leaf 1.19.3+254 / Android ARM64（versionCode 2542）**，修复瓜子章节往前翻回后显示空章节，并加大“看过”圆圈；1.19.2 起包含章节已读／看过、紧凑信息区和墨水屏 UI／动画补齐；发布状态与下载资产见 [GitHub Releases](https://github.com/typhoonwhale/VeneraNext-Leaf/releases)。应用内更新自 1.18.4 提供，墨水屏模式自 1.19.0 提供。固定签名 Leaf Release 可覆盖安装；1.18.2 及更早版本先手动覆盖安装，之后可在应用内更新。
 
 正式版底栏为**横线 1 + 固定间隔 2 + 自然文字高度 + 底部留白 0–15（默认 4）**，字号 **9–13（默认 11）**；真实系统安全区另计。单位为 Flutter 逻辑像素。
 
-**当前功能状态（2026-11-03）：** 看过状态圆圈修复已在独立分支实现，55 项回归、静态分析、格式检查和 Leaf5+ 设备系统截图对照通过；尚未合入 main 或 release/leaf-1.19.3。设备运行正式 1.19.2 / 2532，Leaf Activity 为 350 dpi、fontScale 0.85；ADB 系统截图不代表墨水屏面板的灰阶或残影。详见[当前状态](docs/LEAF_STATUS.md)、[开发计划与待办](docs/LEAF_DEVELOPMENT_PLAN.md#7-待办与验证)、[1.19.3 准备和 main 门禁](docs/LEAF_1_19_3_PREPARATION.md)及[构建说明](docs/LEAF_BUILD.md)。
+**当前功能状态（2026-11-07）：** 看过圆圈修复和瓜子空章节缓存修复已经 `release/leaf-1.19.3` 通过 [PR #12](https://github.com/typhoonwhale/VeneraNext-Leaf/pull/12) 合入 main，12 项 PR 检查全部通过。设备发版前运行正式 1.19.2 / 2532，Leaf Activity 为 350 dpi、fontScale 0.85；ADB 系统截图不代表墨水屏面板的灰阶或残影。详见[当前状态](docs/LEAF_STATUS.md)、[开发计划与待办](docs/LEAF_DEVELOPMENT_PLAN.md#7-待办与验证)、[1.19.3 准备和 main 门禁](docs/LEAF_1_19_3_PREPARATION.md)及[构建说明](docs/LEAF_BUILD.md)。
 
 **开发必读：** [分支与功能文档规范](docs/LEAF_BRANCH_WORKFLOW.md)。每个新功能从当前分支新建功能分支，先整合到下一小版本预备分支，再由预备分支通过 PR 合入 main；功能范围、已实现内容和待办必须随分支同步维护。
 

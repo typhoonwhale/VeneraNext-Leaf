@@ -4,7 +4,7 @@
 
 ## 分支与版本
 
-- `release/leaf-1.19.3` 从 `main@09b0bd5` 建立（准备提交 `bc6b8d6`）。2026-11-07 整合两个修复，并经 `fix/leaf-chapter-cache-head` 同步了 `main@4e848a4` 的规范与 CI 改动；版本元数据仍为 1.19.2+253，发版时再递增。该分支记录的是准备过程，不改变 `main` 作为长期权威主线的地位。
+- `release/leaf-1.19.3` 从 `main@09b0bd5` 建立（准备提交 `bc6b8d6`）。2026-11-07 整合两个修复，并经 `fix/leaf-chapter-cache-head` 同步了 `main@4e848a4` 的规范与 CI 改动；版本元数据在发版提交中递增为 1.19.3+254。该分支记录的是准备过程，不改变 `main` 作为长期权威主线的地位。
 - 正式版及 Leaf5+ 设备版本为 **1.19.2+253 / ARM64 versionCode 2532**；发布资产见 [GitHub Releases](https://github.com/typhoonwhale/VeneraNext-Leaf/releases)。
 - Leaf Activity 实测为 350 dpi、fontScale 0.85；设备运行正式版 1.19.2 / 2532。ADB 系统截图用于界面对照，不代表墨水屏面板的灰阶或残影。
 
@@ -26,8 +26,8 @@
 
 ## 剩余待办
 
-- [ ] 由 `release/leaf-1.19.3` 发起到 main 的 PR，通过 main 保护要求的 CI。
-- [ ] 发版前递增版本元数据并构建正式包；Release 覆盖升级按发布流程核对。
+- [x] 由 `release/leaf-1.19.3` 发起到 main 的 PR：[PR #12](https://github.com/typhoonwhale/VeneraNext-Leaf/pull/12) 12 项检查全部通过，合并提交 `8797c75`。
+- [ ] 版本元数据递增为 `1.19.3+254`（ARM64 versionCode 2542）并更新 CHANGELOG，经 PR 合入 main 后打 `v1.19.3` 标签发布；Release 覆盖升级按发布流程核对。
 - 缓存修复：真实瓜子网络下的长期表现未验证；已被其他客户端写坏的服务器缓存仍可能导致短时空章节，需源脚本处理，不在本版本范围。
 
 ## 调整记录
