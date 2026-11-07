@@ -81,6 +81,10 @@
 
 - 看过状态圆圈修复已保存在 `fix/leaf-viewed-marker@2fb53b4`，55 项回归、全仓静态分析、格式检查及 Leaf5+ 设备系统截图对照通过；尚未合入 main 或 `release/leaf-1.19.3`。后续先收进预备分支并汇总文档，再由预备分支通过 PR 纳入 main；状态见[准备记录](LEAF_1_19_3_PREPARATION.md)。
 
+### 实现中
+
+- 瓜子章节往前翻回后显示空章节：停止用 HEAD 校验网络缓存，分支 `fix/leaf-chapter-cache-head`，见[功能文档](features/leaf-chapter-cache-head.md)。
+
 ### 后续候选
 
 以下为低优先级候选，不作为当前发布门槛：

@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -8,8 +7,6 @@ import 'package:venera_next/foundation/app.dart';
 import 'package:venera_next/foundation/log.dart';
 import 'package:venera_next/network/app_dio.dart';
 import 'package:venera_next/network/cache.dart';
-import 'package:venera_next/network/cookie_jar.dart';
-import 'package:venera_next/network/owned_dio_client.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -49,24 +46,83 @@ void main() {
     ),
   );
 
-  test('revalidation uses the original client adapter', () async {
-    seed();
-    final adapter = _Adapter((_) async => ResponseBody.fromString('', 200));
+  Future<Response<String>> get(
+    _Adapter adapter, {
+    Map<String, dynamic>? headers,
+    CancelToken? cancelToken,
+  }) {
     final dio = AppDio()..httpClientAdapter = adapter;
-    final token = CancelToken();
-    final outcome = dio
-        .get<String>(url, cancelToken: token)
-        .then<Object>((value) => value, onError: (Object error) => error);
-    try {
-      final result = await outcome.timeout(const Duration(seconds: 3));
-      expect(adapter.methods, ['HEAD']);
-      expect(result, isA<Response<String>>());
-      expect((result as Response<String>).data, 'cached');
-      expect(adapter.closes, 0);
-    } finally {
-      token.cancel();
-      dio.close(force: true);
-    }
+    addTearDown(() => dio.close(force: true));
+    return dio.get<String>(
+      url,
+      options: Options(headers: headers),
+      cancelToken: cancelToken,
+    );
+  }
+
+  test('fresh cache is reused without a request', () async {
+    seed(age: const Duration(seconds: 1));
+    final adapter = _Adapter((_) async => ResponseBody.fromString('new', 200));
+    final response = await get(adapter);
+    expect(response.data, 'cached');
+    expect(response.headers.value('venera-cache'), 'true');
+    expect(adapter.methods, isEmpty);
+  });
+
+  test('cache older than 5 seconds is refreshed with one GET', () async {
+    seed(age: const Duration(seconds: 6));
+    final adapter = _Adapter((_) async => ResponseBody.fromString('new', 200));
+    final response = await get(adapter);
+    expect(response.data, 'new');
+    expect(response.headers.value('venera-cache'), isNull);
+    expect(adapter.methods, ['GET']);
+    expect(cache.getCache(Uri.parse(url))!.data, 'new');
+  });
+
+  test('cache-time long reuses for 6 hours then sends only GET', () async {
+    final headers = {'cache-time': 'long'};
+    seed(age: const Duration(hours: 5));
+    final reused = _Adapter((_) async => ResponseBody.fromString('new', 200));
+    expect((await get(reused, headers: headers)).data, 'cached');
+    expect(reused.methods, isEmpty);
+
+    seed(age: const Duration(hours: 7));
+    final expired = _Adapter((_) async => ResponseBody.fromString('new', 200));
+    expect((await get(expired, headers: headers)).data, 'new');
+    expect(expired.methods, ['GET']);
+    expect(cache.getCache(Uri.parse(url))!.data, 'new');
+  });
+
+  test('cache-time no bypasses a fresh cache', () async {
+    seed(age: Duration.zero);
+    final adapter = _Adapter((_) async => ResponseBody.fromString('new', 200));
+    expect((await get(adapter, headers: {'cache-time': 'no'})).data, 'new');
+    expect(adapter.methods, ['GET']);
+  });
+
+  test('request cancelled before cache reuse is rejected', () async {
+    seed(age: Duration.zero);
+    final adapter = _Adapter((_) async => ResponseBody.fromString('new', 200));
+    final token = CancelToken()..cancel('caller closed');
+    await expectLater(
+      get(adapter, cancelToken: token),
+      throwsA(
+        isA<DioException>().having(
+          (e) => e.type,
+          'type',
+          DioExceptionType.cancel,
+        ),
+      ),
+    );
+    expect(adapter.methods, isEmpty);
+  });
+
+  test('cleared cache cannot return its old body', () async {
+    seed();
+    cache.clear();
+    final adapter = _Adapter((_) async => ResponseBody.fromString('new', 200));
+    expect((await get(adapter)).data, 'new');
+    expect(adapter.methods, ['GET']);
   });
 
   test('authorization changes cannot reuse another credential cache', () async {
@@ -83,145 +139,6 @@ void main() {
     expect(response.data, 'current account');
     expect(adapter.methods, ['GET']);
   });
-
-  for (final status in [400, 403, 500]) {
-    test(
-      'HEAD failure $status completes the original GET with its cause',
-      () async {
-        seed();
-        final adapter = _Adapter(
-          (_) async => ResponseBody.fromString('', status),
-        );
-        final dio = AppDio()..httpClientAdapter = adapter;
-        addTearDown(() => dio.close(force: true));
-        await expectLater(
-          dio.get<String>(url).timeout(const Duration(seconds: 2)),
-          throwsA(
-            isA<DioException>()
-                .having((e) => e.response?.statusCode, 'status', status)
-                .having(
-                  (e) => e.requestOptions.method,
-                  'original method',
-                  'GET',
-                ),
-          ),
-        );
-        expect(adapter.methods, ['HEAD']);
-        expect(cache.getCache(Uri.parse(url)), isNull);
-      },
-    );
-  }
-
-  for (final status in [405, 501]) {
-    test('unsupported HEAD $status falls through to one GET', () async {
-      seed();
-      final adapter = _Adapter(
-        (options) async => ResponseBody.fromString(
-          options.method == 'GET' ? 'fresh' : '',
-          options.method == 'GET' ? 200 : status,
-        ),
-      );
-      final dio = AppDio()..httpClientAdapter = adapter;
-      addTearDown(() => dio.close(force: true));
-      expect((await dio.get<String>(url)).data, 'fresh');
-      expect(adapter.methods, ['HEAD', 'GET']);
-    });
-  }
-
-  test('transport error preserves the original object and stack', () async {
-    seed();
-    final cause = StateError('HEAD transport');
-    final stack = StackTrace.current;
-    final adapter = _Adapter(
-      (options) => Future.error(
-        DioException(requestOptions: options, error: cause, stackTrace: stack),
-        stack,
-      ),
-    );
-    final dio = AppDio()..httpClientAdapter = adapter;
-    addTearDown(() => dio.close(force: true));
-    await expectLater(
-      dio.get<String>(url),
-      throwsA(
-        isA<DioException>()
-            .having((e) => e.error, 'original error', same(cause))
-            .having((e) => e.stackTrace, 'original stack', same(stack)),
-      ),
-    );
-  });
-
-  test('clearing cache during validation cannot return its old body', () async {
-    seed();
-    final entered = Completer<void>();
-    final head = Completer<ResponseBody>();
-    final adapter = _Adapter((options) async {
-      if (options.method == 'HEAD') {
-        entered.complete();
-        return head.future;
-      }
-      return ResponseBody.fromString('fresh', 200);
-    });
-    final dio = AppDio()..httpClientAdapter = adapter;
-    addTearDown(() => dio.close(force: true));
-    final request = dio.get<String>(url);
-    await entered.future;
-    cache.clear();
-    head.complete(ResponseBody.fromString('', 200));
-    expect((await request).data, 'fresh');
-    expect(adapter.methods, ['HEAD', 'GET']);
-  });
-
-  test('failed old validation cannot remove a replacement cache', () async {
-    seed();
-    final entered = Completer<void>();
-    final head = Completer<ResponseBody>();
-    final adapter = _Adapter((_) {
-      entered.complete();
-      return head.future;
-    });
-    final dio = AppDio()..httpClientAdapter = adapter;
-    addTearDown(() => dio.close(force: true));
-    final failed = expectLater(
-      dio.get<String>(url),
-      throwsA(isA<DioException>()),
-    );
-    await entered.future;
-    seed(age: Duration.zero, data: 'replacement');
-    final replacement = cache.getCache(Uri.parse(url));
-    head.completeError(StateError('old HEAD failed'));
-    await failed;
-    expect(cache.getCache(Uri.parse(url)), same(replacement));
-  });
-
-  test(
-    'validation replays cookies once and retains HEAD cookie updates',
-    () async {
-      final previous = SingleInstanceCookieJar.instance;
-      SingleInstanceCookieJar.instance = null;
-      final jar = SingleInstanceCookieJar(':memory:');
-      addTearDown(() {
-        jar.dispose();
-        SingleInstanceCookieJar.instance = previous;
-      });
-      jar.saveFromResponse(Uri.parse(url), [Cookie('session', 'one')]);
-      seed(headers: {'cookie': 'session=one'});
-      final adapter = _Adapter((options) async {
-        expect(options.headers['cookie'], 'session=one');
-        return ResponseBody.fromString(
-          '',
-          200,
-          headers: {
-            'set-cookie': ['session=two; Path=/'],
-          },
-        );
-      });
-      final dio = AppDio()..httpClientAdapter = adapter;
-      addTearDown(() => dio.close(force: true));
-      expect((await dio.get<String>(url)).data, 'cached');
-      expect(adapter.methods, ['HEAD']);
-      expect(jar.loadForRequestCookieHeader(Uri.parse(url)), 'session=two');
-    },
-  );
 
   test(
     'response representation changes cannot reuse a cached string as bytes',
@@ -240,42 +157,6 @@ void main() {
       expect(adapter.methods, ['GET']);
     },
   );
-
-  test('validation consumes its body without reporting GET progress', () async {
-    seed();
-    final entered = Completer<void>();
-    final body = StreamController<Uint8List>();
-    final adapter = _Adapter((options) async {
-      expect(options.method, 'HEAD');
-      expect(options.responseType, ResponseType.bytes);
-      expect(options.data, isNull);
-      expect(options.headers.containsKey('cache-time'), isFalse);
-      entered.complete();
-      return ResponseBody(body.stream, 200);
-    });
-    final dio = AppDio()..httpClientAdapter = adapter;
-    addTearDown(() => dio.close(force: true));
-    var completed = false;
-    var progress = 0;
-    final request = dio
-        .get<String>(
-          url,
-          options: Options(headers: {'cache-time': 'short'}),
-          onReceiveProgress: (_, _) => progress++,
-        )
-        .then((response) {
-          completed = true;
-          return response;
-        });
-    await entered.future;
-    body.add(Uint8List.fromList([1, 2, 3]));
-    await pumpEventQueue();
-    expect(completed, isFalse);
-    expect(progress, 0);
-    await body.close();
-    expect((await request).data, 'cached');
-    expect(adapter.methods, ['HEAD']);
-  });
 
   for (final streaming in [false, true]) {
     test(
@@ -307,178 +188,6 @@ void main() {
         expect(cache.getCache(Uri.parse(url)), same(cached));
       },
     );
-  }
-
-  for (final cleanupFails in [false, true]) {
-    test(
-      'cancelled HEAD stays owned through late cleanup; fails=$cleanupFails',
-      () async {
-        seed();
-        final entered = Completer<void>();
-        final response = Completer<ResponseBody>();
-        final adapter = _Adapter((_) {
-          entered.complete();
-          return response.future;
-        });
-        final dio = AppDio()..httpClientAdapter = adapter;
-        final owner = OwnedDioClient(dio);
-        final token = CancelToken();
-        final cancelled = expectLater(
-          dio.get<String>(url, cancelToken: token),
-          throwsA(
-            isA<DioException>().having(
-              (e) => e.type,
-              'cancel',
-              DioExceptionType.cancel,
-            ),
-          ),
-        );
-        await entered.future;
-        token.cancel('caller closed');
-        await cancelled;
-        var closed = false;
-        final close = owner.closeAndWait();
-        final result = cleanupFails
-            ? expectLater(
-                close,
-                throwsA(
-                  isA<DioCleanupFailure>().having(
-                    (e) => e.failures.map((f) => f.error.toString()).toList(),
-                    'cleanup causes',
-                    [
-                      'Bad state: HEAD body close',
-                      'Bad state: HEAD body cancel',
-                    ],
-                  ),
-                ),
-              )
-            : close.then((_) => closed = true);
-        await pumpEventQueue();
-        expect(closed, isFalse);
-        final cancelling = Completer<void>();
-        final release = Completer<void>();
-        final body = StreamController<Uint8List>(
-          onCancel: () {
-            cancelling.complete();
-            return release.future;
-          },
-        );
-        var bodyClosed = false;
-        response.complete(
-          ResponseBody(
-            body.stream,
-            200,
-            onClose: () {
-              bodyClosed = true;
-              if (cleanupFails) throw StateError('HEAD body close');
-            },
-          ),
-        );
-        await cancelling.future;
-        expect(bodyClosed, isTrue);
-        expect(closed, isFalse);
-        if (cleanupFails) {
-          release.completeError(StateError('HEAD body cancel'));
-        } else {
-          release.complete();
-        }
-        await result;
-        expect(owner.closeAndWait(), same(close));
-        expect(adapter.methods, ['HEAD']);
-        expect(adapter.closes, 1);
-        await body.close();
-      },
-    );
-  }
-
-  for (final action in ['match', 'changed', 'close']) {
-    test(
-      'native cache revalidation uses and releases its original adapter: $action',
-      () async {
-        final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-        final address = 'http://127.0.0.1:${server.port}/native';
-        final methods = <String>[];
-        final headEntered = Completer<void>();
-        server.listen((request) {
-          methods.add(request.method);
-          if (request.method == 'HEAD') {
-            headEntered.complete();
-            if (action == 'close') return;
-          }
-          request.response.headers.contentType = ContentType.text;
-          request.response.headers.contentLength = 6;
-          request.response.headers.set(
-            'etag',
-            action == 'changed' && methods.length > 1 ? 'second' : 'first',
-          );
-          if (request.method == 'GET') request.response.write('native');
-          unawaited(request.response.close());
-        });
-        final adapter = _NativeAdapter();
-        final dio = AppDio()..httpClientAdapter = adapter;
-        addTearDown(() async {
-          dio.close(force: true);
-          await adapter.waitForIdle();
-          await server.close(force: true);
-        });
-        Future<Response<String>> get() => dio.get<String>(
-          address,
-          options: Options(headers: {'user-agent': 'cache-owner-native'}),
-        );
-        expect((await get()).data, 'native');
-        final first = cache.getCache(Uri.parse(address))!;
-        cache.setCache(
-          NetworkCache(
-            uri: first.uri,
-            requestHeaders: first.requestHeaders,
-            responseHeaders: first.responseHeaders,
-            data: first.data,
-            time: DateTime.now().subtract(const Duration(minutes: 1)),
-            size: first.size,
-            responseType: first.responseType,
-          ),
-        );
-        final request = get();
-        final result = action == 'close'
-            ? expectLater(request, throwsA(isA<DioException>()))
-            : request.then((value) {
-                expect(value.data, 'native');
-                expect(
-                  value.headers.value('venera-cache'),
-                  action == 'match' ? 'true' : isNull,
-                );
-              });
-        await headEntered.future.timeout(const Duration(seconds: 10));
-        if (action == 'close') dio.close(force: true);
-        await result.timeout(const Duration(seconds: 10));
-        await adapter.waitForIdle().timeout(const Duration(seconds: 10));
-        expect(
-          methods,
-          action == 'changed' ? ['GET', 'HEAD', 'GET'] : ['GET', 'HEAD'],
-        );
-        expect(adapter.methods, methods);
-      },
-      skip: !Platform.isWindows,
-    );
-  }
-}
-
-class _NativeAdapter extends RHttpAdapter {
-  final methods = <String>[];
-  @override
-  Future<rhttp.ClientSettings> get settings async => const rhttp.ClientSettings(
-    proxySettings: rhttp.ProxySettings.noProxy(),
-    throwOnStatusCode: false,
-  );
-
-  @override
-  Future<ResponseBody> fetch(
-    RequestOptions options,
-    Stream<Uint8List>? requestStream,
-    Future<void>? cancelFuture,
-  ) {
-    methods.add(options.method);
-    return super.fetch(options, requestStream, cancelFuture);
   }
 }
 
