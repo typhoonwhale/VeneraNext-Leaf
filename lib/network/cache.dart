@@ -76,22 +76,11 @@ class NetworkCacheManager {
   }
 }
 
-/// Cache data is shared; validation belongs to the client handling this request.
+/// Cache data is shared; reuse is decided by the client handling this request.
 class NetworkCacheInterceptor extends Interceptor {
-  NetworkCacheInterceptor(this._client) : _cache = NetworkCacheManager();
+  NetworkCacheInterceptor() : _cache = NetworkCacheManager();
 
-  final Dio _client;
   final NetworkCacheManager _cache;
-  final _originalHeaders = Expando<Map<String, dynamic>>();
-
-  /// Capture headers before cookie/authentication interceptors mutate them.
-  /// Replaying a HEAD through the same pipeline must not append cookies twice.
-  late final Interceptor captureRequests = InterceptorsWrapper(
-    onRequest: (options, handler) {
-      _originalHeaders[options] = Map.from(options.headers);
-      handler.next(options);
-    },
-  );
 
   void _removeIfCurrent(NetworkCache cache) {
     if (identical(_cache.getCache(cache.uri), cache)) {
@@ -114,16 +103,12 @@ class NetworkCacheInterceptor extends Interceptor {
   );
 
   @override
-  Future<void> onRequest(
-    RequestOptions options,
-    RequestInterceptorHandler handler,
-  ) async {
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
     if (options.method != 'GET') {
       return handler.next(options);
     }
     final cacheTime = options.headers.remove('cache-time');
-    // URL/header caching cannot represent a GET payload, including a stream
-    // that a speculative HEAD must never consume.
+    // URL/header caching cannot represent a GET payload.
     if (options.data != null) return handler.next(options);
     final cache = _cache.getCache(options.uri);
     if (cache == null ||
@@ -142,50 +127,6 @@ class NetworkCacheInterceptor extends Interceptor {
     if ((cacheTime == 'long' && age < const Duration(hours: 6)) ||
         age < const Duration(seconds: 5)) {
       return _resolve(options, cache, handler);
-    }
-    if (age < const Duration(hours: 2)) {
-      try {
-        final head =
-            options.copyWith(
-                method: 'HEAD',
-                headers: Map.from(_originalHeaders[options] ?? options.headers),
-                // A validation response must be consumed even for a streaming GET.
-                responseType: ResponseType.bytes,
-              )
-              ..data = null
-              ..onReceiveProgress = null
-              ..onSendProgress = null;
-        head.headers.remove('cache-time');
-        final response = await _client.fetch<dynamic>(head);
-        final cancellation = options.cancelToken?.cancelError;
-        if (cancellation != null) return handler.reject(cancellation);
-        if (response.statusCode == 200 &&
-            identical(_cache.getCache(cache.uri), cache) &&
-            compareHeaders(options.headers, response.requestOptions.headers) &&
-            compareHeaders(cache.responseHeaders, response.headers.map)) {
-          return _resolve(options, cache, handler);
-        }
-      } catch (error, stack) {
-        _removeIfCurrent(cache);
-        final cancellation = options.cancelToken?.cancelError;
-        if (cancellation != null) return handler.reject(cancellation);
-        // A server can support GET without implementing HEAD.
-        final status = error is DioException
-            ? error.response?.statusCode
-            : null;
-        if (status != 405 && status != 501) {
-          return handler.reject(
-            error is DioException
-                ? error.copyWith(requestOptions: options)
-                : DioException(
-                    requestOptions: options,
-                    error: error,
-                    stackTrace: stack,
-                  ),
-            true,
-          );
-        }
-      }
     }
     _removeIfCurrent(cache);
     handler.next(options);

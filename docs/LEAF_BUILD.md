@@ -1,6 +1,6 @@
 # VeneraNext Leaf Android 构建
 
-当前状态（2026-11-03）：正式版及 Leaf5+ 设备版本为 1.19.2+253 / ARM64 versionCode 2532。`main` 是长期权威主线；`release/leaf-1.19.3@bc6b8d6` 仅为文档准备分支，未改源码或版本元数据。圆圈修复分支与状态见[当前状态](LEAF_STATUS.md)和[准备记录](LEAF_1_19_3_PREPARATION.md)。
+当前状态（2026-11-07）：正式版及 Leaf5+ 设备版本为 1.19.2+253 / ARM64 versionCode 2532。`main` 是长期权威主线；`release/leaf-1.19.3` 已整合看过圆圈修复和缓存 HEAD 修复，版本元数据仍为 1.19.2+253，发版时再递增。整合状态见[当前状态](LEAF_STATUS.md)和[准备记录](LEAF_1_19_3_PREPARATION.md)。
 
 ## 1.19.2 发布记录
 

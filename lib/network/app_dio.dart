@@ -163,14 +163,12 @@ class AppDio with DioMixin {
       allowImageHttp3Fallback: allowImageHttp3Fallback,
     );
     if (App.isInitialized) {
-      final cache = NetworkCacheInterceptor(this);
-      interceptors.add(cache.captureRequests);
       interceptors.add(
         CookieManagerSql.dynamic(() => SingleInstanceCookieJar.instance),
       );
       interceptors.add(CloudflareInterceptor());
       interceptors.add(MyLogInterceptor());
-      interceptors.add(cache);
+      interceptors.add(NetworkCacheInterceptor());
     }
   }
 
